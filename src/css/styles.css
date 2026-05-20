@@ -1,6 +1,6 @@
 body {
     font-family: sans-serif;
-    background-color: #f4f4f4;
+    background-color: #292929;
     margin: 0;
     padding: 0;
 }
@@ -30,7 +30,7 @@ main {
 }
 
 .timer-display {
-    font-size: 2em;
+    font-size: 6em;
     font-weight: bold;
     margin-bottom: 10px;
 }
@@ -49,6 +49,7 @@ main {
 }
 
 footer {
+    font-size: 0.6em;
     text-align: center;
     padding: 10px;
     background-color: #333;
