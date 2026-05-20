@@ -21,6 +21,7 @@ main {
 }
 
 .timer-container {
+    text-align: center;
     margin-bottom: 20px;
     background-color: white;
     padding: 20px;
