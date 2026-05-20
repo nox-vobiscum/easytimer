@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,149 +7,70 @@
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-    <header>
-        <div class="brand">
-            <h1>easyTimer</h1>
-            <p>Einfacher Countdown für Workshops und Meetings</p>
+    <div class="vscode-shell">
+        <div class="titlebar">
+            <div class="titlebar-left">
+                <span class="titlebar-icon">🧭</span>
+                <span class="titlebar-text">RBS' easyTimer</span>
+            </div>
         </div>
-    </header>
-    <main>
-        <section class="timer-card" aria-labelledby="timer-heading">
-            <div class="timer-header">
-                <div>
-                    <h2 id="timer-heading">Countdown</h2>
-                    <p class="timer-note">Gib eine Dauer ein und starte den Timer.</p>
+
+        <main class="editor-panel">
+            <section class="timer-card" aria-labelledby="timer-heading">
+                    <div class="timer-header">
+                        <div>
+                            <h2 id="timer-heading">Countdown</h2>
+                        </div>
+                        <div class="timer-header-actions">
+                            <div class="status-badge" id="timerStatus">Ready</div>
+                            <button id="fullscreenBtn" class="icon-btn" aria-label="Enter fullscreen">⛶</button>
+                            <button id="closeFullscreenBtn" class="close-fullscreen hidden" aria-label="Exit fullscreen">✕</button>
+                        </div>
+                    </div>
+                    <div class="timer-display" aria-live="polite" id="time">00:00</div>
+
+                <button id="toggleControlsBtn" class="toggle-controls" type="button" aria-expanded="false">
+                    Controls <span class="toggle-icon">▾</span>
+                </button>
+
+                <div class="timer-inputs">
+                    <label class="timer-input">
+                        <input id="hoursInput" type="number" min="0" max="99" value="0" inputmode="numeric" placeholder="0" aria-label="Hours" />
+                        <span class="input-unit">h</span>
+                    </label>
+                    <label class="timer-input">
+                        <input id="minutesInput" type="number" min="0" max="59" value="05" inputmode="numeric" placeholder="00" aria-label="Minutes" />
+                        <span class="input-unit">m</span>
+                    </label>
+                    <label class="timer-input">
+                        <input id="secondsInput" type="number" min="0" max="59" value="00" inputmode="numeric" placeholder="00" aria-label="Seconds" />
+                        <span class="input-unit">s</span>
+                    </label>
                 </div>
-                <div class="status-badge" id="timerStatus">Bereit</div>
-            </div>
 
-            <div class="timer-display" aria-live="polite" id="time">00:00</div>
+                <div class="preset-bar">
+                    <button type="button" class="preset-btn" data-seconds="60">1 min</button>
+                    <button type="button" class="preset-btn" data-seconds="180">3 min</button>
+                    <button type="button" class="preset-btn" data-seconds="300">5 min</button>
+                    <button type="button" class="preset-btn" data-seconds="600">10 min</button>
+                    <button type="button" class="preset-btn" data-seconds="900">15 min</button>
+                    <button type="button" class="preset-btn" data-seconds="1800">30 min</button>
+                    <button type="button" class="preset-btn" data-seconds="3600">60 min</button>
+                </div>
 
-            <div class="timer-inputs">
-                <label>
-                    Minuten
-                    <input id="minutesInput" type="number" min="0" max="99" value="05" inputmode="numeric" />
-                </label>
-                <label>
-                    Sekunden
-                    <input id="secondsInput" type="number" min="0" max="59" value="00" inputmode="numeric" />
-                </label>
-            </div>
+                <div class="timer-controls">
+                    <button id="startBtn" class="primary">Start</button>
+                    <button id="pauseBtn" class="secondary">Pause</button>
+                    <button id="resetBtn" class="secondary">Stop & Reset</button>
+                </div>
+            </section>
+        </main>
 
-            <div class="timer-controls">
-                <button id="startBtn" class="primary">Start</button>
-                <button id="pauseBtn" class="secondary">Pause</button>
-                <button id="resetBtn" class="secondary">Reset</button>
-            </div>
-        </section>
-    </main>
-    <footer>
-        <p>Powered by easyTimer</p>
-    </footer>
+        <footer class="status-bar">
+            Crafted with ❤️ by Roland B. SEPER © 2026
+        </footer>
+    </div>
 
-    <script>
-        const timeDisplay = document.getElementById('time');
-        const statusBadge = document.getElementById('timerStatus');
-        const minutesInput = document.getElementById('minutesInput');
-        const secondsInput = document.getElementById('secondsInput');
-        const startBtn = document.getElementById('startBtn');
-        const pauseBtn = document.getElementById('pauseBtn');
-        const resetBtn = document.getElementById('resetBtn');
-
-        let timerInterval;
-        let remainingSeconds = 0;
-        let running = false;
-
-        function formatTime(totalSeconds) {
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = totalSeconds % 60;
-            return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
-        }
-
-        function setRemainingFromInput() {
-            const minutes = Math.max(0, Math.min(99, Number(minutesInput.value) || 0));
-            const seconds = Math.max(0, Math.min(59, Number(secondsInput.value) || 0));
-            remainingSeconds = minutes * 60 + seconds;
-            timeDisplay.textContent = formatTime(remainingSeconds);
-        }
-
-        function updateButtonStates() {
-            startBtn.disabled = running;
-            pauseBtn.disabled = !running;
-            resetBtn.disabled = !running && remainingSeconds === 0;
-        }
-
-        function updateStatus(text) {
-            statusBadge.textContent = text;
-        }
-
-        function tick() {
-            if (remainingSeconds <= 0) {
-                stopTimer('Fertig!');
-                return;
-            }
-            remainingSeconds -= 1;
-            timeDisplay.textContent = formatTime(remainingSeconds);
-            if (remainingSeconds === 0) {
-                stopTimer('Fertig!');
-            }
-        }
-
-        function startTimer() {
-            if (running) return;
-            if (remainingSeconds === 0) {
-                setRemainingFromInput();
-            }
-            if (remainingSeconds === 0) {
-                updateStatus('Bitte Dauer eingeben');
-                return;
-            }
-            running = true;
-            updateStatus('Läuft');
-            updateButtonStates();
-            timerInterval = setInterval(tick, 1000);
-        }
-
-        function pauseTimer() {
-            clearInterval(timerInterval);
-            running = false;
-            updateStatus('Pausiert');
-            updateButtonStates();
-        }
-
-        function resetTimer() {
-            clearInterval(timerInterval);
-            running = false;
-            setRemainingFromInput();
-            updateStatus('Bereit');
-            updateButtonStates();
-        }
-
-        function stopTimer(message) {
-            clearInterval(timerInterval);
-            running = false;
-            updateStatus(message);
-            updateButtonStates();
-        }
-
-        minutesInput.addEventListener('input', () => {
-            if (!running) {
-                setRemainingFromInput();
-            }
-        });
-
-        secondsInput.addEventListener('input', () => {
-            if (!running) {
-                setRemainingFromInput();
-            }
-        });
-
-        startBtn.addEventListener('click', startTimer);
-        pauseBtn.addEventListener('click', pauseTimer);
-        resetBtn.addEventListener('click', resetTimer);
-
-        setRemainingFromInput();
-        updateButtonStates();
-    </script>
+    <script src="js/app.js"></script>
 </body>
 </html>
