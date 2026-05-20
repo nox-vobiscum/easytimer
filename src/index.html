@@ -28,20 +28,22 @@
     let running = false;
 
     function startTimer() {
-    if (running) return;
-    running = true;
-    timerInterval = setInterval(function() {
-        const timeDisplay = document.getElementById('time');
-        const minutes = Math.floor(Number(timeDisplay.textContent.slice(0, 2)));
-        const seconds = Number(timeDisplay.textContent.slice(3));
-        if (seconds < 0) {
-            seconds = 0;
-            minutes--;
-        }
-        const formattedTime = minutes + ':' + (minutes < 10 ? '0' : '') + seconds;
-        timeDisplay.textContent = formattedTime; // Korrigierte Zeile
-    }, 1000);
-}
+        if (running) return;
+        running = true;
+        timerInterval = setInterval(function() {
+            const timeDisplay = document.getElementById('time');
+            let minutes = Number(timeDisplay.textContent.slice(0, 2));
+            let seconds = Number(timeDisplay.textContent.slice(3));
+
+            if (seconds < 0) {
+                seconds = 0;
+                minutes--;
+            }
+
+            const formattedTime = String(minutes) + ':' + String(seconds);
+            timeDisplay.textContent = formattedTime;
+        }, 1000);
+    }
 
     function pauseTimer() {
         clearInterval(timerInterval);
