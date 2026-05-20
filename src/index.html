@@ -4,17 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RBS' easyTimer</title>
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <h1>RBS' easyTimer</h1>
+        <h1 id="timerTitle">RBS' easyTimer</h1>
     </header>
     <main>
         <div class="timer-container">
-            <div class="timer-display">
-                <span id="time">00:00</span>
-            </div>
+            <div id="time">00:00</div>
             <div class="timer-controls">
                 <button id="startBtn">Start</button>
                 <button id="pauseBtn">Pause</button>
@@ -22,8 +20,44 @@
             </div>
         </div>
     </main>
-    <footer>
-        <p>Powered by RBS</p>
+    <footer id="footer">
+        <p>Powered by...</p>
     </footer>
+<script>
+    let timerInterval;
+    let running = false;
+
+    function startTimer() {
+        if (running) return;
+        running = true;
+        timerInterval = setInterval(function() {
+            const timeDisplay = document.getElementById('time');
+            const minutes = Math.floor(Number(timeDisplay.textContent.slice(0, 2)));
+            const seconds = Number(timeDisplay.textContent.slice(3));
+            if (seconds < 0) {
+                seconds = 0;
+                minutes--;
+            }
+            const formattedTime = minutes + ':' + (minutes < 10 ? '0' : '') + seconds;
+            timeDisplay.textContent = formattedTime;
+        }, 1000);
+    }
+
+    function pauseTimer() {
+        clearInterval(timerInterval);
+        running = false;
+    }
+
+    function resetTimer() {
+        clearInterval(timerInterval);
+        running = false;
+        const timeDisplay = document.getElementById('time');
+        timeDisplay.textContent = '00:00';
+    }
+
+    document.getElementById('startBtn').addEventListener('click', startTimer);
+    document.getElementById('pauseBtn').addEventListener('click', pauseTimer);
+    document.getElementById('resetBtn').addEventListener('click', resetTimer);
+</script>
 </body>
 </html>
