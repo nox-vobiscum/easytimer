@@ -13,6 +13,7 @@ header {
 }
 
 header h1 {
+    font-size: 1.2em;
     margin: 0;
 }
 
@@ -23,13 +24,14 @@ main {
 .timer-container {
     text-align: center;
     margin-bottom: 20px;
-    background-color: white;
+    background-color: rgb(202, 202, 202);
     padding: 20px;
     border-radius: 5px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
 .timer-display {
+    font-color: #333;
     font-size: 6em;
     font-weight: bold;
     margin-bottom: 10px;
