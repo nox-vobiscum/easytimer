@@ -1,65 +1,161 @@
+:root {
+    color-scheme: dark;
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0e1115;
+    color: #e8edf3;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    font-family: sans-serif;
-    background-color: #292929;
     margin: 0;
-    padding: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at top, #2b2f39 0%, #10131a 45%, #090b0f 100%);
 }
 
 header {
-    background-color: #333;
-    color: white;
-    padding: 20px;
+    padding: 1.5rem 1rem;
     text-align: center;
 }
 
-header h1 {
-    font-size: 1.2em;
+.brand h1 {
     margin: 0;
+    font-size: clamp(2rem, 2.4vw, 3rem);
+    letter-spacing: -0.04em;
+}
+
+.brand p {
+    margin: 0.5rem auto 0;
+    color: #9ab0d1;
+    font-size: 1rem;
 }
 
 main {
-    padding: 20px;
+    padding: 1rem;
+    display: grid;
+    place-items: center;
 }
 
-.timer-container {
+.timer-card {
+    width: min(100%, 520px);
+    padding: 2rem;
+    border-radius: 24px;
+    background: rgba(20, 24, 34, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.timer-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.timer-header h2 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.timer-note {
+    margin: 0.35rem 0 0;
+    color: #a6b4d4;
+    font-size: 0.95rem;
+}
+
+.status-badge {
+    min-width: 110px;
+    padding: 0.65rem 1rem;
+    border-radius: 999px;
     text-align: center;
-    margin-bottom: 20px;
-    background-color: rgb(202, 202, 202);
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
-
-#time {
-    font-size: 6em;
-    font-weight: bold;
-    margin-bottom: 20px;
+    font-size: 0.95rem;
+    background: rgba(255, 255, 255, 0.06);
+    color: #c8d5ff;
 }
 
 .timer-display {
-    color: #333;
-    font-size: 6em;
-    font-weight: bold;
-    margin-bottom: 10px;
+    margin: 0 auto 1.5rem;
+    width: fit-content;
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    letter-spacing: 0.04em;
+    font-weight: 700;
+    color: #ffffff;
 }
 
-.timer-controls button {
-    background-color: #4CAF50;
-    color: white;
-    padding: 10px 20px;
+.timer-inputs {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+    margin-bottom: 1.5rem;
+}
+
+.timer-inputs label {
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    color: #cbd4ec;
+}
+
+.timer-inputs input {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #eef2ff;
+    font-size: 1rem;
+}
+
+.timer-inputs input:focus {
+    outline: none;
+    border-color: #6f94ff;
+    box-shadow: 0 0 0 4px rgba(111, 148, 255, 0.12);
+}
+
+.timer-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+}
+
+button {
     border: none;
+    border-radius: 14px;
+    padding: 0.95rem 1.4rem;
+    font-size: 1rem;
     cursor: pointer;
-    border-radius: 4px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
-.timer-controls button:hover {
-    background-color: #3e8e41;
+button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+button.primary {
+    background: linear-gradient(135deg, #5b7bff, #4db8ff);
+    color: white;
+    box-shadow: 0 14px 30px rgba(56, 116, 255, 0.25);
+}
+
+button.secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: #d7e1ff;
+}
+
+button:hover:not(:disabled) {
+    transform: translateY(-1px);
 }
 
 footer {
-    font-size: 0.6em;
+    padding: 1rem;
     text-align: center;
-    padding: 10px;
-    background-color: #333;
-    color: white;
+    color: #7f8bae;
+    font-size: 0.95rem;
 }
