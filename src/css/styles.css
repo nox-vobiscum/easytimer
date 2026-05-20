@@ -30,6 +30,11 @@ main {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
+#time {
+    font-size: 6em;
+    margin-bottom: 20px;
+}
+
 .timer-display {
     color: #333;
     font-size: 6em;
