@@ -773,7 +773,8 @@ function toggleMenu() {
 }
 
 function closeMenuOnOutsideClick(event) {
-    if (!menuOverlay.classList.contains('hidden') && !menuOverlay.contains(event.target) && event.target !== menuToggleBtn) {
+    const clickedMenuToggle = menuToggleBtn.contains(event.target);
+    if (!menuOverlay.classList.contains('hidden') && !menuOverlay.contains(event.target) && !clickedMenuToggle) {
         closeMenu();
     }
 }
