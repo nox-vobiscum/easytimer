@@ -38,6 +38,7 @@ const stopAdhocBtn = document.getElementById('stopAdhocBtn');
 const adhocTimeDisplay = document.getElementById('adhocTime');
 const showTimeInputsToggle = document.getElementById('showTimeInputsToggle');
 const includeAdhocInTotalCheckbox = document.getElementById('includeAdhocInTotal');
+const sessionEditorTotal = document.getElementById('sessionEditorTotal');
 const shell = document.querySelector('.vscode-shell');
 
     sessionTransitionModeRadios.forEach((radio) => {
@@ -177,9 +178,10 @@ function renderSessionEditorRows() {
     sessionList.innerHTML = '';
     if (sessions.length === 0) {
         addSessionRow({ title: '', duration: 5 });
-        return;
+    } else {
+        sessions.forEach(addSessionRow);
     }
-    sessions.forEach(addSessionRow);
+    updateSessionEditorTotal();
 }
 
 function addSessionRow(session = { title: '', duration: 5 }) {
@@ -222,7 +224,12 @@ function addSessionRow(session = { title: '', duration: 5 }) {
     removeButton.className = 'session-remove';
     removeButton.textContent = '✕';
     removeButton.setAttribute('aria-label', 'Remove session');
-    removeButton.addEventListener('click', () => row.remove());
+    removeButton.addEventListener('click', () => {
+        row.remove();
+        updateSessionEditorTotal();
+    });
+
+    durationInput.addEventListener('input', updateSessionEditorTotal);
 
     row.draggable = true;
     row.addEventListener('dragstart', (event) => {
@@ -278,10 +285,23 @@ function getEditorSessions() {
     });
 }
 
+function formatHoursAndMinutes(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+}
+
+function updateSessionEditorTotal() {
+    if (!sessionEditorTotal) return;
+    const totalSeconds = getEditorSessions().reduce((sum, session) => sum + session.duration, 0);
+    sessionEditorTotal.textContent = formatHoursAndMinutes(totalSeconds);
+}
+
 function openSessionEditor() {
     renderSessionEditorRows();
     sessionEditorOverlay.classList.remove('hidden');
     sessionEditorOverlay.setAttribute('aria-hidden', 'false');
+    updateSessionEditorTotal();
     closeMenu();
 }
 
@@ -924,7 +944,10 @@ themeButtons.forEach((button) => {
 editSessionsBtn.addEventListener('click', openSessionEditor);
 closeSessionEditorBtn.addEventListener('click', closeSessionEditor);
 cancelSessionsBtn.addEventListener('click', closeSessionEditor);
-addSessionBtn.addEventListener('click', () => addSessionRow());
+addSessionBtn.addEventListener('click', () => {
+    addSessionRow();
+    updateSessionEditorTotal();
+});
 sessionEditorOverlay.addEventListener('click', (event) => {
     if (event.target === sessionEditorOverlay) {
         closeSessionEditor();

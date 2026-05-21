@@ -63,7 +63,10 @@
                         <h3>Session rundown</h3>
                         <p>Define titles and durations for your workshop sessions.</p>
                     </div>
-                    <button id="closeSessionEditor" type="button" class="icon-btn" aria-label="Close session editor" title="Close session editor">✕</button>
+                    <div class="session-heading-actions">
+                        <span class="session-total-box" id="sessionEditorTotal">00:00</span>
+                        <button id="closeSessionEditor" type="button" class="icon-btn" aria-label="Close session editor" title="Close session editor">✕</button>
+                    </div>
                 </div>
                 <div class="session-list" id="sessionList"></div>
                 <button id="addSessionBtn" type="button" class="primary" title="Add a new session">+ Add session</button>
