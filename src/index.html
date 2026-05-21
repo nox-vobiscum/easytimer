@@ -13,6 +13,19 @@
                 <span class="titlebar-icon">🧭</span>
                 <span class="titlebar-text">RBS' easyTimer</span>
             </div>
+            <div class="titlebar-actions">
+                <button id="menuToggleBtn" class="icon-btn menu-toggle" type="button" aria-expanded="false" aria-label="Open menu">☰</button>
+            </div>
+        </div>
+
+        <div id="appMenuOverlay" class="app-menu-overlay hidden" aria-hidden="true">
+            <div class="app-menu-panel" role="dialog" aria-modal="true" aria-label="Application menu">
+                <div class="app-menu-header">
+                    <button type="button" class="theme-btn" data-theme="light" aria-label="Light theme">☀️</button>
+                    <button type="button" class="theme-btn" data-theme="dark" aria-label="Dark theme">🌙</button>
+                    <button type="button" class="theme-btn" data-theme="system" aria-label="System default theme">💻</button>
+                </div>
+            </div>
         </div>
 
         <main class="editor-panel">

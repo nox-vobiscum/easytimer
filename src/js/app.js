@@ -10,6 +10,9 @@ const fullscreenBtn = document.getElementById('fullscreenBtn');
 const closeFullscreenBtn = document.getElementById('closeFullscreenBtn');
 const toggleControlsBtn = document.getElementById('toggleControlsBtn');
 const presetButtons = document.querySelectorAll('.preset-btn');
+const menuToggleBtn = document.getElementById('menuToggleBtn');
+const menuOverlay = document.getElementById('appMenuOverlay');
+const themeButtons = document.querySelectorAll('.theme-btn');
 const shell = document.querySelector('.vscode-shell');
 
 let timerInterval;
@@ -140,6 +143,52 @@ function clearActivePreset() {
     });
 }
 
+function applyTheme(theme) {
+    if (theme === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+    localStorage.setItem('easyTimerTheme', theme);
+    themeButtons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.theme === theme);
+    });
+}
+
+function openMenu() {
+    menuOverlay.classList.remove('hidden');
+    menuOverlay.setAttribute('aria-hidden', 'false');
+    menuToggleBtn.textContent = '✕';
+    menuToggleBtn.setAttribute('aria-expanded', 'true');
+}
+
+function closeMenu() {
+    menuOverlay.classList.add('hidden');
+    menuOverlay.setAttribute('aria-hidden', 'true');
+    menuToggleBtn.textContent = '☰';
+    menuToggleBtn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleMenu() {
+    if (menuOverlay.classList.contains('hidden')) {
+        openMenu();
+    } else {
+        closeMenu();
+    }
+}
+
+function closeMenuOnOutsideClick(event) {
+    if (!menuOverlay.classList.contains('hidden') && !menuOverlay.contains(event.target) && event.target !== menuToggleBtn) {
+        closeMenu();
+    }
+}
+
+function closeMenuOnEscape(event) {
+    if (event.key === 'Escape' && !menuOverlay.classList.contains('hidden')) {
+        closeMenu();
+    }
+}
+
 function closeFullscreenControls() {
     shell.classList.remove('controls-open');
     toggleControlsBtn.setAttribute('aria-expanded', 'false');
@@ -235,6 +284,23 @@ pauseBtn.addEventListener('click', () => {
 resetBtn.addEventListener('click', resetTimer);
 fullscreenBtn.addEventListener('click', enterFullscreen);
 closeFullscreenBtn.addEventListener('click', exitFullscreen);
+menuToggleBtn.addEventListener('click', toggleMenu);
+menuOverlay.addEventListener('click', (event) => {
+    if (event.target === menuOverlay) {
+        closeMenu();
+    }
+});
+window.addEventListener('click', closeMenuOnOutsideClick);
+window.addEventListener('keydown', closeMenuOnEscape);
+
+themeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        applyTheme(button.dataset.theme);
+    });
+});
+
+const savedTheme = localStorage.getItem('easyTimerTheme') || 'system';
+applyTheme(savedTheme);
 
 setRemainingFromInput();
 updateButtonStates();
