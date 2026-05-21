@@ -48,6 +48,89 @@ html[data-theme='dark'] {
     --muted: #9e9e9e;
 }
 
+.burger {
+    display: inline-block;
+    width: 1.3rem;
+    height: 1rem;
+    position: relative;
+}
+.burger span,
+.burger span::before,
+.burger span::after {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: currentColor;
+    border-radius: 999px;
+    transition: transform 180ms ease, opacity 180ms ease;
+}
+.burger span {
+    top: 50%;
+    transform: translateY(-50%);
+}
+.burger span::before {
+    content: '';
+    top: -6px;
+}
+.burger span::after {
+    content: '';
+    top: 6px;
+}
+
+/* when open, morph into X */
+.burger.open span,
+.menu-toggle.open .burger span {
+    transform: rotate(45deg);
+}
+.burger.open span::before,
+.menu-toggle.open .burger span::before {
+    transform: rotate(-90deg) translateX(-1px);
+    top: 0;
+}
+.burger.open span::after,
+.menu-toggle.open .burger span::after {
+    opacity: 0;
+}
+
+/* menu overlay transition */
+.app-menu-overlay {
+    position: fixed;
+    top: 3.75rem;
+    right: 1rem;
+    left: 1rem;
+    z-index: 60;
+    display: grid;
+    justify-items: end;
+    pointer-events: none;
+    padding: 0.5rem;
+    transition: opacity 220ms ease, transform 220ms ease;
+}
+.app-menu-overlay.hidden {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+}
+.app-menu-overlay:not(.hidden) {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* adhoc overlay fade */
+.adhoc-overlay {
+    transition: opacity 200ms ease, visibility 200ms ease;
+}
+.adhoc-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+.adhoc-overlay:not(.hidden) {
+    opacity: 1;
+    visibility: visible;
+}
+
+
 html[data-theme='light'] {
     color-scheme: light;
     --bg: #f5f5f5;
@@ -127,22 +210,9 @@ body {
     background: rgba(0, 0, 0, 0.05);
 }
 
-.app-menu-overlay {
-    position: fixed;
-    top: 3.75rem;
-    right: 1rem;
-    z-index: 60;
-    display: grid;
-    justify-items: end;
-    pointer-events: none;
-}
-
-.app-menu-overlay:not(.hidden) {
-    pointer-events: auto;
-}
 
 .app-menu-panel {
-    width: min(100%, 560px);
+    width: min(100%, 420px);
     max-height: calc(100vh - 5rem);
     background: var(--panel);
     border: 1px solid var(--border-soft);
@@ -186,6 +256,67 @@ body {
 .menu-option input {
     width: auto;
     accent-color: var(--primary);
+}
+
+.menu-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+
+.menu-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.menu-switch .switch-track {
+    position: relative;
+    width: 3rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    transition: background-color 150ms ease, border-color 150ms ease;
+    flex-shrink: 0;
+}
+
+.menu-switch .switch-thumb {
+    position: absolute;
+    top: 0.12rem;
+    left: 0.12rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--text);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+    transition: transform 150ms ease, background-color 150ms ease;
+}
+
+.menu-switch input:checked + .switch-track {
+    background: var(--primary-strong);
+    border-color: var(--primary-strong);
+}
+
+.menu-switch input:checked + .switch-track .switch-thumb {
+    transform: translateX(1.25rem);
+    background: #ffffff;
+}
+
+.menu-switch .switch-track::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    opacity: 0;
+    transition: opacity 150ms ease;
+}
+
+.menu-switch input:focus-visible + .switch-track::after {
+    opacity: 1;
+    box-shadow: 0 0 0 4px rgba(0, 122, 204, 0.18);
 }
 
 .session-overlay {
@@ -366,7 +497,9 @@ body {
     color: #ffffff;
 }
 
-.hidden {
+.hidden,
+.hide-time-inputs .timer-inputs,
+.hide-time-inputs .preset-bar {
     display: none !important;
 }
 
@@ -386,9 +519,6 @@ body {
     border: 1px solid var(--surface-strong);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
     position: relative;
-}
-
-.timer-card {
     display: grid;
     gap: 1.5rem;
 }
@@ -418,9 +548,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: clamp(8rem, 22vw, 18rem);
+    font-size: min(clamp(7rem, 18vw, 18rem), 14vh);
+    line-height: 0.95;
     padding: 0.9rem 0.75rem;
     min-height: 0;
+    max-height: calc(100vh - 7.5rem);
 }
 
 .fullscreen-mode.controls-open .timer-display {
@@ -430,7 +562,13 @@ body {
 
 .fullscreen-mode .timer-inputs,
 .fullscreen-mode .preset-bar,
-.fullscreen-mode .status-badge {
+.fullscreen-mode .status-badge,
+.close-fullscreen.hidden,
+.fullscreen-mode #fullscreenBtn,
+.session-summary.hidden,
+.toggle-controls,
+.adhoc-overlay.hidden,
+.timer-header h2 {
     display: none;
 }
 
@@ -538,9 +676,6 @@ body {
     padding: 0;
 }
 
-.close-fullscreen.hidden {
-    display: none;
-}
 
 /* Position close button inside the timer card (top-right) to free header space */
 .timer-display {
@@ -558,11 +693,7 @@ body {
     font-size: 1rem;
 }
 
-.fullscreen-mode #fullscreenBtn {
-    display: none;
-}
 
-.timer-header h2 { display: none; }
 
 .timer-display #timer-heading {
     position: absolute;
@@ -621,9 +752,6 @@ body {
     margin-bottom: 1rem;
 }
 
-.session-summary.hidden {
-    display: none;
-}
 
 .session-summary span {
     display: inline-flex;
@@ -667,14 +795,6 @@ body {
     pointer-events: none;
 }
 
-.toggle-controls {
-    display: none;
-}
-
-.timer-inputs input::placeholder {
-    color: #6a6d76;
-    opacity: 1;
-}
 
 .timer-inputs input::placeholder {
     color: #6a6d76;
@@ -730,6 +850,84 @@ body {
 
 .timer-inputs input[type="number"] {
     -moz-appearance: textfield;
+}
+
+/* When hide-time-inputs class is present, hide inputs and presets (session mode compact) */
+.hide-time-inputs .timer-inputs,
+.hide-time-inputs .preset-bar {
+    display: none !important;
+}
+
+/* Ad-hoc overlay styles — compact version of main timer */
+.adhoc-overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 120;
+}
+.adhoc-panel {
+    width: min(540px, 90%);
+    background: var(--surface);
+    border: 1px solid var(--surface-strong);
+    border-radius: 10px;
+    padding: 1.5rem;
+    display: grid;
+    gap: 1rem;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+.adhoc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0;
+}
+.adhoc-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text);
+    font-weight: 600;
+}
+.adhoc-display {
+    text-align: center;
+    font-size: clamp(3.5rem, 10vw, 5.5rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    padding: 1.5rem 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 0;
+}
+.adhoc-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.adhoc-input {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+    color: var(--text);
+}
+.adhoc-input input {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.9rem;
+    text-align: center;
+}
+.adhoc-input input:focus {
+    outline: none;
+    border-color: var(--primary-strong);
+    box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.12);
 }
 
 /* Compact and consistent input styles for session editor and other fields */
@@ -809,11 +1007,7 @@ button:hover:not(:disabled) {
     text-align: center;
 }
 
-.status-bar a {
-    color: inherit;
-    text-decoration: none;
-}
-
+.status-bar a,
 .status-bar a:hover,
 .status-bar a:focus {
     color: inherit;
@@ -1080,6 +1274,11 @@ button:hover:not(:disabled) {
     .session-row-duration {
         height: 2rem;
         line-height: 1.2;
+    }
+
+    .fullscreen-mode .timer-display {
+        font-size: clamp(6rem, 16vw, 12rem);
+        padding: 0.75rem 0.65rem;
     }
 }
 

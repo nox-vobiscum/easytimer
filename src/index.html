@@ -14,33 +14,44 @@
                 <span class="titlebar-text">RBS' easyTimer</span>
             </div>
             <div class="titlebar-actions">
-                <button id="menuToggleBtn" class="icon-btn menu-toggle" type="button" aria-expanded="false" aria-label="Open menu">☰</button>
+                <button id="menuToggleBtn" class="icon-btn menu-toggle" type="button" aria-expanded="false" aria-label="Open menu" title="Open menu">
+                    <span class="burger" aria-hidden="true"><span></span><span></span><span></span></span>
+                </button>
             </div>
         </div>
 
         <div id="appMenuOverlay" class="app-menu-overlay hidden" aria-hidden="true">
             <div class="app-menu-panel" role="dialog" aria-modal="true" aria-label="Application menu">
                 <div class="app-menu-header">
-                    <button type="button" class="theme-btn" data-theme="light" aria-label="Light theme">☀️</button>
-                    <button type="button" class="theme-btn" data-theme="dark" aria-label="Dark theme">🌙</button>
-                    <button type="button" class="theme-btn" data-theme="system" aria-label="System default theme">💻</button>
+                    <button type="button" class="theme-btn" data-theme="light" aria-label="Light theme" title="Light theme">☀️</button>
+                    <button type="button" class="theme-btn" data-theme="dark" aria-label="Dark theme" title="Dark theme">🌙</button>
+                    <button type="button" class="theme-btn" data-theme="system" aria-label="System default theme" title="System default theme">💻</button>
                 </div>
                 <div class="menu-section">
                     <div class="menu-label">Timer mode</div>
-                    <label class="menu-option"><input type="radio" name="timerMode" value="countdown" checked> Normal countdown</label>
-                    <label class="menu-option"><input type="radio" name="timerMode" value="sessions"> Session mode</label>
+                    <label class="menu-option" title="Switch to normal countdown mode"><input type="radio" name="timerMode" value="countdown" checked> Normal countdown</label>
+                    <label class="menu-option" title="Switch to session mode"><input type="radio" name="timerMode" value="sessions"> Session mode</label>
                 </div>
-                <div class="menu-section">
-                    <button id="editSessionsBtn" type="button" class="secondary" title="Open the session editor">Edit sessions</button>
-                </div>
-                <div id="sessionTransitionModeSection" class="menu-section hidden">
-                    <div class="menu-label">Session transition</div>
-                    <label class="menu-option" title="Automatically start the next session when the current one ends.">
-                        <input type="radio" name="sessionTransitionMode" value="auto"> Auto
-                    </label>
-                    <label class="menu-option" title="Wait after a session ends until Resume is clicked to start the next session.">
-                        <input type="radio" name="sessionTransitionMode" value="manual"> Manual
-                    </label>
+                <div id="sessionMenuSection" class="menu-section hidden">
+                    <div class="menu-section">
+                        <button id="editSessionsBtn" type="button" class="secondary" title="Open the session editor">Edit sessions</button>
+                    </div>
+                    <div class="menu-section">
+                        <label class="menu-option menu-switch" title="Show or hide the manual time inputs and presets (useful in session mode).">
+                            <span>Show time inputs</span>
+                            <input type="checkbox" id="showTimeInputsToggle" name="showTimeInputs">
+                            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                        </label>
+                    </div>
+                    <div id="sessionTransitionModeSection" class="menu-section">
+                        <div class="menu-label">Session transition</div>
+                        <label class="menu-option" title="Automatically start the next session when the current one ends.">
+                            <input type="radio" name="sessionTransitionMode" value="auto"> Auto
+                        </label>
+                        <label class="menu-option" title="Wait after a session ends until Resume is clicked to start the next session.">
+                            <input type="radio" name="sessionTransitionMode" value="manual"> Manual
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
@@ -52,13 +63,13 @@
                         <h3>Session rundown</h3>
                         <p>Define titles and durations for your workshop sessions.</p>
                     </div>
-                    <button id="closeSessionEditor" type="button" class="icon-btn" aria-label="Close session editor">✕</button>
+                    <button id="closeSessionEditor" type="button" class="icon-btn" aria-label="Close session editor" title="Close session editor">✕</button>
                 </div>
                 <div class="session-list" id="sessionList"></div>
-                <button id="addSessionBtn" type="button" class="primary">+ Add session</button>
+                <button id="addSessionBtn" type="button" class="primary" title="Add a new session">+ Add session</button>
                 <div class="session-panel-actions">
-                    <button id="saveSessionsBtn" type="button" class="primary">Save</button>
-                    <button id="cancelSessionsBtn" type="button" class="secondary">Cancel</button>
+                    <button id="saveSessionsBtn" type="button" class="primary" title="Save the session rundown">Save</button>
+                    <button id="cancelSessionsBtn" type="button" class="secondary" title="Cancel session editing">Cancel</button>
                 </div>
             </div>
         </div>
@@ -71,12 +82,12 @@
                         </div>
                         <div class="timer-header-actions">
                             <div class="status-badge" id="timerStatus">Ready</div>
-                            <button id="fullscreenBtn" class="icon-btn" aria-label="Enter fullscreen">⛶</button>
+                            <button id="fullscreenBtn" class="icon-btn" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button>
                         </div>
                     </div>
                     <div class="timer-display">
                         <h2 id="timer-heading">Countdown</h2>
-                        <button id="closeFullscreenBtn" class="close-fullscreen hidden" aria-label="Exit fullscreen">✕</button>
+                        <button id="closeFullscreenBtn" class="close-fullscreen hidden" aria-label="Exit fullscreen" title="Exit fullscreen">✕</button>
                         <span id="time" aria-live="polite">00:00</span>
                     </div>
                     <div class="session-summary hidden" id="sessionSummary">
@@ -84,7 +95,26 @@
                         <span id="sessionTotalTime">00:00</span>
                     </div>
 
-                <button id="toggleControlsBtn" class="toggle-controls" type="button" aria-expanded="false">
+                <div id="adhocOverlay" class="adhoc-overlay hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Ad-hoc timer">
+                    <div class="adhoc-panel">
+                        <div class="adhoc-header">
+                            <h3>Ad-hoc timer</h3>
+                            <button id="closeAdhocBtn" type="button" class="icon-btn" aria-label="Close ad-hoc" title="Close ad-hoc timer">✕</button>
+                        </div>
+                        <div class="adhoc-display">
+                            <span id="adhocTime">05:00</span>
+                        </div>
+                        <div class="adhoc-controls">
+                            <label class="adhoc-input" title="Minutes for adhoc timer">Min: <input id="adhocMinutes" type="number" min="0" value="5" style="width:4rem"/></label>
+                            <label class="adhoc-input" title="Seconds for adhoc timer">Sec: <input id="adhocSeconds" type="number" min="0" max="59" value="0" style="width:4rem"/></label>
+                            <button id="startAdhocBtn" class="primary" title="Start ad-hoc timer">Start</button>
+                            <button id="pauseAdhocBtn" class="secondary" title="Pause ad-hoc timer">Pause</button>
+                            <button id="stopAdhocBtn" class="secondary" title="Stop ad-hoc timer">Stop</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="toggleControlsBtn" class="toggle-controls" type="button" aria-expanded="false" title="Show or hide the timer controls">
                     Controls <span class="toggle-icon">▾</span>
                 </button>
 
@@ -104,21 +134,22 @@
                 </div>
 
                 <div class="preset-bar">
-                    <button type="button" class="preset-btn" data-seconds="60">1</button>
-                    <button type="button" class="preset-btn" data-seconds="180">3</button>
-                    <button type="button" class="preset-btn" data-seconds="300">5</button>
-                    <button type="button" class="preset-btn" data-seconds="600">10</button>
-                    <button type="button" class="preset-btn" data-seconds="900">15</button>
-                    <button type="button" class="preset-btn" data-seconds="1800">30</button>
-                    <button type="button" class="preset-btn" data-seconds="3600">60</button>
+                    <button type="button" class="preset-btn" data-seconds="60" title="Preset: 1 minute">1</button>
+                    <button type="button" class="preset-btn" data-seconds="180" title="Preset: 3 minutes">3</button>
+                    <button type="button" class="preset-btn" data-seconds="300" title="Preset: 5 minutes">5</button>
+                    <button type="button" class="preset-btn" data-seconds="600" title="Preset: 10 minutes">10</button>
+                    <button type="button" class="preset-btn" data-seconds="900" title="Preset: 15 minutes">15</button>
+                    <button type="button" class="preset-btn" data-seconds="1800" title="Preset: 30 minutes">30</button>
+                    <button type="button" class="preset-btn" data-seconds="3600" title="Preset: 60 minutes">60</button>
                 </div>
 
                 <div class="timer-controls">
-                    <button id="startBtn" class="primary">Start</button>
-                    <button id="pauseBtn" class="secondary">Pause</button>
-                    <button id="restartSessionBtn" class="secondary hidden">Restart session</button>
-                    <button id="nextSessionBtn" class="secondary hidden">Next session</button>
-                    <button id="resetBtn" class="secondary">Stop & Reset</button>
+                    <button id="startBtn" class="primary" title="Start timer">Start</button>
+                    <button id="pauseBtn" class="secondary" title="Pause / Resume">Pause</button>
+                    <button id="adhocBtn" class="secondary" title="Quick breaks: pauses main timer, resumes afterward">Ad-hoc</button>
+                    <button id="restartSessionBtn" class="secondary hidden" title="Restart current session">Restart session</button>
+                    <button id="nextSessionBtn" class="secondary hidden" title="Move to next session">Next session</button>
+                    <button id="resetBtn" class="secondary" title="Stop and reset workshop">Stop & Reset</button>
                 </div>
             </section>
         </main>

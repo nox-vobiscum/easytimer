@@ -23,13 +23,45 @@ const sessionList = document.getElementById('sessionList');
 const modeRadioButtons = document.querySelectorAll('input[name="timerMode"]');
 const sessionTransitionModeRadios = document.querySelectorAll('input[name="sessionTransitionMode"]');
 const sessionTransitionModeSection = document.getElementById('sessionTransitionModeSection');
+const sessionMenuSection = document.getElementById('sessionMenuSection');
 const timerHeading = document.getElementById('timer-heading');
 const sessionSummary = document.getElementById('sessionSummary');
 const sessionTotalTime = document.getElementById('sessionTotalTime');
 const nextSessionBtn = document.getElementById('nextSessionBtn');
 const restartSessionBtn = document.getElementById('restartSessionBtn');
+const adhocBtn = document.getElementById('adhocBtn');
+const adhocOverlay = document.getElementById('adhocOverlay');
+const closeAdhocBtn = document.getElementById('closeAdhocBtn');
+const startAdhocBtn = document.getElementById('startAdhocBtn');
+const pauseAdhocBtn = document.getElementById('pauseAdhocBtn');
+const stopAdhocBtn = document.getElementById('stopAdhocBtn');
+const adhocTimeDisplay = document.getElementById('adhocTime');
+const showTimeInputsToggle = document.getElementById('showTimeInputsToggle');
+const includeAdhocInTotalCheckbox = document.getElementById('includeAdhocInTotal');
 const shell = document.querySelector('.vscode-shell');
 
+    sessionTransitionModeRadios.forEach((radio) => {
+        radio.addEventListener('change', () => {
+            if (radio.checked) {
+                setSessionTransitionMode(radio.value);
+            }
+        });
+    });
+    if (showTimeInputsToggle) {
+        showTimeInputsToggle.addEventListener('change', () => {
+            showTimeInputs = !!showTimeInputsToggle.checked;
+            localStorage.setItem('easyTimerShowInputs', showTimeInputs ? '1' : '0');
+            updateShowTimeInputsDisplay();
+            updateControlsButtonVisibility();
+        });
+    }
+    if (adhocBtn) {
+        adhocBtn.addEventListener('click', openAdhocOverlay);
+    }
+    if (closeAdhocBtn) closeAdhocBtn.addEventListener('click', () => stopAdhoc());
+    if (startAdhocBtn) startAdhocBtn.addEventListener('click', startAdhoc);
+    if (pauseAdhocBtn) pauseAdhocBtn.addEventListener('click', pauseAdhoc);
+    if (stopAdhocBtn) stopAdhocBtn.addEventListener('click', stopAdhoc);
 let timerInterval;
 let remainingSeconds = 0;
 let running = false;
@@ -38,6 +70,19 @@ let isFullscreen = false;
 let timerMode = 'countdown';
 let sessionTransitionMode = 'auto';
 let pendingNextSession = false;
+let currentSessionHasStarted = false;
+let adhocInterval = null;
+let adhocRemaining = 300; // default 5min
+let adhocRunning = false;
+let adhocPaused = false;
+let showTimeInputs = false;
+
+// load adhoc default duration (seconds)
+const savedAdhoc = localStorage.getItem('easyTimerAdhocDefault');
+if (savedAdhoc) {
+    const n = parseInt(savedAdhoc, 10);
+    if (!Number.isNaN(n) && n > 0) adhocRemaining = n;
+}
 let sessions = [];
 let activeSessionIndex = 0;
 
@@ -69,12 +114,14 @@ function setRemainingFromSession() {
     if (sessions.length === 0) {
         remainingSeconds = 0;
         timeDisplay.textContent = formatTime(remainingSeconds);
+        currentSessionHasStarted = false;
         return;
     }
     activeSessionIndex = Math.min(activeSessionIndex, sessions.length - 1);
     const currentSession = sessions[activeSessionIndex];
     remainingSeconds = currentSession.duration;
     timeDisplay.textContent = formatTime(remainingSeconds);
+    currentSessionHasStarted = false;
 }
 
 function updateTimerHeading() {
@@ -251,6 +298,13 @@ function setTimerMode(mode) {
     });
     updateTimerHeading();
     if (timerMode === 'sessions') {
+        // hide inputs by default in session mode
+        showTimeInputs = false;
+        if (showTimeInputsToggle) {
+            showTimeInputsToggle.checked = false;
+        }
+        localStorage.setItem('easyTimerShowInputs', '0');
+        currentSessionHasStarted = false;
         if (sessions.length > 0) {
             activeSessionIndex = Math.min(activeSessionIndex, sessions.length - 1);
             setRemainingFromSession();
@@ -269,6 +323,8 @@ function setTimerMode(mode) {
     updateButtonStates();
     updateEditSessionsAvailability();
     updateSessionTransitionModeDisplay();
+    updateShowTimeInputsDisplay();
+    updateControlsButtonVisibility();
 }
 
 function setSessionTransitionMode(mode) {
@@ -280,9 +336,136 @@ function setSessionTransitionMode(mode) {
 }
 
 function updateSessionTransitionModeDisplay() {
-    if (sessionTransitionModeSection) {
-        sessionTransitionModeSection.classList.toggle('hidden', timerMode !== 'sessions');
+    if (sessionMenuSection) {
+        sessionMenuSection.classList.toggle('hidden', timerMode !== 'sessions');
     }
+}
+
+function updateShowTimeInputsDisplay() {
+    const shouldHide = timerMode === 'sessions' && !showTimeInputs;
+    document.documentElement.classList.toggle('hide-time-inputs', shouldHide);
+    if (showTimeInputsToggle) {
+        showTimeInputsToggle.checked = showTimeInputs;
+    }
+}
+
+function updateControlsButtonVisibility() {
+    // hide controls button in fullscreen session mode when inputs are hidden
+    const shouldHideButton = isFullscreen && timerMode === 'sessions' && !showTimeInputs;
+    if (shouldHideButton) {
+        toggleControlsBtn.classList.add('hidden');
+        closeFullscreenControls();
+    } else {
+        toggleControlsBtn.classList.remove('hidden');
+    }
+}
+
+
+function formatAdhocTime(sec) {
+    const minutes = Math.floor(sec / 60);
+    const seconds = sec % 60;
+    return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+}
+
+function openAdhocOverlay() {
+    adhocOverlay.classList.remove('hidden');
+    adhocOverlay.setAttribute('aria-hidden', 'false');
+    // pause main timer if it's running
+    if (running) {
+        pauseTimer();
+    }
+    // populate inputs with current default
+    const mins = Math.floor(adhocRemaining / 60);
+    const secs = adhocRemaining % 60;
+    const mInput = document.getElementById('adhocMinutes');
+    const sInput = document.getElementById('adhocSeconds');
+    if (mInput) mInput.value = mins;
+    if (sInput) sInput.value = secs;
+    // update button states
+    updateAdhocButtonStates();
+}
+
+function closeAdhocOverlay() {
+    adhocOverlay.classList.add('hidden');
+    adhocOverlay.setAttribute('aria-hidden', 'true');
+}
+
+function updateAdhocButtonStates() {
+    startAdhocBtn.disabled = adhocRunning || adhocPaused;
+    pauseAdhocBtn.disabled = !(adhocRunning || adhocPaused);
+    pauseAdhocBtn.textContent = adhocPaused ? 'Resume' : 'Pause';
+    if (adhocRunning || adhocPaused) {
+        pauseAdhocBtn.classList.remove('secondary');
+        pauseAdhocBtn.classList.add('primary');
+    } else {
+        pauseAdhocBtn.classList.remove('primary');
+        pauseAdhocBtn.classList.add('secondary');
+    }
+}
+
+function adhocTick() {
+    if (adhocRemaining <= 0) {
+        clearInterval(adhocInterval);
+        adhocRunning = false;
+        adhocPaused = false;
+        startAdhocBtn.disabled = false;
+        pauseAdhocBtn.disabled = true;
+        updateAdhocButtonStates();
+        return;
+    }
+    adhocRemaining -= 1;
+    adhocTimeDisplay.textContent = formatAdhocTime(adhocRemaining);
+}
+
+function startAdhoc() {
+    if (adhocRunning) return;
+    // read inputs and persist default
+    const mInput = document.getElementById('adhocMinutes');
+    const sInput = document.getElementById('adhocSeconds');
+    if (mInput && sInput) {
+        const m = Math.max(0, Number(mInput.value) || 0);
+        const s = Math.max(0, Math.min(59, Number(sInput.value) || 0));
+        adhocRemaining = m * 60 + s;
+        localStorage.setItem('easyTimerAdhocDefault', String(adhocRemaining));
+        adhocTimeDisplay.textContent = formatAdhocTime(adhocRemaining);
+    }
+    adhocRunning = true;
+    adhocPaused = false;
+    adhocInterval = setInterval(adhocTick, 1000);
+    startAdhocBtn.disabled = true;
+    pauseAdhocBtn.disabled = false;
+    updateAdhocButtonStates();
+}
+
+function pauseAdhoc() {
+    if (adhocPaused) {
+        // Resume
+        adhocRunning = true;
+        adhocPaused = false;
+        adhocInterval = setInterval(adhocTick, 1000);
+        startAdhocBtn.disabled = true;
+        pauseAdhocBtn.disabled = false;
+    } else if (adhocRunning) {
+        // Pause
+        clearInterval(adhocInterval);
+        adhocRunning = false;
+        adhocPaused = true;
+        startAdhocBtn.disabled = false;
+        pauseAdhocBtn.disabled = false;
+    }
+    updateAdhocButtonStates();
+}
+
+function stopAdhoc() {
+    clearInterval(adhocInterval);
+    adhocRunning = false;
+    adhocPaused = false;
+    adhocRemaining = 300;
+    adhocTimeDisplay.textContent = formatAdhocTime(adhocRemaining);
+    startAdhocBtn.disabled = false;
+    pauseAdhocBtn.disabled = true;
+    updateAdhocButtonStates();
+    closeAdhocOverlay();
 }
 
 function completeSession() {
@@ -292,6 +475,7 @@ function completeSession() {
     if (activeSessionIndex < sessions.length - 1) {
         if (sessionTransitionMode === 'auto') {
             activeSessionIndex += 1;
+            currentSessionHasStarted = false;
             setRemainingFromSession();
             updateTimerHeading();
             updateStatus(`Starting ${sessions[activeSessionIndex].title}`);
@@ -315,6 +499,7 @@ function goToNextSession() {
     clearInterval(timerInterval);
     running = false;
     paused = false;
+    currentSessionHasStarted = false;
     activeSessionIndex += 1;
     setRemainingFromSession();
     updateTimerHeading();
@@ -391,7 +576,7 @@ function updateButtonStates() {
     if (timerMode === 'sessions') {
         nextSessionBtn.classList.remove('hidden');
         restartSessionBtn.classList.remove('hidden');
-        restartSessionBtn.disabled = sessions.length === 0;
+        restartSessionBtn.disabled = sessions.length === 0 || !currentSessionHasStarted;
         nextSessionBtn.disabled = sessions.length <= 1 || activeSessionIndex >= sessions.length - 1;
         if (pendingNextSession) {
             startBtn.disabled = true;
@@ -408,7 +593,13 @@ function updateButtonStates() {
 
 function updateEditSessionsAvailability() {
     if (!editSessionsBtn) return;
-    editSessionsBtn.disabled = timerMode !== 'sessions';
+    // Hide edit sessions button when not in session mode (per UX request)
+    editSessionsBtn.classList.toggle('hidden', timerMode !== 'sessions');
+    if (editSessionsBtn.classList.contains('hidden')) {
+        editSessionsBtn.setAttribute('aria-hidden', 'true');
+    } else {
+        editSessionsBtn.setAttribute('aria-hidden', 'false');
+    }
 }
 
 function updateStatus(text) {
@@ -462,6 +653,9 @@ function startTimer() {
     }
     running = true;
     paused = false;
+    if (timerMode === 'sessions') {
+        currentSessionHasStarted = true;
+    }
     updateStatus(timerMode === 'sessions' ? getCurrentSessionLabel() : 'Running');
     updateButtonStates();
     timerInterval = setInterval(tick, 1000);
@@ -481,6 +675,7 @@ function resetTimer() {
     running = false;
     paused = false;
     pendingNextSession = false;
+    currentSessionHasStarted = false;
     if (timerMode === 'sessions') {
         activeSessionIndex = 0;
         setRemainingFromSession();
@@ -558,14 +753,14 @@ function applyTheme(theme) {
 function openMenu() {
     menuOverlay.classList.remove('hidden');
     menuOverlay.setAttribute('aria-hidden', 'false');
-    menuToggleBtn.textContent = '✕';
+    menuToggleBtn.classList.add('open');
     menuToggleBtn.setAttribute('aria-expanded', 'true');
 }
 
 function closeMenu() {
     menuOverlay.classList.add('hidden');
     menuOverlay.setAttribute('aria-hidden', 'true');
-    menuToggleBtn.textContent = '☰';
+    menuToggleBtn.classList.remove('open');
     menuToggleBtn.setAttribute('aria-expanded', 'false');
 }
 
@@ -630,6 +825,7 @@ function enterFullscreen() {
     closeFullscreenBtn.classList.remove('hidden');
     fullscreenBtn.disabled = true;
     closeFullscreenControls();
+    updateControlsButtonVisibility();
 }
 
 function exitFullscreen() {
@@ -638,6 +834,7 @@ function exitFullscreen() {
     closeFullscreenBtn.classList.add('hidden');
     fullscreenBtn.disabled = false;
     closeFullscreenControls();
+    updateControlsButtonVisibility();
 }
 
 hoursInput.addEventListener('input', () => {
@@ -697,7 +894,15 @@ pauseBtn.addEventListener('click', () => {
 });
 restartSessionBtn.addEventListener('click', restartCurrentSession);
 nextSessionBtn.addEventListener('click', goToNextSession);
-resetBtn.addEventListener('click', resetTimer);
+resetBtn.addEventListener('click', () => {
+    if (timerMode === 'sessions') {
+        const confirmed = window.confirm('This action resets the entire workshop. Do you want to proceed?');
+        if (!confirmed) {
+            return;
+        }
+    }
+    resetTimer();
+});
 fullscreenBtn.addEventListener('click', enterFullscreen);
 closeFullscreenBtn.addEventListener('click', exitFullscreen);
 menuToggleBtn.addEventListener('click', toggleMenu);
@@ -744,6 +949,21 @@ updateModeFromStorage();
 syncModeSelection();
 setSessionTransitionMode(sessionTransitionMode);
 
+// load show inputs preference
+const savedShowInputs = localStorage.getItem('easyTimerShowInputs');
+showTimeInputs = savedShowInputs === '1';
+// in session mode, always hide inputs by default
+if (timerMode === 'sessions') {
+    showTimeInputs = false;
+}
+updateShowTimeInputsDisplay();
+
+// ensure session menu visibility matches current mode
+updateSessionTransitionModeDisplay();
+
+// ensure controls button visibility is correct
+updateControlsButtonVisibility();
+
 if (timerMode === 'sessions') {
     setRemainingFromSession();
 } else {
@@ -751,3 +971,10 @@ if (timerMode === 'sessions') {
 }
 updateButtonStates();
 updateEditSessionsAvailability();
+
+// initialize ad-hoc display to persisted/default value
+if (adhocTimeDisplay) {
+    adhocTimeDisplay.textContent = formatAdhocTime(adhocRemaining);
+}
+// initialize ad-hoc button states
+updateAdhocButtonStates();
