@@ -475,7 +475,7 @@ body {
     right: 0;
     bottom: 0;
     padding: 0.85rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.6rem;
     background: var(--panel);
     border-top: 1px solid var(--border);
