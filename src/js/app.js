@@ -76,8 +76,10 @@ function updateTimerHeading() {
     if (timerMode === 'sessions') {
         const currentSession = sessions[activeSessionIndex];
         timerHeading.textContent = currentSession ? `Session: ${currentSession.title}` : 'Session mode';
+        timerHeading.classList.remove('hidden');
     } else {
         timerHeading.textContent = 'Countdown';
+        timerHeading.classList.add('hidden');
     }
 }
 
@@ -389,6 +391,9 @@ function tick() {
     }
     remainingSeconds -= 1;
     timeDisplay.textContent = formatTime(remainingSeconds);
+    if (timerMode === 'sessions') {
+        updateSessionSummary();
+    }
     if (remainingSeconds === 0) {
         if (timerMode === 'sessions') {
             completeSession();

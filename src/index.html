@@ -65,10 +65,10 @@
                             <button id="fullscreenBtn" class="icon-btn" aria-label="Enter fullscreen">⛶</button>
                         </div>
                     </div>
-                    <div class="timer-display" aria-live="polite" id="time">
+                    <div class="timer-display">
                         <h2 id="timer-heading">Countdown</h2>
-                        <button id="closeFullscreenBtn" class="close-fullscreen" aria-label="Exit fullscreen">✕</button>
-                        00:00
+                        <button id="closeFullscreenBtn" class="close-fullscreen hidden" aria-label="Exit fullscreen">✕</button>
+                        <span id="time" aria-live="polite">00:00</span>
                     </div>
                     <div class="session-summary hidden" id="sessionSummary">
                         <span id="sessionTotalLabel">Total remaining</span>
