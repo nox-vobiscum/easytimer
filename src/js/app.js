@@ -25,6 +25,7 @@ const timerHeading = document.getElementById('timer-heading');
 const sessionSummary = document.getElementById('sessionSummary');
 const sessionTotalTime = document.getElementById('sessionTotalTime');
 const nextSessionBtn = document.getElementById('nextSessionBtn');
+const restartSessionBtn = document.getElementById('restartSessionBtn');
 const shell = document.querySelector('.vscode-shell');
 
 let timerInterval;
@@ -363,10 +364,13 @@ function updateButtonStates() {
 
     if (timerMode === 'sessions') {
         nextSessionBtn.classList.remove('hidden');
+        restartSessionBtn.classList.remove('hidden');
+        restartSessionBtn.disabled = sessions.length === 0;
         nextSessionBtn.disabled = sessions.length <= 1 || activeSessionIndex >= sessions.length - 1;
         updateSessionSummary();
     } else {
         nextSessionBtn.classList.add('hidden');
+        restartSessionBtn.classList.add('hidden');
         sessionSummary.classList.add('hidden');
     }
 }
@@ -441,11 +445,37 @@ function resetTimer() {
     running = false;
     paused = false;
     if (timerMode === 'sessions') {
+        activeSessionIndex = 0;
         setRemainingFromSession();
+        updateTimerHeading();
+        updateSessionSummary();
     } else {
         setRemainingFromInput();
     }
     updateStatus('Ready');
+    updateButtonStates();
+}
+
+function restartCurrentSession() {
+    if (timerMode !== 'sessions' || sessions.length === 0) {
+        return;
+    }
+    const currentSession = sessions[activeSessionIndex];
+    if (!currentSession) {
+        return;
+    }
+    remainingSeconds = currentSession.duration;
+    timeDisplay.textContent = formatTime(remainingSeconds);
+    updateSessionSummary();
+    if (running) {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(tick, 1000);
+        updateStatus(getCurrentSessionLabel());
+    } else if (paused) {
+        updateStatus('Paused');
+    } else {
+        updateStatus('Ready');
+    }
     updateButtonStates();
 }
 
@@ -621,6 +651,7 @@ pauseBtn.addEventListener('click', () => {
         pauseTimer();
     }
 });
+restartSessionBtn.addEventListener('click', restartCurrentSession);
 nextSessionBtn.addEventListener('click', goToNextSession);
 resetBtn.addEventListener('click', resetTimer);
 fullscreenBtn.addEventListener('click', enterFullscreen);

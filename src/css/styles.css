@@ -475,7 +475,7 @@ body {
     right: 0;
     bottom: 0;
     padding: 0.85rem;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
     gap: 0.6rem;
     background: var(--panel);
     border-top: 1px solid var(--border);
@@ -755,7 +755,7 @@ button[disabled] {
 .timer-controls {
     display: grid;
     gap: 0.8rem;
-    grid-template-columns: repeat(4, minmax(100px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
 .timer-controls button {
