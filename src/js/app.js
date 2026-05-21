@@ -21,6 +21,8 @@ const cancelSessionsBtn = document.getElementById('cancelSessionsBtn');
 const addSessionBtn = document.getElementById('addSessionBtn');
 const sessionList = document.getElementById('sessionList');
 const modeRadioButtons = document.querySelectorAll('input[name="timerMode"]');
+const sessionTransitionModeRadios = document.querySelectorAll('input[name="sessionTransitionMode"]');
+const sessionTransitionModeSection = document.getElementById('sessionTransitionModeSection');
 const timerHeading = document.getElementById('timer-heading');
 const sessionSummary = document.getElementById('sessionSummary');
 const sessionTotalTime = document.getElementById('sessionTotalTime');
@@ -34,6 +36,8 @@ let running = false;
 let paused = false;
 let isFullscreen = false;
 let timerMode = 'countdown';
+let sessionTransitionMode = 'auto';
+let pendingNextSession = false;
 let sessions = [];
 let activeSessionIndex = 0;
 
@@ -258,11 +262,27 @@ function setTimerMode(mode) {
         }
     } else {
         activeSessionIndex = 0;
+        pendingNextSession = false;
         setRemainingFromInput();
         updateStatus('Ready');
     }
     updateButtonStates();
     updateEditSessionsAvailability();
+    updateSessionTransitionModeDisplay();
+}
+
+function setSessionTransitionMode(mode) {
+    sessionTransitionMode = mode;
+    localStorage.setItem('easyTimerTransitionMode', mode);
+    sessionTransitionModeRadios.forEach((radio) => {
+        radio.checked = radio.value === mode;
+    });
+}
+
+function updateSessionTransitionModeDisplay() {
+    if (sessionTransitionModeSection) {
+        sessionTransitionModeSection.classList.toggle('hidden', timerMode !== 'sessions');
+    }
 }
 
 function completeSession() {
@@ -270,12 +290,18 @@ function completeSession() {
     running = false;
     paused = false;
     if (activeSessionIndex < sessions.length - 1) {
-        activeSessionIndex += 1;
-        setRemainingFromSession();
-        updateTimerHeading();
-        updateStatus(`Starting ${sessions[activeSessionIndex].title}`);
+        if (sessionTransitionMode === 'auto') {
+            activeSessionIndex += 1;
+            setRemainingFromSession();
+            updateTimerHeading();
+            updateStatus(`Starting ${sessions[activeSessionIndex].title}`);
+            updateButtonStates();
+            startTimer();
+            return;
+        }
+        pendingNextSession = true;
+        updateStatus('Session complete — click Resume for next session');
         updateButtonStates();
-        startTimer();
     } else {
         stopTimer('All sessions complete');
     }
@@ -415,6 +441,11 @@ function startTimer() {
                 updateStatus('Add at least one session');
                 return;
             }
+            if (pendingNextSession) {
+                pendingNextSession = false;
+                activeSessionIndex = Math.min(activeSessionIndex + 1, sessions.length - 1);
+                updateTimerHeading();
+            }
             setRemainingFromSession();
         } else {
             setRemainingFromInput();
@@ -444,6 +475,7 @@ function resetTimer() {
     clearInterval(timerInterval);
     running = false;
     paused = false;
+    pendingNextSession = false;
     if (timerMode === 'sessions') {
         activeSessionIndex = 0;
         setRemainingFromSession();
@@ -692,8 +724,13 @@ saveSessionsBtn.addEventListener('click', () => {
 const savedTheme = localStorage.getItem('easyTimerTheme') || 'system';
 applyTheme(savedTheme);
 loadSessions();
+const savedTransitionMode = localStorage.getItem('easyTimerTransitionMode');
+if (savedTransitionMode === 'auto' || savedTransitionMode === 'manual') {
+    sessionTransitionMode = savedTransitionMode;
+}
 updateModeFromStorage();
 syncModeSelection();
+setSessionTransitionMode(sessionTransitionMode);
 
 if (timerMode === 'sessions') {
     setRemainingFromSession();

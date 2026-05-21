@@ -31,7 +31,16 @@
                     <label class="menu-option"><input type="radio" name="timerMode" value="sessions"> Session mode</label>
                 </div>
                 <div class="menu-section">
-                    <button id="editSessionsBtn" type="button" class="secondary">Edit sessions</button>
+                    <button id="editSessionsBtn" type="button" class="secondary" title="Open the session editor">Edit sessions</button>
+                </div>
+                <div id="sessionTransitionModeSection" class="menu-section hidden">
+                    <div class="menu-label">Session transition</div>
+                    <label class="menu-option" title="Automatically start the next session when the current one ends.">
+                        <input type="radio" name="sessionTransitionMode" value="auto"> Auto
+                    </label>
+                    <label class="menu-option" title="Wait after a session ends until Resume is clicked to start the next session.">
+                        <input type="radio" name="sessionTransitionMode" value="manual"> Manual
+                    </label>
                 </div>
             </div>
         </div>
