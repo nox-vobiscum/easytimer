@@ -25,6 +25,32 @@
                     <button type="button" class="theme-btn" data-theme="dark" aria-label="Dark theme">🌙</button>
                     <button type="button" class="theme-btn" data-theme="system" aria-label="System default theme">💻</button>
                 </div>
+                <div class="menu-section">
+                    <div class="menu-label">Timer mode</div>
+                    <label class="menu-option"><input type="radio" name="timerMode" value="countdown" checked> Normal countdown</label>
+                    <label class="menu-option"><input type="radio" name="timerMode" value="sessions"> Session mode</label>
+                </div>
+                <div class="menu-section">
+                    <button id="editSessionsBtn" type="button" class="secondary">Edit sessions</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="sessionEditorOverlay" class="session-overlay hidden" aria-hidden="true">
+            <div class="session-panel" role="dialog" aria-modal="true" aria-label="Session editor">
+                <div class="session-panel-heading">
+                    <div>
+                        <h3>Session rundown</h3>
+                        <p>Define titles and durations for your workshop sessions.</p>
+                    </div>
+                    <button id="closeSessionEditor" type="button" class="icon-btn" aria-label="Close session editor">✕</button>
+                </div>
+                <div class="session-list" id="sessionList"></div>
+                <button id="addSessionBtn" type="button" class="primary">+ Add session</button>
+                <div class="session-panel-actions">
+                    <button id="saveSessionsBtn" type="button" class="primary">Save</button>
+                    <button id="cancelSessionsBtn" type="button" class="secondary">Cancel</button>
+                </div>
             </div>
         </div>
 
@@ -32,15 +58,22 @@
             <section class="timer-card" aria-labelledby="timer-heading">
                     <div class="timer-header">
                         <div>
-                            <h2 id="timer-heading">Countdown</h2>
+                            <!-- Heading moved into the timer display for centered placement -->
                         </div>
                         <div class="timer-header-actions">
                             <div class="status-badge" id="timerStatus">Ready</div>
                             <button id="fullscreenBtn" class="icon-btn" aria-label="Enter fullscreen">⛶</button>
-                            <button id="closeFullscreenBtn" class="close-fullscreen hidden" aria-label="Exit fullscreen">✕</button>
                         </div>
                     </div>
-                    <div class="timer-display" aria-live="polite" id="time">00:00</div>
+                    <div class="timer-display" aria-live="polite" id="time">
+                        <h2 id="timer-heading">Countdown</h2>
+                        <button id="closeFullscreenBtn" class="close-fullscreen" aria-label="Exit fullscreen">✕</button>
+                        00:00
+                    </div>
+                    <div class="session-summary hidden" id="sessionSummary">
+                        <span id="sessionTotalLabel">Total remaining</span>
+                        <span id="sessionTotalTime">00:00</span>
+                    </div>
 
                 <button id="toggleControlsBtn" class="toggle-controls" type="button" aria-expanded="false">
                     Controls <span class="toggle-icon">▾</span>
@@ -62,18 +95,19 @@
                 </div>
 
                 <div class="preset-bar">
-                    <button type="button" class="preset-btn" data-seconds="60">1 min</button>
-                    <button type="button" class="preset-btn" data-seconds="180">3 min</button>
-                    <button type="button" class="preset-btn" data-seconds="300">5 min</button>
-                    <button type="button" class="preset-btn" data-seconds="600">10 min</button>
-                    <button type="button" class="preset-btn" data-seconds="900">15 min</button>
-                    <button type="button" class="preset-btn" data-seconds="1800">30 min</button>
-                    <button type="button" class="preset-btn" data-seconds="3600">60 min</button>
+                    <button type="button" class="preset-btn" data-seconds="60">1</button>
+                    <button type="button" class="preset-btn" data-seconds="180">3</button>
+                    <button type="button" class="preset-btn" data-seconds="300">5</button>
+                    <button type="button" class="preset-btn" data-seconds="600">10</button>
+                    <button type="button" class="preset-btn" data-seconds="900">15</button>
+                    <button type="button" class="preset-btn" data-seconds="1800">30</button>
+                    <button type="button" class="preset-btn" data-seconds="3600">60</button>
                 </div>
 
                 <div class="timer-controls">
                     <button id="startBtn" class="primary">Start</button>
                     <button id="pauseBtn" class="secondary">Pause</button>
+                    <button id="nextSessionBtn" class="secondary hidden">Next session</button>
                     <button id="resetBtn" class="secondary">Stop & Reset</button>
                 </div>
             </section>

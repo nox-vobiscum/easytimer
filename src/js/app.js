@@ -13,6 +13,18 @@ const presetButtons = document.querySelectorAll('.preset-btn');
 const menuToggleBtn = document.getElementById('menuToggleBtn');
 const menuOverlay = document.getElementById('appMenuOverlay');
 const themeButtons = document.querySelectorAll('.theme-btn');
+const editSessionsBtn = document.getElementById('editSessionsBtn');
+const sessionEditorOverlay = document.getElementById('sessionEditorOverlay');
+const closeSessionEditorBtn = document.getElementById('closeSessionEditor');
+const saveSessionsBtn = document.getElementById('saveSessionsBtn');
+const cancelSessionsBtn = document.getElementById('cancelSessionsBtn');
+const addSessionBtn = document.getElementById('addSessionBtn');
+const sessionList = document.getElementById('sessionList');
+const modeRadioButtons = document.querySelectorAll('input[name="timerMode"]');
+const timerHeading = document.getElementById('timer-heading');
+const sessionSummary = document.getElementById('sessionSummary');
+const sessionTotalTime = document.getElementById('sessionTotalTime');
+const nextSessionBtn = document.getElementById('nextSessionBtn');
 const shell = document.querySelector('.vscode-shell');
 
 let timerInterval;
@@ -20,6 +32,9 @@ let remainingSeconds = 0;
 let running = false;
 let paused = false;
 let isFullscreen = false;
+let timerMode = 'countdown';
+let sessions = [];
+let activeSessionIndex = 0;
 
 function formatTime(totalSeconds) {
     const hours = Math.floor(totalSeconds / 3600);
@@ -45,9 +60,288 @@ function setRemainingFromInput() {
     timeDisplay.textContent = formatTime(remainingSeconds);
 }
 
+function setRemainingFromSession() {
+    if (sessions.length === 0) {
+        remainingSeconds = 0;
+        timeDisplay.textContent = formatTime(remainingSeconds);
+        return;
+    }
+    activeSessionIndex = Math.min(activeSessionIndex, sessions.length - 1);
+    const currentSession = sessions[activeSessionIndex];
+    remainingSeconds = currentSession.duration;
+    timeDisplay.textContent = formatTime(remainingSeconds);
+}
+
+function updateTimerHeading() {
+    if (timerMode === 'sessions') {
+        const currentSession = sessions[activeSessionIndex];
+        timerHeading.textContent = currentSession ? `Session: ${currentSession.title}` : 'Session mode';
+    } else {
+        timerHeading.textContent = 'Countdown';
+    }
+}
+
+function getCurrentSessionLabel() {
+    return sessions.length ? `Session ${activeSessionIndex + 1}/${sessions.length}` : 'No sessions defined';
+}
+
+function loadSessions() {
+    const saved = localStorage.getItem('easyTimerSessions');
+    try {
+        sessions = saved ? JSON.parse(saved) : [];
+    } catch {
+        sessions = [];
+    }
+    if (!Array.isArray(sessions)) {
+        sessions = [];
+    }
+}
+
+function saveSessions() {
+    localStorage.setItem('easyTimerSessions', JSON.stringify(sessions));
+}
+
+function getTotalRemainingSessionTime() {
+    if (sessions.length === 0 || activeSessionIndex >= sessions.length) {
+        return 0;
+    }
+    const remainingOfCurrent = remainingSeconds;
+    const futureSessions = sessions.slice(activeSessionIndex + 1).reduce((sum, session) => sum + session.duration, 0);
+    return remainingOfCurrent + futureSessions;
+}
+
+function updateSessionSummary() {
+    if (timerMode !== 'sessions' || sessions.length === 0) {
+        sessionSummary.classList.add('hidden');
+        return;
+    }
+    sessionSummary.classList.remove('hidden');
+    sessionTotalTime.textContent = formatTime(getTotalRemainingSessionTime());
+}
+
+function renderSessionEditorRows() {
+    sessionList.innerHTML = '';
+    if (sessions.length === 0) {
+        addSessionRow({ title: '', duration: 5 });
+        return;
+    }
+    sessions.forEach(addSessionRow);
+}
+
+function addSessionRow(session = { title: '', duration: 5 }) {
+    const row = document.createElement('div');
+    row.className = 'session-row';
+
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'session-drag-handle';
+    dragHandle.textContent = '☰';
+    dragHandle.setAttribute('aria-hidden', 'true');
+
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'session-row-title';
+    titleInput.placeholder = 'Session title';
+    titleInput.value = session.title || '';
+    titleInput.setAttribute('aria-label', 'Session title');
+
+    const durationWrapper = document.createElement('div');
+    durationWrapper.className = 'session-duration-wrapper';
+    durationWrapper.style.position = 'relative';
+
+    const durationInput = document.createElement('input');
+    durationInput.type = 'number';
+    durationInput.className = 'session-row-duration';
+    durationInput.min = '1';
+    durationInput.step = '1';
+    durationInput.value = Math.max(1, Number(session.duration || 5) / 60);
+    durationInput.setAttribute('aria-label', 'Session duration in minutes');
+
+    const unitLabel = document.createElement('span');
+    unitLabel.className = 'session-unit';
+    unitLabel.textContent = 'min';
+
+    durationWrapper.appendChild(durationInput);
+    durationWrapper.appendChild(unitLabel);
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'session-remove';
+    removeButton.textContent = '✕';
+    removeButton.setAttribute('aria-label', 'Remove session');
+    removeButton.addEventListener('click', () => row.remove());
+
+    row.draggable = true;
+    row.addEventListener('dragstart', (event) => {
+        row.classList.add('dragging');
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', 'dragging');
+        sessionList.dataset.dragSourceIndex = Array.from(sessionList.children).indexOf(row);
+    });
+
+    row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        delete sessionList.dataset.dragSourceIndex;
+    });
+
+    row.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        row.classList.add('drag-over');
+    });
+
+    row.addEventListener('dragleave', () => {
+        row.classList.remove('drag-over');
+    });
+
+    row.addEventListener('drop', (event) => {
+        event.preventDefault();
+        row.classList.remove('drag-over');
+        const sourceIndex = Number(sessionList.dataset.dragSourceIndex);
+        const targetIndex = Array.from(sessionList.children).indexOf(row);
+        if (sourceIndex === targetIndex || Number.isNaN(sourceIndex)) {
+            return;
+        }
+        const sourceRow = sessionList.children[sourceIndex];
+        if (sourceIndex < targetIndex) {
+            sessionList.insertBefore(sourceRow, row.nextSibling);
+        } else {
+            sessionList.insertBefore(sourceRow, row);
+        }
+    });
+
+    row.appendChild(dragHandle);
+    row.appendChild(titleInput);
+    row.appendChild(durationWrapper);
+    row.appendChild(removeButton);
+    sessionList.appendChild(row);
+}
+
+function getEditorSessions() {
+    return Array.from(sessionList.querySelectorAll('.session-row')).map((row) => {
+        const title = row.querySelector('.session-row-title')?.value.trim() || 'Untitled';
+        const durationMinutes = Math.max(1, Number(row.querySelector('.session-row-duration')?.value) || 1);
+        return { title, duration: durationMinutes * 60 };
+    });
+}
+
+function openSessionEditor() {
+    renderSessionEditorRows();
+    sessionEditorOverlay.classList.remove('hidden');
+    sessionEditorOverlay.setAttribute('aria-hidden', 'false');
+    closeMenu();
+}
+
+function closeSessionEditor() {
+    sessionEditorOverlay.classList.add('hidden');
+    sessionEditorOverlay.setAttribute('aria-hidden', 'true');
+}
+
+function setTimerMode(mode) {
+    timerMode = mode;
+    localStorage.setItem('easyTimerMode', mode);
+    modeRadioButtons.forEach((radio) => {
+        radio.checked = radio.value === mode;
+    });
+    updateTimerHeading();
+    if (timerMode === 'sessions') {
+        if (sessions.length > 0) {
+            activeSessionIndex = Math.min(activeSessionIndex, sessions.length - 1);
+            setRemainingFromSession();
+            updateStatus(getCurrentSessionLabel());
+        } else {
+            remainingSeconds = 0;
+            timeDisplay.textContent = formatTime(remainingSeconds);
+            updateStatus('No sessions defined');
+        }
+    } else {
+        activeSessionIndex = 0;
+        setRemainingFromInput();
+        updateStatus('Ready');
+    }
+    updateButtonStates();
+    updateEditSessionsAvailability();
+}
+
+function completeSession() {
+    clearInterval(timerInterval);
+    running = false;
+    paused = false;
+    if (activeSessionIndex < sessions.length - 1) {
+        activeSessionIndex += 1;
+        setRemainingFromSession();
+        updateTimerHeading();
+        updateStatus(`Starting ${sessions[activeSessionIndex].title}`);
+        updateButtonStates();
+        startTimer();
+    } else {
+        stopTimer('All sessions complete');
+    }
+}
+
+function goToNextSession() {
+    if (sessions.length === 0 || activeSessionIndex >= sessions.length - 1) {
+        stopTimer('No next session');
+        return;
+    }
+    clearInterval(timerInterval);
+    running = false;
+    paused = false;
+    activeSessionIndex += 1;
+    setRemainingFromSession();
+    updateTimerHeading();
+    updateStatus(`Starting ${sessions[activeSessionIndex].title}`);
+    updateButtonStates();
+    startTimer();
+}
+
+function setRemainingForCurrentMode() {
+    if (timerMode === 'sessions') {
+        setRemainingFromSession();
+    } else {
+        setRemainingFromInput();
+    }
+}
+
+function updateModeFromStorage() {
+    const savedMode = localStorage.getItem('easyTimerMode');
+    if (savedMode === 'sessions' || savedMode === 'countdown') {
+        timerMode = savedMode;
+    }
+    modeRadioButtons.forEach((radio) => {
+        radio.checked = radio.value === timerMode;
+    });
+    updateTimerHeading();
+}
+
+function updateStatusForMode() {
+    if (timerMode === 'sessions' && sessions.length > 0) {
+        updateStatus(getCurrentSessionLabel());
+    }
+}
+
+function getTimerModeLabel() {
+    return timerMode === 'sessions' ? 'Session mode' : 'Countdown';
+}
+
+function updateModeDisplay() {
+    updateTimerHeading();
+    updateButtonStates();
+}
+
+function syncModeSelection() {
+    modeRadioButtons.forEach((radio) => {
+        radio.addEventListener('change', () => {
+            if (radio.checked) {
+                setTimerMode(radio.value);
+            }
+        });
+    });
+}
+
 function updateButtonStates() {
+    const hasDuration = remainingSeconds > 0 || (timerMode === 'sessions' && sessions.length > 0);
     const isStopped = !running && !paused;
-    startBtn.disabled = running || paused || remainingSeconds === 0;
+    startBtn.disabled = running || paused || !hasDuration;
     pauseBtn.disabled = isStopped;
     pauseBtn.textContent = paused ? 'Resume' : 'Pause';
 
@@ -64,6 +358,20 @@ function updateButtonStates() {
     }
 
     resetBtn.disabled = !running && remainingSeconds === 0;
+
+    if (timerMode === 'sessions') {
+        nextSessionBtn.classList.remove('hidden');
+        nextSessionBtn.disabled = sessions.length <= 1 || activeSessionIndex >= sessions.length - 1;
+        updateSessionSummary();
+    } else {
+        nextSessionBtn.classList.add('hidden');
+        sessionSummary.classList.add('hidden');
+    }
+}
+
+function updateEditSessionsAvailability() {
+    if (!editSessionsBtn) return;
+    editSessionsBtn.disabled = timerMode !== 'sessions';
 }
 
 function updateStatus(text) {
@@ -72,20 +380,36 @@ function updateStatus(text) {
 
 function tick() {
     if (remainingSeconds <= 0) {
-        stopTimer('Finished!');
+        if (timerMode === 'sessions') {
+            completeSession();
+        } else {
+            stopTimer('Finished!');
+        }
         return;
     }
     remainingSeconds -= 1;
     timeDisplay.textContent = formatTime(remainingSeconds);
     if (remainingSeconds === 0) {
-        stopTimer('Finished!');
+        if (timerMode === 'sessions') {
+            completeSession();
+        } else {
+            stopTimer('Finished!');
+        }
     }
 }
 
 function startTimer() {
     if (running) return;
     if (remainingSeconds === 0) {
-        setRemainingFromInput();
+        if (timerMode === 'sessions') {
+            if (sessions.length === 0) {
+                updateStatus('Add at least one session');
+                return;
+            }
+            setRemainingFromSession();
+        } else {
+            setRemainingFromInput();
+        }
     }
     if (remainingSeconds === 0) {
         updateStatus('Please enter duration');
@@ -93,7 +417,7 @@ function startTimer() {
     }
     running = true;
     paused = false;
-    updateStatus('Running');
+    updateStatus(timerMode === 'sessions' ? getCurrentSessionLabel() : 'Running');
     updateButtonStates();
     timerInterval = setInterval(tick, 1000);
 }
@@ -111,7 +435,11 @@ function resetTimer() {
     clearInterval(timerInterval);
     running = false;
     paused = false;
-    setRemainingFromInput();
+    if (timerMode === 'sessions') {
+        setRemainingFromSession();
+    } else {
+        setRemainingFromInput();
+    }
     updateStatus('Ready');
     updateButtonStates();
 }
@@ -184,8 +512,15 @@ function closeMenuOnOutsideClick(event) {
 }
 
 function closeMenuOnEscape(event) {
-    if (event.key === 'Escape' && !menuOverlay.classList.contains('hidden')) {
+    if (event.key !== 'Escape') {
+        return;
+    }
+    if (!menuOverlay.classList.contains('hidden')) {
         closeMenu();
+        return;
+    }
+    if (!sessionEditorOverlay.classList.contains('hidden')) {
+        closeSessionEditor();
     }
 }
 
@@ -234,7 +569,7 @@ function exitFullscreen() {
 }
 
 hoursInput.addEventListener('input', () => {
-    if (!running) {
+    if (!running && timerMode === 'countdown') {
         paused = false;
         setRemainingFromInput();
         clearActivePreset();
@@ -242,7 +577,7 @@ hoursInput.addEventListener('input', () => {
 });
 
 minutesInput.addEventListener('input', () => {
-    if (!running) {
+    if (!running && timerMode === 'countdown') {
         paused = false;
         setRemainingFromInput();
         clearActivePreset();
@@ -250,7 +585,7 @@ minutesInput.addEventListener('input', () => {
 });
 
 secondsInput.addEventListener('input', () => {
-    if (!running) {
+    if (!running && timerMode === 'countdown') {
         paused = false;
         setRemainingFromInput();
         clearActivePreset();
@@ -281,6 +616,7 @@ pauseBtn.addEventListener('click', () => {
         pauseTimer();
     }
 });
+nextSessionBtn.addEventListener('click', goToNextSession);
 resetBtn.addEventListener('click', resetTimer);
 fullscreenBtn.addEventListener('click', enterFullscreen);
 closeFullscreenBtn.addEventListener('click', exitFullscreen);
@@ -299,8 +635,34 @@ themeButtons.forEach((button) => {
     });
 });
 
+editSessionsBtn.addEventListener('click', openSessionEditor);
+closeSessionEditorBtn.addEventListener('click', closeSessionEditor);
+cancelSessionsBtn.addEventListener('click', closeSessionEditor);
+addSessionBtn.addEventListener('click', () => addSessionRow());
+sessionEditorOverlay.addEventListener('click', (event) => {
+    if (event.target === sessionEditorOverlay) {
+        closeSessionEditor();
+    }
+});
+saveSessionsBtn.addEventListener('click', () => {
+    sessions = getEditorSessions();
+    saveSessions();
+    activeSessionIndex = 0;
+    closeSessionEditor();
+    setTimerMode(timerMode);
+    updateStatus('Sessions saved');
+});
+
 const savedTheme = localStorage.getItem('easyTimerTheme') || 'system';
 applyTheme(savedTheme);
+loadSessions();
+updateModeFromStorage();
+syncModeSelection();
 
-setRemainingFromInput();
+if (timerMode === 'sessions') {
+    setRemainingFromSession();
+} else {
+    setRemainingFromInput();
+}
 updateButtonStates();
+updateEditSessionsAvailability();
