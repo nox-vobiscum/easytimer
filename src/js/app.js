@@ -374,7 +374,7 @@ function updateButtonStates() {
     pauseBtn.disabled = isStopped;
     pauseBtn.textContent = paused ? 'Resume' : 'Pause';
 
-    if (running || paused) {
+    if (running || paused || pendingNextSession) {
         startBtn.classList.remove('primary');
         startBtn.classList.add('secondary');
         pauseBtn.classList.remove('secondary');
@@ -393,6 +393,11 @@ function updateButtonStates() {
         restartSessionBtn.classList.remove('hidden');
         restartSessionBtn.disabled = sessions.length === 0;
         nextSessionBtn.disabled = sessions.length <= 1 || activeSessionIndex >= sessions.length - 1;
+        if (pendingNextSession) {
+            startBtn.disabled = true;
+            pauseBtn.disabled = false;
+            pauseBtn.textContent = 'Resume';
+        }
         updateSessionSummary();
     } else {
         nextSessionBtn.classList.add('hidden');
@@ -674,6 +679,13 @@ startBtn.addEventListener('click', () => {
     }
 });
 pauseBtn.addEventListener('click', () => {
+    if (pendingNextSession && timerMode === 'sessions') {
+        startTimer();
+        if (isFullscreen) {
+            closeFullscreenControls();
+        }
+        return;
+    }
     if (paused) {
         startTimer();
         if (isFullscreen) {
