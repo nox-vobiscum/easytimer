@@ -844,11 +844,13 @@ body {
 
 .timer-inputs input::-webkit-inner-spin-button,
 .timer-inputs input::-webkit-outer-spin-button {
+    appearance: none;
     -webkit-appearance: none;
     margin: 0;
 }
 
 .timer-inputs input[type="number"] {
+    appearance: textfield;
     -moz-appearance: textfield;
 }
 
