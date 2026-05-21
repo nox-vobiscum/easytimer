@@ -286,7 +286,7 @@ body {
     display: grid;
     gap: 1rem;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-bottom: 1rem;
+    /*margin-bottom: 1rem;*/
 }
 
 .timer-input {
@@ -332,7 +332,7 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 0.6rem;
-    margin-bottom: 1rem;
+    /*margin-bottom: 1rem;*/
 }
 
 .preset-btn {
