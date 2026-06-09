@@ -41,29 +41,28 @@ const includeAdhocInTotalCheckbox = document.getElementById('includeAdhocInTotal
 const sessionEditorTotal = document.getElementById('sessionEditorTotal');
 const shell = document.querySelector('.vscode-shell');
 
-sessionTransitionModeRadios.forEach((radio) => {
-    radio.addEventListener('change', () => {
-        if (radio.checked) {
-            setSessionTransitionMode(radio.value);
-        }
+    sessionTransitionModeRadios.forEach((radio) => {
+        radio.addEventListener('change', () => {
+            if (radio.checked) {
+                setSessionTransitionMode(radio.value);
+            }
+        });
     });
-});
-if (showTimeInputsToggle) {
-    showTimeInputsToggle.addEventListener('change', () => {
-        showTimeInputs = !!showTimeInputsToggle.checked;
-        localStorage.setItem('easyTimerShowInputs', showTimeInputs ? '1' : '0');
-        updateShowTimeInputsDisplay();
-        updateControlsButtonVisibility();
-    });
-}
-if (adhocBtn) {
-    adhocBtn.addEventListener('click', openAdhocOverlay);
-}
-if (closeAdhocBtn) closeAdhocBtn.addEventListener('click', () => stopAdhoc());
-if (startAdhocBtn) startAdhocBtn.addEventListener('click', startAdhoc);
-if (pauseAdhocBtn) pauseAdhocBtn.addEventListener('click', pauseAdhoc);
-if (stopAdhocBtn) stopAdhocBtn.addEventListener('click', stopAdhoc);
-
+    if (showTimeInputsToggle) {
+        showTimeInputsToggle.addEventListener('change', () => {
+            showTimeInputs = !!showTimeInputsToggle.checked;
+            localStorage.setItem('easyTimerShowInputs', showTimeInputs ? '1' : '0');
+            updateShowTimeInputsDisplay();
+            updateControlsButtonVisibility();
+        });
+    }
+    if (adhocBtn) {
+        adhocBtn.addEventListener('click', openAdhocOverlay);
+    }
+    if (closeAdhocBtn) closeAdhocBtn.addEventListener('click', () => stopAdhoc());
+    if (startAdhocBtn) startAdhocBtn.addEventListener('click', startAdhoc);
+    if (pauseAdhocBtn) pauseAdhocBtn.addEventListener('click', pauseAdhoc);
+    if (stopAdhocBtn) stopAdhocBtn.addEventListener('click', stopAdhoc);
 let timerInterval;
 let remainingSeconds = 0;
 let running = false;
@@ -163,11 +162,7 @@ function getTotalRemainingSessionTime() {
     }
     const remainingOfCurrent = remainingSeconds;
     const futureSessions = sessions.slice(activeSessionIndex + 1).reduce((sum, session) => sum + session.duration, 0);
-    let total = remainingOfCurrent + futureSessions;
-    if (includeAdhocInTotalCheckbox && includeAdhocInTotalCheckbox.checked) {
-        total += Number(adhocRemaining) || 0;
-    }
-    return total;
+    return remainingOfCurrent + futureSessions;
 }
 
 function updateSessionSummary() {
@@ -436,12 +431,10 @@ function adhocTick() {
         startAdhocBtn.disabled = false;
         pauseAdhocBtn.disabled = true;
         updateAdhocButtonStates();
-        updateSessionSummary();
         return;
     }
     adhocRemaining -= 1;
     adhocTimeDisplay.textContent = formatAdhocTime(adhocRemaining);
-    updateSessionSummary();
 }
 
 function startAdhoc() {
@@ -462,7 +455,6 @@ function startAdhoc() {
     startAdhocBtn.disabled = true;
     pauseAdhocBtn.disabled = false;
     updateAdhocButtonStates();
-    updateSessionSummary();
 }
 
 function pauseAdhoc() {
@@ -482,7 +474,6 @@ function pauseAdhoc() {
         pauseAdhocBtn.disabled = false;
     }
     updateAdhocButtonStates();
-    updateSessionSummary();
 }
 
 function stopAdhoc() {
@@ -495,7 +486,6 @@ function stopAdhoc() {
     pauseAdhocBtn.disabled = true;
     updateAdhocButtonStates();
     closeAdhocOverlay();
-    updateSessionSummary();
 }
 
 function completeSession() {
@@ -991,16 +981,6 @@ if (timerMode === 'sessions') {
     showTimeInputs = false;
 }
 updateShowTimeInputsDisplay();
-
-// load include-adhoc-in-total preference and wire checkbox
-const savedIncludeAdhoc = localStorage.getItem('easyTimerIncludeAdhocInTotal');
-if (includeAdhocInTotalCheckbox) {
-    includeAdhocInTotalCheckbox.checked = savedIncludeAdhoc === '1';
-    includeAdhocInTotalCheckbox.addEventListener('change', () => {
-        localStorage.setItem('easyTimerIncludeAdhocInTotal', includeAdhocInTotalCheckbox.checked ? '1' : '0');
-        updateSessionSummary();
-    });
-}
 
 // ensure session menu visibility matches current mode
 updateSessionTransitionModeDisplay();
