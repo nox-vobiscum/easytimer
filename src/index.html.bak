@@ -43,12 +43,6 @@
                             <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
                         </label>
                     </div>
-                    <div class="menu-section">
-                        <label class="menu-option" title="Include ad-hoc timers in session totals">
-                            <span>Include ad-hoc in total</span>
-                            <input type="checkbox" id="includeAdhocInTotal" name="includeAdhocInTotal">
-                        </label>
-                    </div>
                     <div id="sessionTransitionModeSection" class="menu-section">
                         <div class="menu-label">Session transition</div>
                         <label class="menu-option" title="Automatically start the next session when the current one ends.">
@@ -114,8 +108,8 @@
                             <span id="adhocTime">05:00</span>
                         </div>
                         <div class="adhoc-controls">
-                            <label class="adhoc-input" title="Minutes for adhoc timer">Min: <input id="adhocMinutes" type="number" min="0" value="5"/></label>
-                            <label class="adhoc-input" title="Seconds for adhoc timer">Sec: <input id="adhocSeconds" type="number" min="0" max="59" value="0"/></label>
+                            <label class="adhoc-input" title="Minutes for adhoc timer">Min: <input id="adhocMinutes" type="number" min="0" value="5" style="width:4rem"/></label>
+                            <label class="adhoc-input" title="Seconds for adhoc timer">Sec: <input id="adhocSeconds" type="number" min="0" max="59" value="0" style="width:4rem"/></label>
                             <button id="startAdhocBtn" class="primary" title="Start ad-hoc timer">Start</button>
                             <button id="pauseAdhocBtn" class="secondary" title="Pause ad-hoc timer">Pause</button>
                             <button id="stopAdhocBtn" class="secondary" title="Stop ad-hoc timer">Stop</button>
@@ -164,7 +158,7 @@
         </main>
 
         <footer class="status-bar">
-            Crafted with 🖤 by <a href="https://rolandseper.at" target="_blank" rel="noopener noreferrer">&nbsp; Roland B. SEPER &nbsp;</a> © 2026
+            Crafted with 🖤 by <a href="https://rolandseper.at" target="_new" rel="noopener noreferrer">&nbsp; Roland B. SEPER &nbsp;</a> © 2026
         </footer>
     </div>
 
