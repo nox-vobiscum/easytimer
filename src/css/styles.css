@@ -581,11 +581,13 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: clamp(4rem, min(20vw, 20vh), 24rem);
-    line-height: 0.9;
+    font-size: clamp(8rem, max(22vw, 22vh), 80rem);
+    line-height: 0.85;
     padding: 0.9rem 0.75rem;
     min-height: 0;
     max-height: none;
+    background: var(--bg);
+    border: none;
 }
 
 .fullscreen-mode.controls-open .timer-display {
