@@ -541,7 +541,21 @@ body {
     gap: 1.5rem;
 }
 
+.fullscreen-mode {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.fullscreen-mode .titlebar,
+.fullscreen-mode .status-bar {
+    display: none;
+}
+
 .fullscreen-mode .editor-panel {
+    flex: 1;
+    min-height: 0;
     padding: 0;
     align-items: stretch;
     justify-content: flex-start;
@@ -552,7 +566,8 @@ body {
     flex-direction: column;
     width: 100%;
     max-width: none;
-    min-height: calc(100vh - 6rem);
+    min-height: 100vh;
+    height: 100vh;
     border-radius: 0;
     border: none;
     box-shadow: none;
@@ -566,11 +581,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: min(clamp(7rem, 18vw, 18rem), 14vh);
-    line-height: 0.95;
+    font-size: clamp(4rem, min(20vw, 20vh), 24rem);
+    line-height: 0.9;
     padding: 0.9rem 0.75rem;
     min-height: 0;
-    max-height: calc(100vh - 7.5rem);
+    max-height: none;
 }
 
 .fullscreen-mode.controls-open .timer-display {
@@ -757,6 +772,15 @@ body {
     border-radius: 10px;
     padding: 2.4rem 1.5rem 1.5rem;
     text-align: center;
+}
+
+#time {
+    display: block;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    line-height: 0.9;
 }
 
 .session-summary {
