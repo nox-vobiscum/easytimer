@@ -1,72 +1,86 @@
-# RBS' easyTimer
+# easyTimer
 
-A lightweight browser-based countdown for workshops, meetings, facilitation, and presentations.
+A small, dependency-free countdown timer for meetings and personal timeboxing.
 
-**Live application:** https://et.rbsnet.at/  
-**Source:** https://github.com/nox-vobiscum/easytimer
+## MVP-01 and MVP-02
 
-## Current features
+- One timer with Start, Pause, Resume, Restart and Stop.
+- Restart restores the original configured duration and starts immediately. Stop restores it and stays ready.
+- Hours, minutes and seconds (up to 99:59:59); three compact presets.
+- Duration inputs are locked while running or paused. Zero, blank, fractional and out-of-range values are rejected.
+- Expiry stays at 00:00 with a localized finished status; Start again runs the original duration.
+- German and English UI, Light/Dark/System appearance, and browser-local language/theme preferences.
+- System appearance follows OS changes through CSS media queries.
+- Responsive standard view for desktop and mobile portrait; original stopwatch SVG identity.
 
-- Normal countdown with duration inputs and quick presets
-- Start, pause/resume, and reset controls
-- Large presentation-style timer view with responsive layouts
-- Ad-hoc countdown for temporary discussions, with separate timer controls
-- Session mode with editable workshop phases and phase durations
-- Automatic or manual transitions between session phases
-- Light, Dark, and System themes
-- Browser-local persistence for selected preferences and session settings
-- No required backend or external runtime dependencies
+MVP-02 adds native fullscreen with a full-viewport fallback, an automatic reduced landscape presentation on touch devices up to 600 px high, and a five-pixel progress strip. Essential controls remain visible and keyboard/touch accessible. Escape or the view button exits the expanded view; rotating back to portrait restores the standard layout unless fullscreen is still active.
 
-> **Current implementation vs. planned UX:** The application still uses a hamburger menu for theme and mode selection, and the current ad-hoc return behavior has not yet been verified against the approved manual-resume requirement. The proposed header, visual simplification, and other future changes are documented separately; they are not implemented features.
+The strip shows remaining time in pink on the left and elapsed time in green on the right. Its marker moves right to left; pause freezes it, Restart/Stop restore it, and expiry leaves it fully green. It is decorative and never announces timer ticks to screen readers.
+
+Session, ad-hoc, overtime and user-configurable presentation settings remain outside scope.
 
 ## Run locally
 
-Open `src/index.html` in a browser. A static local web server is also suitable for development.
+Native ES modules require a static HTTP server; opening `src/index.html` using `file://` is not supported.
+For example, with an existing Python installation, run from the repository root:
 
-There is no framework build step required by the currently documented application.
-
-## Project layout
-
-```text
-src/
-  index.html         Main UI
-  css/styles.css     Styles, layout, and theme tokens
-  js/app.js          Timer logic, state, and interactions
-docs/
-  BRIEFING.md        Project rules, technical baseline, and workflow
-  EASYTIMER_UX_CONCEPT.md  Proposed UX direction and decisions
+```sh
+python -m http.server 8000 --directory src
 ```
 
-## Product direction
+Then open `http://localhost:8000`. No build, package installation or backend is needed.
 
-The goal is a clear, timer-first interface with three use cases:
+## Architecture
 
-1. **Quick Timer:** A straightforward countdown with a highly legible presentation view.
-2. **Ad-hoc Timer:** A separate short timebox that interrupts the main timer without discarding its state.
-3. **Session Timer:** A sequence of workshop phases with individual timeboxes and an overall remaining-time display.
+- `src/index.html`: semantic single-timer interface.
+- `src/css/styles.css`: responsive standard view and appearance tokens.
+- `src/js/timer.mjs`: DOM-independent state transitions and duration validation.
+- `src/js/app.js`: browser events, rendering, DE/EN resources and preference persistence.
+- `src/stopwatch.svg`: original vector identity and favicon.
 
-### Confirmed requirement
+The authoritative timer object holds status, original duration, remaining milliseconds and a deadline.
+An injected timestamp makes the timer engine deterministic in tests. The browser uses `Date.now()`;
+refresh callbacks never decrement the timer. Returning to a backgrounded page recalculates from its deadline.
+Manual system-clock changes can affect a running countdown. Active countdowns are not restored after reload.
+Unavailable local storage falls back to in-memory preferences.
 
-**An ad-hoc timer must never automatically resume the main timer.** After ad-hoc completion, the user returns to the saved main timer and resumes it deliberately. This describes the target behavior; the current implementation requires review before it can be considered compliant.
+## Validation
 
-### Planned, not yet implemented
+Node.js 22 or newer is suitable for the dependency-free checks:
 
-- Remove the hamburger menu; place labeled Timer/Session mode selection and Light/Dark/System controls in the header.
-- Keep session-specific controls near the session workflow.
-- Streamline timer control states, presentation visuals, and the session editor.
-- Consider more accurate deadline-based countdown timing.
-- Add user-configurable colors later.
+```sh
+node --test tests/timer.test.mjs
+node --check src/js/app.js
+node --check src/js/timer.mjs
+```
 
-For decisions, open questions, and saved desktop/mobile wireframes, see [`docs/EASYTIMER_UX_CONCEPT.md`](docs/EASYTIMER_UX_CONCEPT.md).
+The optional browser check uses an installed Chromium-based browser and Node's built-in WebSocket:
 
-## Contribution and language conventions
+```sh
+node tests/browser-check.mjs
+```
 
-- Repository files, source code, comments, UI text, documentation, tests, and commit messages are **English-only**.
-- Project conversations with the owner take place in **German**.
-- Prefer small, focused changes; keep CSS in `src/css/styles.css`.
-- Do not combine timer-logic changes with visual redesign work without approval.
-- Consult [`docs/BRIEFING.md`](docs/BRIEFING.md) before implementation.
+On Windows it defaults to Microsoft Edge. Set `EASYTIMER_BROWSER` to another Chromium executable if needed.
+It starts a temporary local server and isolated headless browser profile, then closes both.
 
-## Status
+Owner acceptance checks:
 
-The application is live. The UX refresh is in the **planning** stage; no redesign or deployment is authorized by this README.
+1. Set 00:00:05 and Start. Pause, wait, and Resume: paused time must not count down.
+2. Restart during a run and while paused: immediately run the original five seconds. Stop: return to five seconds, ready.
+3. Let the timer expire: 00:00 and the finished status remain, without overtime. Start again repeats the original duration.
+4. Try zero, blank, negative, fractional and out-of-range fields. Start must be unavailable with a clear error.
+5. Run 30 seconds, switch tabs for at least 10 seconds, and return. Remaining time must reflect elapsed wall time; repeat past expiry.
+6. Switch DE/EN and Light/Dark/System while running and paused. The timer must preserve its progress. Reload to verify preferences; change OS theme with System selected.
+7. Check desktop and 320–390 px portrait widths, including 99:59:59. Check keyboard focus, Enter activation, touch targets and screen-reader labels.
+8. Enter fullscreen while running and paused. Check that digits fit, controls remain usable and time does not reset. Exit using the button and Escape. Where fullscreen is unavailable or denied, verify the expanded-view fallback; it cannot remove browser chrome.
+9. Rotate a touch device into landscape and back. Check both 00:05 and 99:59:59, including short screens and browser toolbars. Native fullscreen remains active until explicitly exited.
+10. Check the progress strip at start, halfway, pause, Restart, Stop and expiry. Run the browser regression check for emulated orientation changes, native fullscreen, rejection/unavailability fallback and Escape.
+
+## Scope and delivery
+
+The MVP sections of `docs/EASYTIMER_UX_KONZEPT_v2.md` describe the current direction; older briefing material includes superseded multi-mode scope.
+German translation strings are an explicitly approved exception to the repository's English content convention.
+Code, comments and documentation remain English.
+
+The existing `.github/workflows/deploy.yaml` FTP pipeline deploys pushes to `main`.
+MVP work belongs on a development branch. Commit, push, merge and deployment require separate owner authorization.
