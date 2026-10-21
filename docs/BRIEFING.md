@@ -6,13 +6,14 @@
 
 ## 1. Current product
 
-easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The current production release provides one basic timer with subtle overtime after expiry. Session timing, ad-hoc timing, in-flight duration adjustments, alarms, and user-configurable presentation settings remain future scope.
+easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The release includes subtle overtime, unified presets, continuous time-budget extensions, and a persistent budget line. Session timing, ad-hoc timing, alarms, and user-configurable presentation settings remain future scope.
 
 The countdown is the dominant element. Desktop, mobile portrait, mobile landscape, fullscreen, and the expanded-view fallback are presentations of the same timer state rather than separate modes.
 
 ## 2. Implemented behavior
 
-- Configure hours, minutes, and seconds up to `99:59:59`, or use one of three presets.
+- Select one of eight presets (1, 2, 3, 5, 10, 15, 30, 60 minutes) while ready. Selection does not start the timer.
+- Add +1 h, +5 min, +1 min, or +30 s in every state and presentation. The effective budget cannot exceed `99:59:59`; exceeding it gives localized feedback.
 - `Start` begins the configured duration.
 - `Pause` freezes the exact remaining duration; `Resume` continues from it.
 - `Restart` restores the original configured duration and starts immediately.
@@ -20,7 +21,9 @@ The countdown is the dominant element. Desktop, mobile portrait, mobile landscap
 - Expiry keeps the main display at `00:00`, retains the localized finished status, and shows a smaller overtime counter derived from the original deadline.
 - Overtime continues until Stop, Restart, or a new run. Stop restores the original duration and remains ready; Restart immediately runs it.
 - Zero, blank, fractional, negative, and out-of-range durations are rejected.
-- Duration inputs are locked while the timer is running or paused.
+- Configuration presets are locked while running, paused, or expired. Manual duration entry is not part of UX-001.
+- Before Start, additions become part of planned duration. After Start, additions extend the effective budget while preserving active elapsed time and pause state. Restart and Stop discard extensions and restore planned duration.
+- Adding time in overtime shifts the existing deadline: smaller additions reduce overtime, an exact compensation stays at zero, and larger additions return to countdown. This explicitly supersedes ET-001 decision 37.
 - Remaining time and overtime are derived from the deadline. Delayed callbacks and background-tab throttling do not accumulate timer drift.
 - A theme, language, orientation, viewport, or presentation change never resets the timer.
 - An active countdown is not restored after a complete page reload.
@@ -38,6 +41,8 @@ The countdown is the dominant element. Desktop, mobile portrait, mobile landscap
 - Native Fullscreen API is used where available. A reversible full-viewport fallback is used when fullscreen is unavailable or rejected.
 - Native fullscreen and its expanded-view fallback show a small, nearly opaque stopwatch-and-wordmark identity at the safe top-left edge without displaying the standard header.
 - The presentation view retains Start/Pause/Resume, Restart, Stop, and exit controls.
+- Actions combine SVG icons and localized text. All four time additions remain directly visible in presentation views; only configuration presets are hidden.
+- A small safe-area-aware budget line above the progress strip shows Total, or Total · Planned + additions. It is not a live region and updates only when budget values or language change.
 - A five-pixel bottom strip shows remaining time in pink and elapsed time in green. It is decorative and is not announced on every timer tick.
 
 ## 4. Progressive Web App
@@ -59,7 +64,7 @@ Offline reload starts a fresh ready timer because cross-reload timer persistence
 - `tests/timer.test.mjs`: deterministic timer transition and formatting tests.
 - `tests/browser-check.mjs`: Chromium regression test for UI, timing, accessibility-related geometry, fullscreen/fallback behavior, mobile layouts, PWA registration, and offline reload.
 
-The timer object is the single authoritative state source. It contains status, original duration, remaining milliseconds, a deadline, and deadline-derived overtime. Rendering and browser presentation do not own independent timer state.
+The timer object is the single authoritative state source. It contains status, planned duration (`durationMs`), cumulative post-start additions (`adjustmentMs`), remaining milliseconds, a deadline, and deadline-derived overtime. `timeBudget` derives effective total and elapsed active time (excluding pauses); rendering and browser presentation do not own independent timer state.
 
 ## 6. Local development and validation
 
@@ -98,7 +103,7 @@ The production workflow currently uploads the static repository contents. There 
 
 `docs/EASYTIMER_UX_KONZEPT_v2.md` is the canonical product and UX direction. Its 56 ET-001 decisions describe accepted long-term behavior, not current production functionality and not automatic authorization to implement future features.
 
-Future work may include time-adjustment controls, session timing, ad-hoc timing, signals, restoration, and customization. Each next feature requires a bounded plan and explicit approval.
+Future work may include subtraction controls, manual duration entry, session timing, ad-hoc timing, signals, restoration, and customization. Each next feature requires a bounded plan and explicit approval.
 
 ## 10. Collaboration workflow
 

@@ -102,18 +102,8 @@ h1 { font-size:.95rem; font-weight:500; color:var(--muted); margin:0 0 1rem; }
 .actions { display:flex; justify-content:center; flex-wrap:wrap; gap:.65rem; }
 .actions .primary { min-width:8rem; background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
 .actions .primary:hover { background:var(--accent); filter:brightness(.93); }
-form { margin:2.5rem auto 0; max-width:25rem; }
-fieldset { border:0; margin:0; padding:0; }
-legend { margin:auto auto .8rem; font-size:.85rem; color:var(--muted); }
-.inputs { display:flex; justify-content:center; gap:.75rem; }
-.inputs label { display:grid; gap:.4rem; font-size:.75rem; color:var(--muted); }
-input { width:4.5rem; min-height:44px; padding:.5rem; text-align:center; border:1px solid var(--border); border-radius:.5rem; background:var(--surface); color:var(--text); font-size:1.1rem; }
-input[aria-invalid="true"] { border-color:var(--error); }
-.presets { display:flex; justify-content:center; gap:.5rem; margin-top:.8rem; }
-.presets button { font-size:.8rem; background:transparent; border-color:transparent; }
 #help { color:var(--muted); font-size:.8rem; min-height:3em; line-height:1.5; margin-bottom:0; }
 #help[data-error="true"] { color:var(--error); }
-fieldset:disabled input { opacity:.6; }
 footer { text-align:center; padding:1rem; color:var(--muted); font-size:.75rem; }
 footer a { color:inherit; text-underline-offset:.2em; }
 noscript { text-align:center; padding:1rem; }
@@ -138,6 +128,18 @@ noscript { text-align:center; padding:1rem; }
   background: var(--text);
   border-radius: 2px;
 }
+.actions button { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; }
+.action-icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+.duration-config { margin:2rem auto 0; max-width:42rem; }
+.duration-config h2, .duration-adjustments h2 { font-size:.8rem; font-weight:500; color:var(--muted); margin:0 0 .6rem; }
+.duration-presets, .adjustment-buttons { display:flex; flex-wrap:wrap; justify-content:center; gap:.45rem; }
+.duration-presets button { min-width:4.25rem; padding:.5rem .7rem; background:var(--selected); border-color:var(--border); font-size:.85rem; }
+.duration-presets button[aria-pressed="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); color:var(--accent); }
+.duration-adjustments { margin:1.1rem auto 0; }
+.adjustment-buttons button { background:transparent; font-size:.8rem; font-weight:500; padding:.45rem .65rem; }
+.time-budget { position:fixed; z-index:1; bottom:max(12px,calc(env(safe-area-inset-bottom) + 8px)); left:max(12px,env(safe-area-inset-left)); right:max(12px,env(safe-area-inset-right)); margin:0; text-align:center; color:var(--muted); font-size:.75rem; line-height:1.4; font-variant-numeric:tabular-nums; }
+footer { padding-bottom:calc(env(safe-area-inset-bottom) + 3rem); }
+#help:empty { display:none; }
 /* Presentation changes layout only; all controls use the existing timer. */
 body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
 .room-presentation .presentation-brand {
@@ -156,25 +158,28 @@ body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidd
 }
 .presentation-brand-mark { display:grid; width:22px; height:22px; flex:none; }
 .presentation-brand-logo { grid-area:1 / 1; display:block; width:22px; height:22px; object-fit:contain; }
-.presentation header, .presentation footer, .presentation form { display: none; }
+.presentation header, .presentation footer, .presentation .duration-config { display: none; }
 .presentation h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .presentation main {
   padding-top:max(2.5rem,calc(env(safe-area-inset-top) + 2rem));
   padding-right:max(1rem,env(safe-area-inset-right));
-  padding-bottom:max(4rem,calc(env(safe-area-inset-bottom) + 3rem));
+  padding-bottom:calc(env(safe-area-inset-bottom) + 10rem);
   padding-left:max(1rem,env(safe-area-inset-left));
   min-height:0;
 }
 .presentation .timer { width: 100%; min-width: 0; }
 .presentation #time {
-  font-size:min(30vw,calc((100dvh - 150px) * .75));
+  font-size:min(30vw,calc((100dvh - 230px) * .75));
   line-height:1;
 }
-.presentation #time[data-hours="true"] { font-size: min(20vw, calc((100dvh - 150px) * .75)); }
+.presentation #time[data-hours="true"] { font-size: min(20vw, calc((100dvh - 230px) * .75)); }
+.presentation .duration-adjustments { position:fixed; bottom:calc(env(safe-area-inset-bottom) + 2.1rem); left:max(1rem,env(safe-area-inset-left)); right:max(1rem,env(safe-area-inset-right)); margin:0; }
+.presentation .duration-adjustments h2 { margin-bottom:.2rem; font-size:.7rem; }
+.presentation #help:not(:empty) { position:fixed; top:3.25rem; left:1rem; right:1rem; margin:0; min-height:0; font-size:.75rem; }
 .presentation .overtime { margin-top:.35rem; font-size:clamp(.85rem,2.2vw,1.35rem); }
 .presentation #status { position: fixed; top: max(.75rem, calc(env(safe-area-inset-top) + .5rem)); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); margin: 0; font-size: .85rem; }
 .presentation .fullscreen-button { position:fixed; top:max(.75rem,calc(env(safe-area-inset-top) + .5rem)); right:max(.75rem,calc(env(safe-area-inset-right) + .5rem)); color:var(--muted); }
-.presentation .actions { position: fixed; bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + .75rem)); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); gap: .5rem; }
+.presentation .actions { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 6.75rem); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); gap: .5rem; }
 .presentation .actions button { font-size: .8rem; padding: .5rem .75rem; }
 .presentation .actions .primary { min-width: 6rem; }
 @media(max-width:560px) {
@@ -189,7 +194,6 @@ body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidd
   .brand { font-size:1.4rem; }
   .preferences { margin-left:auto; gap:8px; }
   main { padding-top:2rem; }
-  form { margin-top:2rem; }
   .actions { gap:.45rem; }
   .actions button { padding-inline:.85rem; }
   .fullscreen-button { top:-.65rem; right:0; padding:0; }

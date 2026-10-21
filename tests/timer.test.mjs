@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTimer, durationFromFields, formatOvertime, formatTime, transition } from '../src/js/timer.mjs';
+import { createTimer, durationFromFields, formatOvertime, formatTime, timeBudget, transition } from '../src/js/timer.mjs';
 const act = (state, type, now, extra = {}) => transition(state, { type, ...extra }, now);
 
 test('start and background callback gaps use the original deadline', () => {
@@ -43,6 +43,69 @@ test('configuration cannot replace a running or paused countdown', () => {
     const paused = act(running, 'PAUSE', 1000);
     assert.deepEqual(act(paused, 'CONFIGURE', 2000, { durationMs: 5000 }), paused);
     assert.equal(act(createTimer(), 'CONFIGURE', 0, { durationMs: 5000 }).durationMs, 5000);
+    const finished = act(running, 'TICK', 20000);
+    assert.deepEqual(act(finished, 'CONFIGURE', 20000, { durationMs: 5000 }), finished);
+});
+test('pre-start additions become planned duration; presets replace only ready configuration', () => {
+    let state = act(createTimer(), 'CONFIGURE', 0, { durationMs: 900000 });
+    state = act(state, 'ADJUST', 0, { amountMs: 300000 });
+    assert.equal(state.durationMs, 1200000);
+    assert.equal(state.adjustmentMs, 0);
+    state = act(state, 'START', 1000);
+    assert.equal(state.deadlineMs, 1201000);
+    state = act(state, 'ADJUST', 2000, { amountMs: 300000 });
+    assert.equal(state.durationMs, 1200000);
+    assert.equal(state.adjustmentMs, 300000);
+    assert.equal(state.deadlineMs, 1501000);
+});
+test('multiple additions preserve active elapsed time and paused state', () => {
+    let state = act(createTimer(900000), 'START', 0);
+    state = act(state, 'ADJUST', 60000, { amountMs: 300000 });
+    assert.equal(state.remainingMs, 1140000);
+    state = act(state, 'PAUSE', 120000);
+    state = act(state, 'ADJUST', 999999, { amountMs: 90000 });
+    assert.equal(state.status, 'PAUSED');
+    assert.equal(state.remainingMs, 1170000);
+    assert.equal(state.adjustmentMs, 390000);
+    assert.equal(state.durationMs + state.adjustmentMs - state.remainingMs, 120000);
+    assert.deepEqual(timeBudget(state), { plannedMs: 900000, adjustmentMs: 390000, totalMs: 1290000, elapsedMs: 120000 });
+    state = act(state, 'RESUME', 2000000);
+    assert.equal(state.deadlineMs, 3170000);
+    assert.equal(act(state, 'TICK', 3200000).overtimeMs, 30000);
+    assert.equal(act(state, 'STOP', 3200000).adjustmentMs, 0);
+    const restarted = act(state, 'RESTART', 3200000);
+    assert.equal(restarted.remainingMs, 900000);
+    assert.equal(restarted.adjustmentMs, 0);
+});
+test('overtime extensions preserve the original elapsed history', () => {
+    const finished = act(act(createTimer(900000), 'START', 0), 'TICK', 983000);
+    const small = act(finished, 'ADJUST', 983000, { amountMs: 60000 });
+    assert.equal(small.status, 'FINISHED');
+    assert.equal(small.overtimeMs, 23000);
+    assert.equal(timeBudget(small).elapsedMs, 983000);
+    const large = act(finished, 'ADJUST', 983000, { amountMs: 300000 });
+    assert.equal(large.status, 'RUNNING');
+    assert.equal(large.remainingMs, 217000);
+    assert.equal(large.durationMs + large.adjustmentMs - large.remainingMs, 983000);
+    assert.equal(timeBudget(large).elapsedMs, 983000);
+    const boundary = act(finished, 'ADJUST', 983000, { amountMs: 83000 });
+    assert.equal(boundary.status, 'FINISHED');
+    assert.equal(boundary.remainingMs, 0);
+    assert.equal(boundary.overtimeMs, 0);
+    assert.equal(act(boundary, 'TICK', 985000).overtimeMs, 2000);
+    assert.equal(act(large, 'TICK', 1300000).overtimeMs, 100000);
+    assert.equal(act(small, 'START', 1000000).adjustmentMs, 0);
+});
+test('budget limit and invalid additions leave valid state intact', () => {
+    const ready = createTimer(359969000);
+    assert.equal(act(ready, 'ADJUST', 0, { amountMs: 30000 }).durationMs, 359999000);
+    for (const amountMs of [30001, 0, -1, NaN, Infinity, 1.5]) {
+        assert.deepEqual(act(ready, 'ADJUST', 0, { amountMs }), ready);
+    }
+    const running = act(ready, 'START', 0);
+    const adjusted = act(running, 'ADJUST', 1000, { amountMs: 30000 });
+    assert.equal(adjusted.durationMs + adjusted.adjustmentMs, 359999000);
+    assert.deepEqual(act(adjusted, 'ADJUST', 1000, { amountMs: 1 }), adjusted);
 });
 test('invalid and zero durations are rejected without normalization', () => {
     for (const fields of [['0','0','0'], ['', '1', '0'], ['-1','0','0'], ['0','60','0'], ['0','0','60'], ['100','0','0'], ['0','1.5','0'], ['0','1e1','0'], ['NaN','0','0']]) {

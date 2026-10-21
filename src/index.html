@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="css/styles.css">
 </head>
-<body>
+<body data-duration-entry="presets-adjustments">
   <header>
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">
@@ -77,28 +77,36 @@
       </div>
       <p id="status" role="status">Ready</p>
       <div class="actions">
-        <button id="primary" class="primary" type="button">Start</button>
-        <button id="restart" type="button" data-copy="restart">Restart</button>
-        <button id="stop" type="button" data-copy="stop">Stop</button>
+        <button id="primary" class="primary" type="button"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path id="primary-icon" d="m8 4 12 8-12 8Z"/></svg><span id="primary-label">Start</span></button>
+        <button id="restart" type="button"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></svg><span data-copy="restart">Restart</span></button>
+        <button id="stop" type="button"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5Z"/></svg><span data-copy="stop">Stop</span></button>
       </div>
-      <form id="duration-form" novalidate>
-        <fieldset id="duration-fields">
-          <legend data-copy="duration">Duration</legend>
-          <div class="inputs">
-            <label><span data-copy="hours">Hours</span><input id="hours" type="number" min="0" max="99" step="1" value="0" inputmode="numeric" required aria-describedby="help"></label>
-            <label><span data-copy="minutes">Minutes</span><input id="minutes" type="number" min="0" max="59" step="1" value="5" inputmode="numeric" required aria-describedby="help"></label>
-            <label><span data-copy="seconds">Seconds</span><input id="seconds" type="number" min="0" max="59" step="1" value="0" inputmode="numeric" required aria-describedby="help"></label>
-          </div>
-          <div class="presets">
-            <button type="button" data-preset="300000">5 min</button>
-            <button type="button" data-preset="600000">10 min</button>
-            <button type="button" data-preset="1500000">25 min</button>
-          </div>
-        </fieldset>
-        <p id="help" aria-live="polite"></p>
-      </form>
+      <section class="duration-config" aria-labelledby="duration-heading">
+        <h2 id="duration-heading" data-copy="duration">Duration</h2>
+        <div class="duration-presets">
+          <button type="button" data-preset="60000">1 min</button>
+          <button type="button" data-preset="120000">2 min</button>
+          <button type="button" data-preset="180000">3 min</button>
+          <button type="button" data-preset="300000">5 min</button>
+          <button type="button" data-preset="600000">10 min</button>
+          <button type="button" data-preset="900000">15 min</button>
+          <button type="button" data-preset="1800000">30 min</button>
+          <button type="button" data-preset="3600000">60 min</button>
+        </div>
+      </section>
+      <section class="duration-adjustments" aria-labelledby="adjustment-heading">
+        <h2 id="adjustment-heading" data-copy="adjustments">Add time</h2>
+        <div class="adjustment-buttons">
+          <button type="button" data-adjustment="3600000">+1 h</button>
+          <button type="button" data-adjustment="300000">+5 min</button>
+          <button type="button" data-adjustment="60000">+1 min</button>
+          <button type="button" data-adjustment="30000">+30 s</button>
+        </div>
+      </section>
+      <p id="help" role="status"></p>
     </section>
   </main>
+  <p id="time-budget" class="time-budget">Total 05:00</p>
   <div id="progress" class="progress-strip" aria-hidden="true"><span class="progress-marker"></span></div>
   <footer><span data-copy="credit">Created by</span> <a href="https://rolandseper.at">Roland B. Seper</a> · © 2026</footer>
   <noscript>This timer requires JavaScript. / Dieser Timer benötigt JavaScript.</noscript>

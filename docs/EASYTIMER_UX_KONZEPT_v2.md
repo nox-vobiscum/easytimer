@@ -3,6 +3,7 @@
 **Date:** 2026-10-20
 **Last reviewed:** 2026-10-21
 **Status:** Canonical product and UX direction; MVP-01, MVP-02, PWA delivery, mobile refinements, and QT-001 overtime are implemented in production
+**Release:** UX-001 unified duration selection and continuous time budget are implemented and approved for production.
 **Supersedes:** `EASYTIMER_UX_KONZEPT_v1.md`
 **Repository:** https://github.com/nox-vobiscum/easytimer
 **Production:** https://et.rbsnet.at/
@@ -78,7 +79,7 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 
 **Timer behavior**
 
-- Configure a duration using a straightforward hours/minutes/seconds control; retain a few useful existing presets if they fit without adding clutter.
+- UX-001 replaces manual duration fields with eight configuration-only presets (1, 2, 3, 5, 10, 15, 30, 60 minutes) and four universal additions (+1 h, +5 min, +1 min, +30 s).
 - Initial configured duration may default to five minutes; no behavior may start automatically on page load.
 - `Start`: starts a prepared countdown.
 - `Pause`: freezes the current remaining time.
@@ -87,7 +88,7 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 - `Stop`: restores the *original configured duration* and remains stopped/ready.
 - The main action changes contextually: `Start` / `Pause` / `Resume`. Secondary `Restart` and `Stop` are accessible without overwhelming the display.
 - At `00:00`, keep the main display fixed, show a discreet, translatable “Time's up”/“Zeit abgelaufen” status, and display the QT-001 overtime counter below it.
-- Reject a zero/invalid duration for Start. Edits to duration must not silently override a running or paused countdown; the simple MVP may allow editing only in ready/stopped state.
+- Reject zero/invalid durations in the engine. Presets are available only in READY; universal additions preserve elapsed active time in all states. The maximum effective budget is 99:59:59.
 - Compute remaining time from an absolute time reference, rather than decrementing an integer once per `setInterval` tick. Restore correct remaining time when a throttled/background tab becomes active again.
 - The timer must not restart or reset because the theme, language, viewport, orientation, or display presentation changes.
 
@@ -114,10 +115,10 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 
 ### Explicit MVP exclusions
 
-- No `Quick Timer` mode selector, expanded Quick Timer features, or in-flight `+1/+5/-1 minute` time adjustment controls.
+- No `Quick Timer` mode selector, subtraction controls, configurable presets, or manual duration-entry interface. UX-001 implements only the four approved additive controls.
 - No Session mode, phases, phase editor, transitions, workshop completion, or statistics.
 - No Ad-hoc timebox.
-- No overtime controls, time adjustments, or ability to add time after expiry. QT-001 provides only the subtle automatic counter from decisions 30 and 31.
+- No separate overtime stop control. UX-001 additions during overtime extend the same continuous budget, superseding decision 37 as documented below.
 - No configurable signals/alarms or event-specific signal gates.
 - No recovery dialog, multi-hour workshop recovery rules, or full cross-reload persistence of an active timer. **Background-tab accuracy within an open page remains required.**
 - No extra themes, custom color picker, configurable progress-bar visibility, custom layout presets, or settings panel.
@@ -159,6 +160,20 @@ These are presentations of the *same* countdown and actions, not independent fun
 
 ### 4.1 Standard (desktop and mobile portrait)
 
+UX-001 uses compact voting-style preset chips, visually distinct from neutral outlined additions. Eight chips fit a single desktop row and wrap without horizontal scrolling on mobile. Selected state follows an exact match with the configured planned duration. Action buttons always combine an inline SVG icon with localized text.
+
+#### UX-001 continuous time budget (approved override)
+
+- Planned duration is the configured duration immediately before Start. Pre-start additions become part of this plan.
+- Post-start additions accumulate separately. Effective total equals planned duration plus these additions; elapsed time excludes paused intervals.
+- Running additions move the existing deadline forward without changing elapsed history. Paused additions increase remaining time and preserve pause.
+- Overtime additions recalculate against that same elapsed history. For 15:00 planned and 16:23 elapsed, +5 min gives 03:37 remaining; +1 min leaves +00:23 overtime. Exact compensation shows 00:00 and +00:00, continuing from that deadline.
+- Restart discards post-start additions and immediately starts planned duration. Stop discards them and restores planned duration in READY. A new Start after expiry also clears the prior extension breakdown.
+- The progress strip uses remaining time divided by effective total, clamped to 0–100%; overtime stays fully elapsed.
+- All four additions remain directly visible in Standard, Fullscreen, Expanded View, and Mobile Landscape. Presets alone are hidden during presentation.
+- A small bottom-center line above the progress strip shows `Total 15:00` or `Total 21:30 · Planned 15:00 + 06:30`, localized in German. It respects safe areas, avoids control overlap, and changes only when budget or language changes. It does not announce each tick.
+- Only `data-duration-entry="presets-adjustments"` is delivered. Presets-only and manual variants remain future scope without hidden controls or a selection setting.
+
 ```text
 +-----------------------------------------------------------------------+
 | [original stopwatch] easyTimer                 [sun][moon][system] DE EN|
@@ -170,15 +185,15 @@ These are presentations of the *same* countdown and actions, not independent fun
 |                                                                       |
 |                   [   Pause   ]  [Restart] [Stop]                      |
 |                                                                       |
-|                 Duration: [00 h] [15 m] [00 s]                         |
-|                         [ Fullscreen ]                                |
+|              [1 min] [2 min] [3 min] [5 min] ... [60 min]              |
+|                    [+1 h] [+5 min] [+1 min] [+30 s]                   |
 |                                                                       |
 +-----------------------------------------------------------------------+
-|                       understated attribution                         |
+|                  understated attribution / Total 15:00                |
 +-----------------------------------------------------------------------+
 ```
 
-The actual layout need not follow this diagram pixel-for-pixel. Controls should adjust to the state; duration inputs should remain unobtrusive and accessible.
+The actual layout need not follow this diagram pixel-for-pixel. Controls adjust to state; preset and additive controls remain distinct, unobtrusive, and accessible.
 
 Production keeps both preference groups visible on desktop. At viewport widths up to 440 px, the standard view keeps the brand and a hamburger trigger in one compact header row. The trigger opens a localized, safe-area-aware preference dropdown containing the same DE/EN and Light/Dark/System controls. Escape and an outside click close it; Escape restores focus to the trigger. This responsive navigation change does not create a timer mode or a general settings system.
 
@@ -192,7 +207,9 @@ Production keeps both preference groups visible on desktop. At viewport widths u
 |                         12:34                                         |
 |                                                                       |
 |                                                                       |
-|                                  [tiny controls on interaction]        |
+|                     [Pause] [Restart] [Stop]                           |
+|                  [+1 h] [+5 min] [+1 min] [+30 s]                      |
+|                            Total 15:00                                |
 |=============================================================== 3-5 px |
 +-----------------------------------------------------------------------+
 ```
@@ -204,7 +221,7 @@ Production retains a small, nearly opaque easyTimer stopwatch-and-wordmark ident
 ### 4.3 Mobile landscape
 
 - Nearly time-only presentation with appropriately enlarged digits.
-- Essential actions accessible on tap/keyboard, without permanently occupying valuable vertical space.
+- Essential actions and all four additions remain directly visible with keyboard/touch access. Compact control rows and a safe-area-aware budget line reserve space below the digits.
 - Reverting to portrait restores the standard mobile control layout.
 - Installed iPhone PWA presentation respects display safe areas. Countdown placement is visually and geometrically centered between the localized status and bottom action area.
 
@@ -270,7 +287,7 @@ MVP-01 and MVP-02 were delivered as bounded, separately reviewed changes. Later 
 
 This roadmap preserves the product decisions made during the requirements-engineering discussion. The order is indicative, not a commitment to deliver all features at once.
 
-1. **Enhanced Quick Timer:** Temporary +/- adjustments and related overtime interactions, with original-duration restart behavior. The initial subtle overtime counter is delivered in QT-001.
+1. **Enhanced Quick Timer:** Subtraction and further approved controls. QT-001 delivers subtle overtime; UX-001 delivers additive continuous-budget adjustments.
 2. **Session Timer:** Named phases, manual/automatic transitions, upcoming phase preview, total remaining, completion and overtime.
 3. **Ad-hoc Timer:** Independent temporary timebox, preserving and pausing any main countdown/overtime state.
 4. **Workshop editing and statistics:** Live editor, stable phase identifiers, conflict resolution, time savings and overtime tracking.
@@ -322,7 +339,7 @@ The following summarizes the **56 approved product decisions**. Their numbered o
 34. Final workshop overtime keeps accumulating while a recovery dialog is open, unless deliberately paused/stopped.
 35. Quick time may be deliberately extended/shortened while running or paused without changing its original configured duration.
 36. Quick Restart/Stop always restore the original duration, even after temporary adjustments.
-37. Adding time during Quick overtime starts a fresh timebox for the added duration; old overtime is discarded.
+37. **Superseded by UX-001:** Adding time during Quick overtime extends the effective total budget of the existing run. Elapsed active time is retained; the result may remain overtime, sit at the exact zero boundary, or return to countdown. No fresh timebox is started.
 38. Reducing Quick remaining time to zero triggers expiry without retroactive overtime; running/paused status is preserved appropriately.
 39. Session Editor stays open while the workshop continues; future phases can be edited; Cancel discards unsaved changes.
 40. Current phase title/duration can be edited, applying a calculated delta to current remaining time; future phases remain editable.

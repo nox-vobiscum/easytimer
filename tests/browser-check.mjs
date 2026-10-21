@@ -61,7 +61,8 @@ try {
     const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
     const text = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent`);
     async function configure(h, m, s) {
-        await evaluate(`['hours','minutes','seconds'].forEach((id,i)=>{const el=document.getElementById(id);el.value=${JSON.stringify([h,m,s])}[i];el.dispatchEvent(new Event('input',{bubbles:true}));})`);
+        // Exercise the real configuration handler with short deterministic test durations.
+        await evaluate(`(()=>{const el=document.querySelector('[data-preset]');const original=el.dataset.preset;el.dataset.preset=${(h*3600+m*60+s)*1000};el.click();el.dataset.preset=original;})()`);
     }
     await cdp('Runtime.enable');
     await cdp('Page.enable');
@@ -91,10 +92,37 @@ try {
     ])`), 'activated');
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Ready');
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.textContent)`), ['1 min','2 min','3 min','5 min','10 min','15 min','30 min','60 min']);
+    assert.equal(await evaluate(`new Set(Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.getBoundingClientRect().top)).size`),1,'Desktop presets use one row');
+    assert.equal(await evaluate(`document.querySelectorAll('input').length`),0);
+    assert.equal(await evaluate(`['primary','restart','stop'].every(id=>document.getElementById(id).querySelector('svg')&&document.getElementById(id).textContent.trim())`),true);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-preset]')).backgroundColor !== getComputedStyle(document.querySelector('[data-adjustment]')).backgroundColor`),true);
+    await click('[data-preset="900000"]');
+    await click('[data-adjustment="300000"]');
+    assert.equal(await text('#time'),'20:00');
+    assert.equal(await text('#time-budget'),'Total 20:00');
+    assert.equal(await evaluate(`document.querySelectorAll('[data-preset][aria-pressed="true"]').length`),0);
+    await click('#primary');
+    await click('[data-adjustment="30000"]');
+    assert.equal(await text('#status'),'Running');
+    await click('#primary');
+    const pausedBeforeAddition = await text('#time');
+    await click('[data-adjustment="300000"]');
+    assert.equal(await text('#status'),'Paused');
+    assert.equal(await text('#time-budget'),'Total 25:30 · Planned 20:00 + 05:30');
+    assert.notEqual(await text('#time'),pausedBeforeAddition);
+    await click('#restart');
+    assert.equal(await text('#time-budget'),'Total 20:00');
+    await click('#stop');
+    await configure(99,59,59);
+    await click('[data-adjustment="30000"]');
+    assert.equal(await text('#time'),'99:59:59');
+    assert.match(await text('#help'),/99:59:59/);
+    await click('#stop');
     await configure(0, 0, 5);
     await click('#primary');
     assert.equal(await text('#status'), 'Running');
-    assert.equal(await evaluate(`document.querySelector('#duration-fields').disabled`), true);
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).every(button=>button.disabled)`), true);
     await delay(1150);
     await click('#primary');
     const frozen = await text('#time');
@@ -123,11 +151,6 @@ try {
     await click('#stop');
     assert.equal(await text('#time'), '00:05');
     assert.equal(await text('#status'), 'Bereit');
-    for (const fields of [[0,0,0], [0,60,0], [-1,0,0], [0,0,1.5], ['',0,0]]) {
-        await configure(...fields);
-        assert.equal(await evaluate(`document.querySelector('#primary').disabled`), true);
-        assert.equal(await evaluate(`document.querySelector('#help').dataset.error`), 'true');
-    }
     await configure(0,0,1);
     await click('#primary');
     await delay(1200);
@@ -135,6 +158,7 @@ try {
     assert.equal(await text('#status'), 'Zeit abgelaufen');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), false);
     assert.match(await text('#overtime-time'), /^\+00:0[01]$/);
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).every(b=>b.disabled)`),true);
     const overtimeBeforePreferences = await text('#overtime-time');
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Time’s up');
@@ -158,6 +182,10 @@ try {
     assert.equal(await text('#status'), 'Time’s up');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), false);
     assert.ok(Number((await text('#overtime-time')).slice(-2)) >= 1);
+    await click('[data-adjustment="30000"]');
+    assert.equal(await text('#status'),'Running');
+    assert.equal(await text('#time-budget'),'Total 00:32 · Planned 00:02 + 00:30');
+    assert.ok(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining')) > 0`));
     await click('#restart');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), true);
     await click('#stop');
@@ -180,6 +208,7 @@ try {
         assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true, `No horizontal overflow at ${width}px`);
         assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).filter(el=>el.getClientRects().length).every(el=>el.getBoundingClientRect().height>=44)`), true);
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})()`), true);
+        if(width===320) assert.ok(await evaluate(`new Set(Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.getBoundingClientRect().top)).size`)>1,'Mobile presets wrap');
         if (process.env.EASYTIMER_SCREENSHOT_DIR) {
             const screenshot = await cdp('Page.captureScreenshot', { format: 'png' });
             const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, `easytimer-${width}.png`);
@@ -240,6 +269,7 @@ try {
     if (!nativeFullscreen) console.log(`SKIP: native fullscreen did not complete in this browser run (${await evaluate('window.fullscreenTestError || "request did not settle"')}); verifying fallback and API lifecycle separately.`);
     assert.equal(await evaluate('document.body.classList.contains("presentation")'), true);
     assert.equal(await evaluate('document.body.classList.contains("room-presentation")'), true);
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>b.getClientRects().length>0)`),true,'Additions visible in native/fallback fullscreen');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'flex');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).opacity`), '0.94');
     assert.equal(await text('#time'), presentationTime);
@@ -299,10 +329,12 @@ try {
         assert.equal(await evaluate('document.body.classList.contains("presentation")'), true, JSON.stringify(await evaluate(`({width:innerWidth,height:innerHeight,coarse:matchMedia('(pointer:coarse)').matches,landscape:matchMedia('(orientation:landscape)').matches})`)));
         assert.equal(await evaluate('document.body.classList.contains("room-presentation")'), false);
         assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
+        assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>{const r=b.getBoundingClientRect();return r.height>=44&&r.left>=0&&r.right<=innerWidth&&r.bottom<document.querySelector('#time-budget').getBoundingClientRect().top})`),true,'Adjustments fit landscape');
+        assert.equal(await evaluate(`(()=>{const a=document.querySelector('.actions').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();return a.bottom<=d.top})()`),true,'Actions and adjustments do not overlap');
         assert.equal(await text('#time'), pausedTime);
         assert.equal(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining'))`), progress);
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=a.top})()`), true, `Digits fit at ${width}x${height}`);
-        assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();return Math.abs((r.left+r.right)/2-innerWidth/2)<2&&Math.abs((r.top+r.bottom)/2-innerHeight/2)<innerHeight*.08})()`), true, `Digits are centered at ${width}x${height}`);
+        assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();return Math.abs((r.left+r.right)/2-innerWidth/2)<2})()`), true, `Digits are horizontally centered at ${width}x${height}`);
         if (process.env.EASYTIMER_SCREENSHOT_DIR && width === 852) {
             const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, 'easytimer-iphone-landscape.png');
             await writeFile(path,Buffer.from(screenshot.data,'base64'));
@@ -349,6 +381,8 @@ try {
         await cdp('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:width<1000});
         const screenshot = await cdp('Page.captureScreenshot', {format:'png'});
         assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
+        assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>b.getClientRects().length>0)`),true,'All additions visible in expanded view');
+        assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();return d.bottom<=b.top&&b.bottom<innerHeight-5})()`),true,'Budget line fits above progress and below additions');
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=a.top})()`),true,`Long duration fits at ${width}x${height}`);
         if (process.env.EASYTIMER_SCREENSHOT_DIR) {
             const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, `easytimer-presentation-${width}.png`);
@@ -369,9 +403,17 @@ try {
     assert.equal(await evaluate(`(()=>{const r=document.querySelector('#overtime').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.top>=t.bottom&&r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits presentation view');
     await cdp('Emulation.setDeviceMetricsOverride', {width:568,height:320,deviceScaleFactor:1,mobile:true,screenOrientation:{type:'landscapePrimary',angle:90}});
     assert.equal(await evaluate(`(()=>{const r=document.querySelector('#overtime').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.top>=t.bottom&&r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits mobile landscape presentation');
+    if (process.env.EASYTIMER_SCREENSHOT_DIR) {
+        const screenshot = await cdp('Page.captureScreenshot', {format:'png'});
+        await writeFile(join(process.env.EASYTIMER_SCREENSHOT_DIR,'easytimer-overtime-landscape.png'),Buffer.from(screenshot.data,'base64'));
+    }
     await click('[data-language="de"]');
     assert.equal(await text('.overtime-label'),'Überzeit');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+    await click('[data-adjustment="300000"]');
+    assert.equal(await text('#status'),'Läuft');
+    assert.equal(await text('#time-budget'),'Gesamt 05:01 · Geplant 00:01 + 05:00');
+    assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const a=document.querySelector('.duration-adjustments').getBoundingClientRect();return b.top>=a.bottom&&b.bottom<innerHeight-5})()`),true,'Extended budget fits short landscape');
     await click('#stop');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),true);
     await cdp('Network.enable');
@@ -385,7 +427,7 @@ try {
     assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    console.log('PASS: PWA manifest, service worker offline reload, countdown and overtime regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen API lifecycle, Escape, fallback, landscape rotation, preserved countdown and progress.');
+    console.log('PASS: preset chips, action icons, universal additions, planned/extended budget, limit feedback, PWA offline reload, countdown and overtime regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen lifecycle/fallback, landscape and progress.');
     await cdp('Browser.close');
 } finally {
     socket?.close();

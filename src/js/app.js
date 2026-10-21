@@ -1,31 +1,30 @@
-import { createTimer, durationFromFields, formatOvertime, formatTime, transition } from './timer.mjs';
+import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs';
 
 const copy = {
     en: {
         countdown: 'Countdown', light: 'Light', dark: 'Dark', system: 'System', theme: 'Appearance', language: 'Language',
-        de: 'German', en: 'English', duration: 'Duration', hours: 'Hours', minutes: 'Minutes', seconds: 'Seconds',
+        de: 'German', en: 'English', duration: 'Duration',
         start: 'Start', pause: 'Pause', resume: 'Resume', restart: 'Restart', stop: 'Stop', credit: 'Created by',
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: "Time’s up", newRun: 'Start again', overtime: 'Overtime',
-        invalid: 'Enter a duration greater than zero: 0–99 hours, 0–59 minutes and 0–59 seconds. Use whole numbers.',
-        locked: 'Stop the timer to change its duration.', hint: 'Set a duration, then start.',
         openMenu: 'Open preferences', closeMenu: 'Close preferences',
         preset: minutes => `Set ${minutes} minutes`,
+        adjustments: 'Add time', total: 'Total', planned: 'Planned', limit: 'The total budget cannot exceed 99:59:59.',
+        addTime: seconds => `Add ${seconds} seconds`,
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
     de: {
         countdown: 'Countdown', light: 'Hell', dark: 'Dunkel', system: 'System', theme: 'Darstellung', language: 'Sprache',
-        de: 'Deutsch', en: 'Englisch', duration: 'Dauer', hours: 'Stunden', minutes: 'Minuten', seconds: 'Sekunden',
+        de: 'Deutsch', en: 'Englisch', duration: 'Dauer',
         start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', restart: 'Neustart', stop: 'Stoppen', credit: 'Erstellt von',
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Zeit abgelaufen', newRun: 'Erneut starten', overtime: 'Überzeit',
-        invalid: 'Eine Dauer größer als null eingeben: 0–99 Stunden, 0–59 Minuten und 0–59 Sekunden. Ganze Zahlen verwenden.',
-        locked: 'Timer stoppen, um die Dauer zu ändern.', hint: 'Dauer einstellen und starten.',
         openMenu: 'Einstellungen öffnen', closeMenu: 'Einstellungen schließen',
         preset: minutes => `${minutes} Minuten einstellen`,
+        adjustments: 'Zeit hinzufügen', total: 'Gesamt', planned: 'Geplant', limit: 'Das Gesamtbudget darf 99:59:59 nicht überschreiten.',
+        addTime: seconds => `${seconds} Sekunden hinzufügen`,
         fullscreen: 'Vollbild', exitFullscreen: 'Vollbild verlassen', expand: 'Ansicht vergrößern', exitExpanded: 'Vergrößerte Ansicht verlassen',
     },
 };
 const $ = id => document.getElementById(id);
-const inputs = ['hours', 'minutes', 'seconds'].map($);
 function readPreference(key, fallback, allowed) {
     try { const value = localStorage.getItem(key); return allowed.includes(value) ? value : fallback; }
     catch { return fallback; }
@@ -36,7 +35,7 @@ function savePreference(key, value) {
 let language = readPreference('easyTimerLanguage', navigator.language?.startsWith('de') ? 'de' : 'en', ['de', 'en']);
 let theme = readPreference('easyTimerTheme', 'system', ['light', 'dark', 'system']);
 let timer = createTimer();
-let invalid = false;
+let limitExceeded = false;
 let expanded = false;
 let fullscreenRequested = false;
 let fullscreenRequestId = 0;
@@ -100,20 +99,6 @@ function dispatch(action) {
     timer = transition(timer, action, Date.now());
     render();
 }
-function configuredDuration() {
-    return durationFromFields(...inputs.map(input => input.value));
-}
-function syncInputs() {
-    const seconds = timer.durationMs / 1000;
-    [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].forEach((value, i) => { inputs[i].value = value; });
-}
-function configure() {
-    if (['RUNNING', 'PAUSED'].includes(timer.status)) return;
-    const durationMs = configuredDuration();
-    invalid = durationMs === null;
-    if (!invalid) timer = transition(timer, { type: 'CONFIGURE', durationMs }, Date.now());
-    render();
-}
 function render() {
     const t = copy[language];
     const fullscreen = Boolean(document.fullscreenElement);
@@ -124,9 +109,9 @@ function render() {
     const menuLabel = t[menuOpen ? 'closeMenu' : 'openMenu'];
     $('menu-toggle').setAttribute('aria-label', menuLabel);
     $('menu-toggle').title = menuLabel;
-    const remaining = Math.max(0, Math.min(1, timer.remainingMs / timer.durationMs));
+    const { totalMs, plannedMs, adjustmentMs } = timeBudget(timer);
+    const remaining = Math.max(0, Math.min(1, timer.remainingMs / totalMs));
     $('progress').style.setProperty('--remaining', `${remaining * 100}%`);
-    const active = ['RUNNING', 'PAUSED'].includes(timer.status);
     document.documentElement.lang = language;
     document.documentElement.dataset.theme = theme;
     document.querySelectorAll('[data-copy]').forEach(el => { el.textContent = t[el.dataset.copy]; });
@@ -146,6 +131,8 @@ function render() {
         button.textContent = `${minutes} min`;
         button.setAttribute('aria-label', t.preset(minutes));
         button.title = t.preset(minutes);
+        button.disabled = timer.status !== 'READY';
+        button.setAttribute('aria-pressed', String(timer.durationMs === Number(button.dataset.preset)));
     });
     const time = formatTime(timer.remainingMs);
     if ($('time').textContent !== time) $('time').textContent = time;
@@ -157,43 +144,41 @@ function render() {
     $('overtime').setAttribute('aria-label', `${t.overtime}: ${overtime}`);
     if ($('status').textContent !== t[timer.status]) $('status').textContent = t[timer.status];
     const primary = timer.status === 'RUNNING' ? 'pause' : timer.status === 'PAUSED' ? 'resume' : timer.status === 'FINISHED' ? 'newRun' : 'start';
-    $('primary').textContent = t[primary];
+    $('primary-label').textContent = t[primary];
+    $('primary-icon').setAttribute('d', primary === 'pause' ? 'M7 4v16M17 4v16' : 'm8 4 12 8-12 8Z');
     $('primary').title = t[primary];
-    $('primary').disabled = invalid && !active;
-    $('restart').disabled = invalid && !active;
     $('restart').title = t.restart;
     $('stop').title = t.stop;
-    $('duration-fields').disabled = active;
-    inputs.forEach(input => input.setAttribute('aria-invalid', String(invalid)));
-    const help = invalid ? t.invalid : active ? t.locked : t.hint;
+    document.querySelectorAll('[data-adjustment]').forEach(button => button.setAttribute('aria-label', t.addTime(Number(button.dataset.adjustment) / 1000)));
+    const budget = `${t.total} ${formatTime(totalMs)}${adjustmentMs ? ` · ${t.planned} ${formatTime(plannedMs)} + ${formatTime(adjustmentMs)}` : ''}`;
+    if ($('time-budget').textContent !== budget) $('time-budget').textContent = budget;
+    const help = limitExceeded ? t.limit : '';
     if ($('help').textContent !== help) $('help').textContent = help;
-    $('help').dataset.error = String(invalid);
+    $('help').dataset.error = String(limitExceeded);
 }
 
 $('primary').addEventListener('click', () => {
+    limitExceeded = false;
     if (timer.status === 'RUNNING') dispatch({ type: 'PAUSE' });
     else if (timer.status === 'PAUSED') dispatch({ type: 'RESUME' });
-    else if (!invalid) dispatch({ type: 'START' });
+    else dispatch({ type: 'START' });
 });
-$('restart').addEventListener('click', () => { if (!invalid) dispatch({ type: 'RESTART' }); });
+$('restart').addEventListener('click', () => { limitExceeded = false; dispatch({ type: 'RESTART' }); });
 $('stop').addEventListener('click', () => {
-    invalid = false;
+    limitExceeded = false;
     timer = transition(timer, { type: 'STOP' }, Date.now());
-    syncInputs();
     render();
-});
-inputs.forEach(input => input.addEventListener('input', configure));
-$('duration-form').addEventListener('submit', event => {
-    event.preventDefault();
-    configure();
-    if (!invalid && timer.status === 'READY') dispatch({ type: 'START' });
 });
 document.querySelectorAll('[data-preset]').forEach(button => button.addEventListener('click', () => {
-    if (['RUNNING', 'PAUSED'].includes(timer.status)) return;
-    invalid = false;
+    if (timer.status !== 'READY') return;
+    limitExceeded = false;
     timer = transition(timer, { type: 'CONFIGURE', durationMs: Number(button.dataset.preset) }, Date.now());
-    syncInputs();
     render();
+}));
+document.querySelectorAll('[data-adjustment]').forEach(button => button.addEventListener('click', () => {
+    const amountMs = Number(button.dataset.adjustment);
+    limitExceeded = timer.durationMs + timer.adjustmentMs + amountMs > 359999000;
+    dispatch({ type: 'ADJUST', amountMs });
 }));
 document.querySelectorAll('button[data-theme]').forEach(button => button.addEventListener('click', () => {
     theme = button.dataset.theme;
