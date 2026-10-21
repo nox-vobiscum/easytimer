@@ -1,7 +1,7 @@
 # easyTimer — Product, UX and MVP Concept v2
 
 **Date:** 2026-10-20
-**Last reviewed:** 2026-10-21
+**Last reviewed:** 2026-10-22
 **Status:** Canonical product and UX direction; MVP-01, MVP-02, PWA delivery, mobile refinements, and QT-001 overtime are implemented in production
 **Release:** UX-001 unified duration selection and continuous time budget are implemented and approved for production.
 **Release:** UX-002 contextual duration controls and layout polish are approved for production; the UX-001 engine and budget semantics are unchanged.
@@ -85,9 +85,9 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 - `Start`: starts a prepared countdown.
 - `Pause`: freezes the current remaining time.
 - `Resume`: continues from the paused remaining time.
-- `Restart`: restores the *original configured duration* and starts immediately.
+- UX-003 removes dedicated Quick Timer Restart UI; the shared engine retains RESTART. Stop followed by Start runs the original planned duration again.
 - `Stop`: restores the *original configured duration* and remains stopped/ready.
-- The main action changes contextually: `Start` / `Pause` / `Resume`. Secondary `Restart` and `Stop` are accessible without overwhelming the display.
+- The main action changes contextually: `Start` / `Pause` / `Resume`. Stop is secondary and hidden in READY; FINISHED retains New Run.
 - At `00:00`, keep the main display fixed, show a discreet, translatable “Time's up”/“Zeit abgelaufen” status, and display the QT-001 overtime counter below it.
 - Reject zero/invalid durations in the engine. Presets are available only in READY; universal additions preserve elapsed active time in all states. The maximum effective budget is 99:59:59.
 - Compute remaining time from an absolute time reference, rather than decrementing an integer once per `setInterval` tick. Restore correct remaining time when a throttled/background tab becomes active again.
@@ -109,7 +109,7 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 - One prominent `Fullscreen` / `Exit fullscreen` action.
 - Prefer the standard Fullscreen API where supported, with an acceptable full-viewport CSS fallback when necessary; never promise browser capabilities that are not available on a device.
 - The digits occupy **as much of the available screen as practical**, remaining fully visible without clipping. Very strong contrast, minimal chrome.
-- Only the smallest required controls remain accessible: the contextual primary action, Restart, Stop, Exit fullscreen. Keep them near an edge, subordinate to the clock. Reveal-on-interaction is acceptable, but keyboard and touch users must not be locked out.
+- Only the smallest required controls remain accessible: the contextual primary action, Stop when applicable, all four additions, and Exit fullscreen. Keep them near an edge, subordinate to the clock. Reveal-on-interaction is acceptable, but keyboard and touch users must not be locked out.
 - Header navigation and footer disappear or become visually irrelevant while presenting.
 - On a mobile device, **landscape orientation should automatically favor a nearly time-only layout**, even without fullscreen permission; portrait restores the normal mobile view. Rotation never changes timer state.
 - A slim (few-pixel) bottom-edge progress indicator visually differentiates elapsed and remaining fractions. Initial styling: soft pastel green for elapsed, pastel red/pink for remaining, with a small moving boundary marker. If the marker moves right-to-left, assign remaining to its left and elapsed to its right to keep the visual meaning consistent. No settings or custom colors now.
@@ -128,12 +128,12 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 
 ### Proposed MVP state contract
 
-| State | Main time | Primary action | Restart | Stop |
-|---|---|---|---|---|
-| Ready | Configured duration | Start | Start again from configured duration | Remain ready at configured duration |
-| Running | Computed remaining time | Pause | Reset and immediately run | Reset and remain ready |
-| Paused | Frozen remaining time | Resume | Reset and immediately run | Reset and remain ready |
-| Expired / overtime | 00:00 plus subtle overtime | Start a new run from original duration, clearly indicated | Clear overtime, reset and immediately run | Clear overtime, reset and remain ready |
+| State | Main time | Primary action | Stop |
+|---|---|---|---|
+| Ready | Configured duration | Start | Hidden |
+| Running | Computed remaining time | Pause | Restore planned duration and remain ready |
+| Paused | Frozen remaining time | Resume | Restore planned duration and remain ready |
+| Expired / overtime | 00:00 plus subtle overtime | New Run from planned duration | Clear overtime and extensions, restore planned duration and remain ready |
 
 A single timer state object should represent this contract; avoid unrelated `running` and `paused` booleans. The precise object shape is an implementation detail.
 
@@ -144,7 +144,7 @@ A single timer state object should represent this contract; avoid unrelated `run
 - [x] Every visible text/status/tooltip/accessible label belongs to the selected language; switching languages preserves timer state.
 - [x] Light/Dark/System appearance works and is persisted; selecting a theme never alters the clock.
 - [x] The time readout is the most prominent element on desktop, tablet, and mobile.
-- [x] Start, Pause, Resume, Restart, Stop, expiry, and invalid-duration handling work as specified.
+- [x] Start, Pause, Resume, Stop, New Run, expiry, and engine duration validation work as specified. The engine retains RESTART without a dedicated UI action.
 - [x] Timing corrects for browser callback throttling/background tabs; pause/resume does not lose or double-count time.
 - [x] Fullscreen offers a room-scale timer and minimal, accessible controls; exit works by button and browser conventions.
 - [x] Landscape mobile layout emphasizes the time; portrait restores normal controls without affecting countdown.
@@ -161,9 +161,9 @@ These are presentations of the *same* countdown and actions, not independent fun
 
 ### 4.1 Standard (desktop and mobile portrait)
 
-UX-001 uses compact voting-style preset chips, visually distinct from neutral outlined additions. Eight chips fit a single desktop row and wrap without horizontal scrolling on mobile. Selected state follows an exact match with the configured planned duration. Action buttons always combine an inline SVG icon with localized text.
+UX-001 uses compact voting-style preset chips, visually distinct from neutral outlined additions. Eight chips fit a single desktop row and wrap without horizontal scrolling on mobile. Selected state follows an exact match with the configured planned duration. UX-003 action buttons combine SVG icons with localized text at spacious widths and show icons with full accessible names at compact widths.
 
-UX-002 shows the preset section only in READY in standard, native fullscreen, and expanded views. RUNNING, PAUSED, and FINISHED hide the entire section; Restart keeps it hidden and Stop restores it. Automatic mobile landscape keeps presets hidden even in READY unless the user explicitly enters fullscreen or expanded view. Standard countdown positioning is independent of control height. Room views reserve compact preset space above the essential actions to avoid moving the readout when presets appear or disappear; short displays use smaller chips with 44 px touch targets.
+UX-003 extends READY preset visibility to every presentation, including automatic mobile landscape. RUNNING, PAUSED, and FINISHED hide presets; Stop restores them and New Run hides them. The unified control region replaces separate fixed rows and obsolete preset-space reserves. Controlled layout movement is allowed to reclaim room for the countdown; 44 px touch targets and readable time take priority.
 
 The adjustment section stays available in every state and view. Its localized heading is “Add to duration” / “Dauer ergänzen” in READY, “Extend remaining time” / “Restzeit verlängern” in RUNNING and PAUSED, and “Extend time budget” / “Zeitbudget verlängern” in FINISHED. Values, handlers, budget calculation, and overtime semantics remain those of UX-001.
 
@@ -173,9 +173,9 @@ The adjustment section stays available in every state and view. Its localized he
 - Post-start additions accumulate separately. Effective total equals planned duration plus these additions; elapsed time excludes paused intervals.
 - Running additions move the existing deadline forward without changing elapsed history. Paused additions increase remaining time and preserve pause.
 - Overtime additions recalculate against that same elapsed history. For 15:00 planned and 16:23 elapsed, +5 min gives 03:37 remaining; +1 min leaves +00:23 overtime. Exact compensation shows 00:00 and +00:00, continuing from that deadline.
-- Restart discards post-start additions and immediately starts planned duration. Stop discards them and restores planned duration in READY. A new Start after expiry also clears the prior extension breakdown.
+- The engine RESTART transition discards post-start additions and immediately starts planned duration, but has no dedicated Quick Timer UI control. Stop restores planned duration in READY; New Run after expiry immediately runs it and clears extensions.
 - The progress strip uses remaining time divided by effective total, clamped to 0–100%; overtime stays fully elapsed.
-- All four additions remain directly visible in Standard, Fullscreen, Expanded View, and Mobile Landscape. Presets appear only in READY in Standard, Fullscreen, and Expanded View; automatic Mobile Landscape keeps them hidden.
+- All four additions remain directly visible in Standard, Fullscreen, Expanded View, and Mobile Landscape. Presets appear only in READY in every view, including automatic Mobile Landscape.
 - A small bottom-center line above the progress strip shows `Total 15:00` or `Total 21:30 · Planned 15:00 + 06:30`, localized in German. It respects safe areas, avoids control overlap, and changes only when budget or language changes. It does not announce each tick.
 - Only `data-duration-entry="presets-adjustments"` is delivered. Presets-only and manual variants remain future scope without hidden controls or a selection setting.
 
@@ -188,7 +188,7 @@ The adjustment section stays available in every state and view. Its localized he
 |                                                                       |
 |                          Remaining                                    |
 |                                                                       |
-|                   [   Pause   ]  [Restart] [Stop]                      |
+|                   [   Pause   ]  [Stop]                      |
 |                                                                       |
 |              [1 min] [2 min] [3 min] [5 min] ... [60 min]              |
 |                    [+1 h] [+5 min] [+1 min] [+30 s]                   |
@@ -212,7 +212,7 @@ Production keeps both preference groups visible on desktop. At viewport widths u
 |                         12:34                                         |
 |                                                                       |
 |                                                                       |
-|                     [Pause] [Restart] [Stop]                           |
+|                     [Pause] [Stop]                           |
 |                  [+1 h] [+5 min] [+1 min] [+30 s]                      |
 |                            Total 15:00                                |
 |=============================================================== 3-5 px |
@@ -308,7 +308,7 @@ Later epics must reuse the MVP's shared engine and presentation architecture rat
 
 The following summarizes the **56 approved product decisions**. Their numbered order reflects the conversation's decision history; each must be elaborated as acceptance tests when the related feature is scheduled for implementation. The MVP explicitly implements only the applicable basic-timer subset.
 
-1. Quick Restart returns to originally configured duration and starts immediately.
+1. The shared RESTART transition returns to planned duration and starts immediately. UX-003 removes its dedicated Quick Timer button; use Stop then Start.
 2. Quick Stop returns to originally configured duration and remains stopped.
 3. Switching Quick/Session while running or paused requires confirmation; no automatic start of the destination mode.
 4. Early cancellation of Ad-hoc immediately returns to the main timer, paused, without confirmation.
@@ -338,7 +338,7 @@ The following summarizes the **56 approved product decisions**. Their numbered o
 28. Returning to a phase discards final workshop overtime; accepting completion keeps it.
 29. The four-hour recovery prompt occurs at most once per workshop completion.
 30. Quick expiry displays a separate, subtle overtime counter below the fixed 00:00.
-31. Quick overtime continues until Quick Stop or Restart; there is no separate Quick-overtime stop control.
+31. Quick overtime continues until Quick Stop or New Run; there is no separate Quick-overtime stop control.
 32. Manual overtime persists until explicit Next Phase; a subtle “Up next” preview remains visible during sessions.
 33. Time reconstruction does not replay missed audible/visual signals.
 34. Final workshop overtime keeps accumulating while a recovery dialog is open, unless deliberately paused/stopped.
@@ -393,3 +393,8 @@ The following summarizes the **56 approved product decisions**. Their numbered o
 5. **STOP.** Do not begin the next step, commit, push, merge, deploy, or edit deployment settings without explicit authorization.
 
 **End of concept v2.**
+
+
+## UX-003 responsive control bar
+
+UX-003 unifies timer actions and additions in one responsive control bar. Wide containers show icons with localized action text and full amounts; constrained containers show action icons with complete accessible names and compact +1h/+5m/+1m/+30s amounts. Contextual adjustment headings remain semantic group labels and are visually hidden in compact layouts. Touch targets stay at least 44 px; groups wrap only when necessary. Presets remain a separate READY-only group in every view. Timer calculations, overtime, budgets, progress, and dynamic tab titles are unchanged. No extra settings or dependencies are introduced.

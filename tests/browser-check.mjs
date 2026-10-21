@@ -115,7 +115,8 @@ try {
             await checkContext(false,labels[1]);
             await click('#primary');
             await checkContext(false,labels[1]);
-            await click('#restart');
+            await click('#stop');
+    await click('#primary');
             await checkContext(false,labels[1]);
             await delay(1200);
             await checkContext(false,labels[2]);
@@ -124,12 +125,86 @@ try {
         }
     }
     await cdp('Emulation.clearDeviceMetricsOverride');
+    assert.equal(await evaluate(`document.querySelector('#restart')`),null,'No dedicated Restart UI');
+    // Width-based controls use the same handlers in standard and automatic landscape views.
+    for (const [width,height] of [[1920,1080],[1280,720],[1024,768],[844,390],[667,375],[390,844],[320,568],[568,320],[568,240]]) {
+        await cdp('Emulation.setTouchEmulationEnabled',{enabled:width<900});
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<900,screenOrientation:{type:width>height?'landscapePrimary':'portraitPrimary',angle:width>height?90:0}});
+        await cdp('Page.captureScreenshot',{format:'png'});
+        for (const language of ['de','en']) {
+            await click(`[data-language="${language}"]`);
+            await configure(1,0,0);
+            for (const state of ['READY','RUNNING','PAUSED']) {
+                if (state !== 'READY') await click('#primary');
+                const geometry = await evaluate(`(()=>{
+                    const bar=document.querySelector('.control-bar');
+                    const buttons=Array.from(bar.querySelectorAll('button')).filter(b=>b.getClientRects().length);
+                    const rects=buttons.map(b=>b.getBoundingClientRect());
+                    const budget=document.querySelector('#time-budget').getBoundingClientRect();
+                    const time=document.querySelector('#time').getBoundingClientRect();
+                    return {count:buttons.length,fit:rects.every(r=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth),
+                        names:buttons.every(b=>b.getAttribute('aria-label')?.length>0),
+                        separate:rects.every((r,i)=>rects.every((other,j)=>i===j||r.right<=other.left||other.right<=r.left||r.bottom<=other.top||other.bottom<=r.top)),
+                        belowTime:rects.every(r=>r.top>=time.bottom),aboveBudget:rects.every(r=>r.bottom<=budget.top),
+                        preset:document.querySelector('.duration-config').getClientRects().length>0,
+                        compact:getComputedStyle(document.querySelector('#primary-label')).display==='none',
+                        oneRow:Math.max(...rects.map(r=>r.top))-Math.min(...rects.map(r=>r.top))<3,
+                        overflow:document.documentElement.scrollWidth>innerWidth};})()`);
+                assert.equal(geometry.count,state==='READY'?5:6);
+                assert.equal(geometry.preset,state==='READY',`READY presets at ${width}x${height}`);
+                assert.ok(geometry.fit&&geometry.names&&geometry.separate&&geometry.belowTime&&geometry.aboveBudget&&!geometry.overflow,JSON.stringify({width,height,state,language,geometry}));
+                assert.equal(geometry.compact,width<704);
+                if(width>320||state==='READY') assert.equal(geometry.oneRow,true,`Controls fit one row: ${JSON.stringify({width,height,state,language,geometry})}`);
+            }
+            await evaluate(`document.querySelector('#stop').focus()`);
+            await click('#stop');
+            assert.equal(await evaluate(`document.activeElement===document.querySelector('#primary')`),true,'Stop returns focus to Start before hiding');
+            assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true);
+        }
+    }
+    await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+    await cdp('Emulation.clearDeviceMetricsOverride');
+    await configure(0,5,0);
+    for (const state of ['READY','RUNNING','PAUSED']) {
+        if(state!=='READY') await click('#primary');
+        for (const amount of [3600000,300000,60000,30000]) {
+            const before=await text('#time-budget');
+            await click(`[data-adjustment="${amount}"]`);
+            assert.notEqual(await text('#time-budget'),before,'Every addition updates the budget');
+            await checkTitle(state);
+        }
+    }
+    await click('#stop');
+    await configure(0,0,1);
+    await click('#primary');
+    // Advance the injected wall clock to verify long overtime without real-time waiting.
+    await evaluate(`window.originalNow=Date.now;Date.now=()=>window.originalNow()+36000000;document.dispatchEvent(new Event('visibilitychange'));`);
+    assert.match(await evaluate('document.title'),/^\+09:59:/);
+    for (const amount of [3600000,300000,60000,30000]) {
+        await click(`[data-adjustment="${amount}"]`);
+        await checkTitle('FINISHED');
+        assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+    }
+    await click('#primary');
+    await checkTitle('RUNNING');
+    assert.equal(await text('#time-budget'),'Total 00:01','New Run clears additions');
+    await click('#stop');
+    await evaluate('Date.now=window.originalNow;delete window.originalNow');
+    await cdp('Emulation.setDeviceMetricsOverride',{width:320,height:568,deviceScaleFactor:1,mobile:true});
+    await evaluate(`document.documentElement.style.fontSize='150%'`);
+    await configure(0,5,0);
+    await click('#primary');
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('.control-bar button')).filter(b=>b.getClientRects().length).every(b=>{const r=b.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.height>=44&&r.width>=44})`),true,'150% text scaling preserves control access');
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,'Text scaling does not cause horizontal overflow');
+    await click('#stop');
+    await evaluate(`document.documentElement.style.fontSize=''`);
+    await cdp('Emulation.clearDeviceMetricsOverride');
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Ready');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.textContent)`), ['1 min','2 min','3 min','5 min','10 min','15 min','30 min','60 min']);
     assert.equal(await evaluate(`new Set(Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.getBoundingClientRect().top)).size`),1,'Desktop presets use one row');
     assert.equal(await evaluate(`document.querySelectorAll('input').length`),0);
-    assert.equal(await evaluate(`['primary','restart','stop'].every(id=>document.getElementById(id).querySelector('svg')&&document.getElementById(id).textContent.trim())`),true);
+    assert.equal(await evaluate(`['primary','stop'].every(id=>document.getElementById(id).querySelector('svg')&&document.getElementById(id).textContent.trim())`),true);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-preset]')).backgroundColor !== getComputedStyle(document.querySelector('[data-adjustment]')).backgroundColor`),true);
     await click('[data-preset="900000"]');
     await click('[data-adjustment="300000"]');
@@ -147,7 +222,8 @@ try {
     assert.equal(await text('#time-budget'),'Total 25:30 · Planned 20:00 + 05:30');
     await checkTitle('PAUSED');
     assert.notEqual(await text('#time'),pausedBeforeAddition);
-    await click('#restart');
+    await click('#stop');
+    await click('#primary');
     assert.equal(await text('#time-budget'),'Total 20:00');
     await click('#stop');
     await configure(99,59,59);
@@ -173,7 +249,7 @@ try {
     await evaluate(`window.titleMutations=0;window.titleObserver=new MutationObserver(records=>{window.titleMutations+=records.length});window.titleObserver.observe(document.querySelector('title'),{childList:true,subtree:true,characterData:true});`);
     await click('[data-language="de"]');
     assert.equal(await text('#status'), 'Pausiert');
-    assert.equal(await text('#primary'), 'Fortsetzen');
+    assert.equal(await evaluate(`document.querySelector('#primary').getAttribute('aria-label')`), 'Fortsetzen');
     await click('[data-theme="dark"]');
     assert.equal(await text('#time'), frozen);
     assert.equal(await evaluate('document.title'),frozenTitle);
@@ -195,7 +271,8 @@ try {
     await delay(1100);
     await checkTitle('RUNNING');
     assert.notEqual(await evaluate('document.title'),`${frozen} · easyTimer`,'Resume advances the remaining title time');
-    await click('#restart');
+    await click('#stop');
+    await click('#primary');
     assert.equal(await text('#time'), '00:05');
     assert.equal(await evaluate('document.title'),'00:05 · easyTimer');
     assert.equal(await text('#status'), 'Läuft');
@@ -242,7 +319,8 @@ try {
     assert.equal(await text('#time-budget'),'Total 00:32 · Planned 00:02 + 00:30');
     await checkTitle('RUNNING');
     assert.ok(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining')) > 0`));
-    await click('#restart');
+    await click('#stop');
+    await click('#primary');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), true);
     await click('#stop');
     await click('[data-theme="system"]');
@@ -386,7 +464,7 @@ try {
         assert.equal(await evaluate('document.body.classList.contains("room-presentation")'), false);
         assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
         assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>{const r=b.getBoundingClientRect();return r.height>=44&&r.left>=0&&r.right<=innerWidth&&r.bottom<document.querySelector('#time-budget').getBoundingClientRect().top})`),true,'Adjustments fit landscape');
-        assert.equal(await evaluate(`(()=>{const a=document.querySelector('.actions').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();return a.bottom<=d.top})()`),true,'Actions and adjustments do not overlap');
+        assert.equal(await evaluate(`(()=>{const a=document.querySelector('.actions').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();return a.right<=d.left||a.bottom<=d.top})()`),true,'Actions and adjustments do not overlap');
         assert.equal(await text('#time'), pausedTime);
         assert.equal(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining'))`), progress);
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=a.top})()`), true, `Digits fit at ${width}x${height}`);
@@ -442,11 +520,12 @@ try {
         const readyTop = await evaluate(`document.querySelector('#time').getBoundingClientRect().top`);
         await click('#primary');
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Running presets hidden');
-        assert.ok(Math.abs(await evaluate(`document.querySelector('#time').getBoundingClientRect().top`)-readyTop)<1,'Room readout stable on Start');
+        assert.ok(Math.abs(await evaluate(`document.querySelector('#time').getBoundingClientRect().top`)-readyTop)<height*.2,'Room readout transition stays deliberate');
         await click('#primary');
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Paused presets hidden');
-        await click('#restart');
-        assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Restart keeps presets hidden');
+        await click('#stop');
+    await click('#primary');
+        assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Stop then Start keeps presets hidden');
         await click('#stop');
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true,'Stop restores room presets');
         assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>b.getClientRects().length>0)`),true,'All additions visible in expanded view');

@@ -1,6 +1,6 @@
 # easyTimer — Project Briefing
 
-**Last reviewed:** 2026-10-21
+**Last reviewed:** 2026-10-22
 **Repository:** https://github.com/nox-vobiscum/easytimer  
 **Production:** https://et.rbsnet.at/
 
@@ -16,14 +16,14 @@ The countdown is the dominant element. Desktop, mobile portrait, mobile landscap
 - Add +1 h, +5 min, +1 min, or +30 s in every state and presentation. The effective budget cannot exceed `99:59:59`; exceeding it gives localized feedback.
 - `Start` begins the configured duration.
 - `Pause` freezes the exact remaining duration; `Resume` continues from it.
-- `Restart` restores the original configured duration and starts immediately.
+- UX-003 removes the dedicated Restart UI and hides Stop in READY; the shared engine retains RESTART for future use. Stop followed by Start starts the planned duration again.
 - `Stop` restores the original configured duration and remains ready.
 - Expiry keeps the main display at `00:00`, retains the localized finished status, and shows a smaller overtime counter derived from the original deadline.
-- Overtime continues until Stop, Restart, or a new run. Stop restores the original duration and remains ready; Restart immediately runs it.
+- Overtime continues until Stop or New Run. Stop restores the planned duration and remains ready; New Run immediately starts it and clears extensions.
 - Zero, blank, fractional, negative, and out-of-range durations are rejected.
-- UX-002 configuration presets are hidden while running, paused, or expired, remain hidden after Restart, and return after Stop in standard, native fullscreen, and expanded views. Automatic mobile landscape keeps presets hidden. Manual duration entry remains outside scope.
+- UX-002 configuration presets are hidden while running, paused, or expired, remain hidden after New Run, and return after Stop in standard, native fullscreen, and expanded views. READY presets also appear in automatic mobile landscape. Manual duration entry remains outside scope.
 - Adjustment headings follow state: READY uses “Add to duration” / “Dauer ergänzen”; RUNNING and PAUSED use “Extend remaining time” / “Restzeit verlängern”; FINISHED uses “Extend time budget” / “Zeitbudget verlängern”. All four additions remain available. The standard readout is anchored independently of the changing control height.
-- Before Start, additions become part of planned duration. After Start, additions extend the effective budget while preserving active elapsed time and pause state. Restart and Stop discard extensions and restore planned duration.
+- Before Start, additions become part of planned duration. After Start, additions extend the effective budget while preserving active elapsed time and pause state. Stop and New Run discard extensions and restore planned duration.
 - Adding time in overtime shifts the existing deadline: smaller additions reduce overtime, an exact compensation stays at zero, and larger additions return to countdown. This explicitly supersedes ET-001 decision 37.
 - Remaining time and overtime are derived from the deadline. Delayed callbacks and background-tab throttling do not accumulate timer drift.
 - A theme, language, orientation, viewport, or presentation change never resets the timer.
@@ -43,8 +43,8 @@ UX-004 adds a dynamic browser tab title: READY uses `easyTimer`; RUNNING uses `0
 - Touch landscape up to 600 px high automatically uses the reduced presentation layout and returns to the standard layout in portrait.
 - Native Fullscreen API is used where available. A reversible full-viewport fallback is used when fullscreen is unavailable or rejected.
 - Native fullscreen and its expanded-view fallback show a small, nearly opaque stopwatch-and-wordmark identity at the safe top-left edge without displaying the standard header.
-- The presentation view retains Start/Pause/Resume, Restart, Stop, and exit controls.
-- Actions combine SVG icons and localized text. All four time additions remain directly visible in presentation views. Fullscreen and expanded view display configuration presets only in READY; automatic mobile landscape keeps them hidden.
+- The presentation view retains Start/Pause/Resume/New Run, contextual Stop, and exit controls.
+- Actions combine SVG icons and localized text when spacious; constrained control bars show icons with full localized accessible names. All four time additions remain directly visible in every view, with values and units always shown. Presets appear only in READY in all views.
 - A small safe-area-aware budget line above the progress strip shows Total, or Total · Planned + additions. It is not a live region and updates only when budget values or language change.
 - A five-pixel bottom strip shows remaining time in pink and elapsed time in green. It is decorative and is not announced on every timer tick.
 
@@ -116,3 +116,8 @@ Future work may include subtraction controls, manual duration entry, session tim
 4. Keep the patch focused and preserve existing dependencies and deployment infrastructure.
 5. Run applicable checks and report changed files, results, unrun tests, and remaining limitations.
 6. Stop after the approved task. Commit, merge, push, external-service changes, and production deployment require explicit authorization.
+
+
+## UX-003 responsive control bar
+
+UX-003 unifies timer actions and additions in one responsive control bar. Wide containers show icons with localized action text and full amounts; constrained containers show action icons with complete accessible names and compact +1h/+5m/+1m/+30s amounts. Contextual adjustment headings remain semantic group labels and are visually hidden in compact layouts. Touch targets stay at least 44 px; groups wrap only when necessary. Presets remain a separate READY-only group in every view. Timer calculations, overtime, budgets, progress, and dynamic tab titles are unchanged. No extra settings or dependencies are introduced.

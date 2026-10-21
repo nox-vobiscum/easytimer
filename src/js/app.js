@@ -4,7 +4,7 @@ const copy = {
     en: {
         countdown: 'Countdown', light: 'Light', dark: 'Dark', system: 'System', theme: 'Appearance', language: 'Language',
         de: 'German', en: 'English', duration: 'Duration',
-        start: 'Start', pause: 'Pause', resume: 'Resume', restart: 'Restart', stop: 'Stop', credit: 'Created by',
+        start: 'Start', pause: 'Pause', resume: 'Resume', stop: 'Stop', credit: 'Created by',
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: "Time’s up", newRun: 'Start again', overtime: 'Overtime',
         openMenu: 'Open preferences', closeMenu: 'Close preferences',
         preset: minutes => `Set ${minutes} minutes`,
@@ -16,7 +16,7 @@ const copy = {
     de: {
         countdown: 'Countdown', light: 'Hell', dark: 'Dunkel', system: 'System', theme: 'Darstellung', language: 'Sprache',
         de: 'Deutsch', en: 'Englisch', duration: 'Dauer',
-        start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', restart: 'Neustart', stop: 'Stoppen', credit: 'Erstellt von',
+        start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', stop: 'Stoppen', credit: 'Erstellt von',
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Zeit abgelaufen', newRun: 'Erneut starten', overtime: 'Überzeit',
         openMenu: 'Einstellungen öffnen', closeMenu: 'Einstellungen schließen',
         preset: minutes => `${minutes} Minuten einstellen`,
@@ -153,7 +153,9 @@ function render() {
     $('primary-label').textContent = t[primary];
     $('primary-icon').setAttribute('d', primary === 'pause' ? 'M7 4v16M17 4v16' : 'm8 4 12 8-12 8Z');
     $('primary').title = t[primary];
-    $('restart').title = t.restart;
+    $('primary').setAttribute('aria-label', t[primary]);
+    $('stop').hidden = timer.status === 'READY';
+    $('stop').setAttribute('aria-label', t.stop);
     $('stop').title = t.stop;
     document.querySelectorAll('[data-adjustment]').forEach(button => button.setAttribute('aria-label', t.addTime(Number(button.dataset.adjustment) / 1000)));
     const budget = `${t.total} ${formatTime(totalMs)}${adjustmentMs ? ` · ${t.planned} ${formatTime(plannedMs)} + ${formatTime(adjustmentMs)}` : ''}`;
@@ -169,11 +171,12 @@ $('primary').addEventListener('click', () => {
     else if (timer.status === 'PAUSED') dispatch({ type: 'RESUME' });
     else dispatch({ type: 'START' });
 });
-$('restart').addEventListener('click', () => { limitExceeded = false; dispatch({ type: 'RESTART' }); });
 $('stop').addEventListener('click', () => {
+    const restoreFocus = document.activeElement === $('stop');
     limitExceeded = false;
     timer = transition(timer, { type: 'STOP' }, Date.now());
     render();
+    if (restoreFocus) $('primary').focus({ preventScroll: true });
 });
 document.querySelectorAll('[data-preset]').forEach(button => button.addEventListener('click', () => {
     if (timer.status !== 'READY') return;

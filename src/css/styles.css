@@ -102,7 +102,7 @@ h1 { font-size:.95rem; font-weight:500; color:var(--muted); margin:0 0 1rem; }
 .overtime-label { font-size:.75em; text-transform:uppercase; letter-spacing:.08em; }
 #overtime-time { font-weight:650; letter-spacing:.02em; }
 #status { min-height:1.5em; color:var(--muted); margin:.8rem 0 1.75rem; }
-.actions { display:flex; justify-content:center; flex-wrap:wrap; gap:.65rem; }
+.actions { display:flex; justify-content:center; gap:.5rem; align-items:center; }
 .actions .primary { min-width:8rem; background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
 .actions .primary:hover { background:var(--accent); filter:brightness(.93); }
 #help { color:var(--muted); font-size:.8rem; min-height:3em; line-height:1.5; margin-bottom:0; }
@@ -132,13 +132,29 @@ noscript { text-align:center; padding:1rem; }
   border-radius: 2px;
 }
 .actions button { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; }
+.actions button[hidden] { display:none; }
+.controls-region { container-type:inline-size; }
+.control-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:1rem; margin-top:2rem; }
+.control-bar button { min-width:44px; }
+.amount-compact { display:none; }
 .action-icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; }
-.duration-config { margin:2rem auto 0; max-width:42rem; }
+.duration-config { margin:1rem auto 0; max-width:42rem; }
 .duration-config h2, .duration-adjustments h2 { font-size:.8rem; font-weight:500; color:var(--muted); margin:0 0 .6rem; }
 .duration-presets, .adjustment-buttons { display:flex; flex-wrap:wrap; justify-content:center; gap:.45rem; }
 .duration-presets button { min-width:4.25rem; padding:.5rem .7rem; background:var(--selected); border-color:var(--border); font-size:.85rem; }
 .duration-presets button[aria-pressed="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); color:var(--accent); }
-.duration-adjustments { margin:1.1rem auto 0; }
+.duration-adjustments { position:relative; border-left:1px solid var(--border); padding-left:1rem; }
+.duration-adjustments h2 { position:absolute; bottom:100%; left:1rem; right:0; white-space:nowrap; }
+@container (max-width: 42rem) {
+  .control-bar { gap:.5rem; margin-top:1rem; }
+  .action-label, .amount-full { display:none; }
+  .amount-compact { display:inline; }
+  .control-bar .actions button { min-width:44px; width:44px; padding:0; }
+  .duration-adjustments { padding-left:.5rem; }
+  .duration-adjustments h2 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .adjustment-buttons { gap:.25rem; }
+  .adjustment-buttons button { padding:.4rem; }
+}
 .adjustment-buttons button { background:transparent; font-size:.8rem; font-weight:500; padding:.45rem .65rem; }
 .time-budget { position:fixed; z-index:1; bottom:max(12px,calc(env(safe-area-inset-bottom) + 8px)); left:max(12px,env(safe-area-inset-left)); right:max(12px,env(safe-area-inset-right)); margin:0; text-align:center; color:var(--muted); font-size:.75rem; line-height:1.4; font-variant-numeric:tabular-nums; }
 footer { padding-bottom:calc(env(safe-area-inset-bottom) + 3rem); }
@@ -161,47 +177,41 @@ body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidd
 }
 .presentation-brand-mark { display:grid; width:22px; height:22px; flex:none; }
 .presentation-brand-logo { grid-area:1 / 1; display:block; width:22px; height:22px; object-fit:contain; }
-.presentation header, .presentation footer, .presentation .duration-config { display: none; }
-.room-presentation .duration-config:not([hidden]) {
-  display:block;
+.presentation header, .presentation footer { display: none; }
+.presentation .controls-region {
   position:fixed;
-  bottom:calc(env(safe-area-inset-bottom) + 10.25rem);
+  bottom:calc(env(safe-area-inset-bottom) + 2.5rem);
   left:max(1rem,env(safe-area-inset-left));
   right:max(1rem,env(safe-area-inset-right));
   margin:0 auto;
 }
-.room-presentation .duration-config h2 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.presentation .duration-config { margin:0 auto; }
+.presentation .duration-config h2 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 .presentation h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .presentation main {
   padding-top:max(2.5rem,calc(env(safe-area-inset-top) + 2rem));
   padding-right:max(1rem,env(safe-area-inset-right));
-  padding-bottom:calc(env(safe-area-inset-bottom) + 10rem);
+  padding-bottom:calc(env(safe-area-inset-bottom) + 7rem);
   padding-left:max(1rem,env(safe-area-inset-left));
   min-height:0;
 }
 .presentation .timer { width: 100%; min-width: 0; }
 .presentation #time {
-  font-size:min(30vw,calc((100dvh - 230px) * .75));
+  font-size:min(30vw,calc((100dvh - 160px) * .75));
   line-height:1;
 }
-.presentation #time[data-hours="true"] { font-size: min(20vw, calc((100dvh - 230px) * .75)); }
-/* Reserve the compact preset rows even while running to keep the readout stable. */
-.room-presentation main { padding-bottom:calc(env(safe-area-inset-bottom) + 14rem); }
-.room-presentation #time { font-size:min(30vw,calc((100dvh - 260px) * .75)); }
-.room-presentation #time[data-hours="true"] { font-size:min(20vw,calc((100dvh - 260px) * .75)); }
+.presentation #time[data-hours="true"] { font-size: min(20vw, calc((100dvh - 160px) * .75)); }
+.presentation:has(.duration-config:not([hidden])) main { padding-bottom:calc(env(safe-area-inset-bottom) + 12rem); }
+.presentation:has(.duration-config:not([hidden])) #time { font-size:max(2rem,min(25vw,calc((100dvh - 230px) * .65))); }
+.presentation:has(.duration-config:not([hidden])) #time[data-hours="true"] { font-size:max(2rem,min(17vw,calc((100dvh - 230px) * .65))); }
 @media(max-height:400px) {
-  .room-presentation .duration-presets { gap:.3rem; }
-  .room-presentation .duration-presets button { min-width:3rem; padding:.4rem .5rem; font-size:.75rem; }
+  .presentation .duration-presets { gap:.3rem; }
+  .presentation .duration-presets button { min-width:3rem; padding:.4rem .5rem; font-size:.75rem; }
 }
-.presentation .duration-adjustments { position:fixed; bottom:calc(env(safe-area-inset-bottom) + 2.1rem); left:max(1rem,env(safe-area-inset-left)); right:max(1rem,env(safe-area-inset-right)); margin:0; }
-.presentation .duration-adjustments h2 { margin-bottom:.2rem; font-size:.7rem; }
 .presentation #help:not(:empty) { position:fixed; top:3.25rem; left:1rem; right:1rem; margin:0; min-height:0; font-size:.75rem; }
 .presentation .overtime { margin-top:.35rem; font-size:clamp(.85rem,2.2vw,1.35rem); }
 .presentation #status { position: fixed; top: max(.75rem, calc(env(safe-area-inset-top) + .5rem)); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); margin: 0; font-size: .85rem; }
 .presentation .fullscreen-button { position:fixed; top:max(.75rem,calc(env(safe-area-inset-top) + .5rem)); right:max(.75rem,calc(env(safe-area-inset-right) + .5rem)); color:var(--muted); }
-.presentation .actions { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 6.75rem); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); gap: .5rem; }
-.presentation .actions button { font-size: .8rem; padding: .5rem .75rem; }
-.presentation .actions .primary { min-width: 6rem; }
 @media(max-width:560px) {
   header {
     justify-content:space-between;
@@ -214,8 +224,6 @@ body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidd
   .brand { font-size:1.4rem; }
   .preferences { margin-left:auto; gap:8px; }
   main { padding-top:2rem; }
-  .actions { gap:.45rem; }
-  .actions button { padding-inline:.85rem; }
   .fullscreen-button { top:-.65rem; right:0; padding:0; }
 }
 @media(max-width:440px) {

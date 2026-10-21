@@ -76,11 +76,7 @@
         <span id="overtime-time">+00:00</span>
       </div>
       <p id="status" role="status">Ready</p>
-      <div class="actions">
-        <button id="primary" class="primary" type="button"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path id="primary-icon" d="m8 4 12 8-12 8Z"/></svg><span id="primary-label">Start</span></button>
-        <button id="restart" type="button"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></svg><span data-copy="restart">Restart</span></button>
-        <button id="stop" type="button"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5Z"/></svg><span data-copy="stop">Stop</span></button>
-      </div>
+      <div class="controls-region">
       <section class="duration-config" aria-labelledby="duration-heading">
         <h2 id="duration-heading" data-copy="duration">Duration</h2>
         <div class="duration-presets">
@@ -94,15 +90,22 @@
           <button type="button" data-preset="3600000">60 min</button>
         </div>
       </section>
+      <div class="control-bar">
+      <div class="actions">
+        <button id="primary" class="primary" type="button"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path id="primary-icon" d="m8 4 12 8-12 8Z"/></svg><span id="primary-label" class="action-label">Start</span></button>
+        <button id="stop" type="button" hidden><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5Z"/></svg><span class="action-label" data-copy="stop">Stop</span></button>
+      </div>
       <section class="duration-adjustments" aria-labelledby="adjustment-heading">
         <h2 id="adjustment-heading">Add to duration</h2>
         <div class="adjustment-buttons">
-          <button type="button" data-adjustment="3600000">+1 h</button>
-          <button type="button" data-adjustment="300000">+5 min</button>
-          <button type="button" data-adjustment="60000">+1 min</button>
-          <button type="button" data-adjustment="30000">+30 s</button>
+          <button type="button" data-adjustment="3600000"><span class="amount-full">+1 h</span><span class="amount-compact" aria-hidden="true">+1h</span></button>
+          <button type="button" data-adjustment="300000"><span class="amount-full">+5 min</span><span class="amount-compact" aria-hidden="true">+5m</span></button>
+          <button type="button" data-adjustment="60000"><span class="amount-full">+1 min</span><span class="amount-compact" aria-hidden="true">+1m</span></button>
+          <button type="button" data-adjustment="30000"><span class="amount-full">+30 s</span><span class="amount-compact" aria-hidden="true">+30s</span></button>
         </div>
       </section>
+      </div>
+      </div>
       <p id="help" role="status"></p>
     </section>
   </main>
