@@ -90,6 +90,34 @@ try {
         })),
         new Promise(resolve => setTimeout(() => resolve('timeout'),5000))
     ])`), 'activated');
+    // Contextual controls must not move the readout when the preset section collapses.
+    for (const width of [1280,390,320]) {
+        await cdp('Emulation.setDeviceMetricsOverride', {width,height:900,deviceScaleFactor:1,mobile:width<500});
+        for (const language of ['de','en']) {
+            await click(`[data-language="${language}"]`);
+            await configure(0,0,1);
+            const top = await evaluate(`document.querySelector('#time').getBoundingClientRect().top`);
+            async function checkContext(ready, label) {
+                assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length > 0`),ready);
+                assert.equal(await text('#adjustment-heading'),label);
+                assert.ok(Math.abs(await evaluate(`document.querySelector('#time').getBoundingClientRect().top`) - top)<1,`Stable readout at ${width}px (${label})`);
+                assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>{const r=b.getBoundingClientRect();return !b.disabled&&r.height>=44&&r.left>=0&&r.right<=innerWidth})`),true);
+            }
+            const labels = language === 'de' ? ['Dauer ergänzen','Restzeit verlängern','Zeitbudget verlängern'] : ['Add to duration','Extend remaining time','Extend time budget'];
+            await checkContext(true,labels[0]);
+            await click('#primary');
+            await checkContext(false,labels[1]);
+            await click('#primary');
+            await checkContext(false,labels[1]);
+            await click('#restart');
+            await checkContext(false,labels[1]);
+            await delay(1200);
+            await checkContext(false,labels[2]);
+            await click('#stop');
+            await checkContext(true,labels[0]);
+        }
+    }
+    await cdp('Emulation.clearDeviceMetricsOverride');
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Ready');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.textContent)`), ['1 min','2 min','3 min','5 min','10 min','15 min','30 min','60 min']);
@@ -381,6 +409,18 @@ try {
         await cdp('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:width<1000});
         const screenshot = await cdp('Page.captureScreenshot', {format:'png'});
         assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
+        assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true,'READY presets visible in expanded view');
+        assert.equal(await evaluate(`(()=>{const p=document.querySelector('.duration-config').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return p.top>=t.bottom&&p.bottom<=a.top&&p.left>=0&&p.right<=innerWidth})()`),true,'READY presets fit between readout and actions');
+        const readyTop = await evaluate(`document.querySelector('#time').getBoundingClientRect().top`);
+        await click('#primary');
+        assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Running presets hidden');
+        assert.ok(Math.abs(await evaluate(`document.querySelector('#time').getBoundingClientRect().top`)-readyTop)<1,'Room readout stable on Start');
+        await click('#primary');
+        assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Paused presets hidden');
+        await click('#restart');
+        assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Restart keeps presets hidden');
+        await click('#stop');
+        assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true,'Stop restores room presets');
         assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>b.getClientRects().length>0)`),true,'All additions visible in expanded view');
         assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();return d.bottom<=b.top&&b.bottom<innerHeight-5})()`),true,'Budget line fits above progress and below additions');
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=a.top})()`),true,`Long duration fits at ${width}x${height}`);
@@ -399,6 +439,7 @@ try {
     await delay(100);
     assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+    assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Overtime presets hidden in presentation');
     assert.ok(await text('#overtime-time') >= overtimeBeforePresentation);
     assert.equal(await evaluate(`(()=>{const r=document.querySelector('#overtime').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.top>=t.bottom&&r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits presentation view');
     await cdp('Emulation.setDeviceMetricsOverride', {width:568,height:320,deviceScaleFactor:1,mobile:true,screenOrientation:{type:'landscapePrimary',angle:90}});

@@ -21,7 +21,8 @@ The countdown is the dominant element. Desktop, mobile portrait, mobile landscap
 - Expiry keeps the main display at `00:00`, retains the localized finished status, and shows a smaller overtime counter derived from the original deadline.
 - Overtime continues until Stop, Restart, or a new run. Stop restores the original duration and remains ready; Restart immediately runs it.
 - Zero, blank, fractional, negative, and out-of-range durations are rejected.
-- Configuration presets are locked while running, paused, or expired. Manual duration entry is not part of UX-001.
+- UX-002 configuration presets are hidden while running, paused, or expired, remain hidden after Restart, and return after Stop in standard, native fullscreen, and expanded views. Automatic mobile landscape keeps presets hidden. Manual duration entry remains outside scope.
+- Adjustment headings follow state: READY uses “Add to duration” / “Dauer ergänzen”; RUNNING and PAUSED use “Extend remaining time” / “Restzeit verlängern”; FINISHED uses “Extend time budget” / “Zeitbudget verlängern”. All four additions remain available. The standard readout is anchored independently of the changing control height.
 - Before Start, additions become part of planned duration. After Start, additions extend the effective budget while preserving active elapsed time and pause state. Restart and Stop discard extensions and restore planned duration.
 - Adding time in overtime shifts the existing deadline: smaller additions reduce overtime, an exact compensation stays at zero, and larger additions return to countdown. This explicitly supersedes ET-001 decision 37.
 - Remaining time and overtime are derived from the deadline. Delayed callbacks and background-tab throttling do not accumulate timer drift.
@@ -41,7 +42,7 @@ The countdown is the dominant element. Desktop, mobile portrait, mobile landscap
 - Native Fullscreen API is used where available. A reversible full-viewport fallback is used when fullscreen is unavailable or rejected.
 - Native fullscreen and its expanded-view fallback show a small, nearly opaque stopwatch-and-wordmark identity at the safe top-left edge without displaying the standard header.
 - The presentation view retains Start/Pause/Resume, Restart, Stop, and exit controls.
-- Actions combine SVG icons and localized text. All four time additions remain directly visible in presentation views; only configuration presets are hidden.
+- Actions combine SVG icons and localized text. All four time additions remain directly visible in presentation views. Fullscreen and expanded view display configuration presets only in READY; automatic mobile landscape keeps them hidden.
 - A small safe-area-aware budget line above the progress strip shows Total, or Total · Planned + additions. It is not a live region and updates only when budget values or language change.
 - A five-pixel bottom strip shows remaining time in pink and elapsed time in green. It is decorative and is not announced on every timer tick.
 

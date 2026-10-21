@@ -70,6 +70,9 @@ header {
 .theme-icon { display:block; width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 main { flex:1; display:grid; align-items:center; padding:clamp(1.5rem,5vh,4rem) 1rem; }
 .timer { position:relative; width:min(100%,1100px); margin:auto; text-align:center; }
+/* Anchor the readout independently of the contextual controls below it. */
+body:not(.presentation) main { align-items:start; }
+body:not(.presentation) .timer { margin:0 auto; }
 h1 { font-size:.95rem; font-weight:500; color:var(--muted); margin:0 0 1rem; }
 .fullscreen-button {
   position:absolute;
@@ -159,6 +162,15 @@ body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidd
 .presentation-brand-mark { display:grid; width:22px; height:22px; flex:none; }
 .presentation-brand-logo { grid-area:1 / 1; display:block; width:22px; height:22px; object-fit:contain; }
 .presentation header, .presentation footer, .presentation .duration-config { display: none; }
+.room-presentation .duration-config:not([hidden]) {
+  display:block;
+  position:fixed;
+  bottom:calc(env(safe-area-inset-bottom) + 10.25rem);
+  left:max(1rem,env(safe-area-inset-left));
+  right:max(1rem,env(safe-area-inset-right));
+  margin:0 auto;
+}
+.room-presentation .duration-config h2 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 .presentation h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .presentation main {
   padding-top:max(2.5rem,calc(env(safe-area-inset-top) + 2rem));
@@ -173,6 +185,14 @@ body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidd
   line-height:1;
 }
 .presentation #time[data-hours="true"] { font-size: min(20vw, calc((100dvh - 230px) * .75)); }
+/* Reserve the compact preset rows even while running to keep the readout stable. */
+.room-presentation main { padding-bottom:calc(env(safe-area-inset-bottom) + 14rem); }
+.room-presentation #time { font-size:min(30vw,calc((100dvh - 260px) * .75)); }
+.room-presentation #time[data-hours="true"] { font-size:min(20vw,calc((100dvh - 260px) * .75)); }
+@media(max-height:400px) {
+  .room-presentation .duration-presets { gap:.3rem; }
+  .room-presentation .duration-presets button { min-width:3rem; padding:.4rem .5rem; font-size:.75rem; }
+}
 .presentation .duration-adjustments { position:fixed; bottom:calc(env(safe-area-inset-bottom) + 2.1rem); left:max(1rem,env(safe-area-inset-left)); right:max(1rem,env(safe-area-inset-right)); margin:0; }
 .presentation .duration-adjustments h2 { margin-bottom:.2rem; font-size:.7rem; }
 .presentation #help:not(:empty) { position:fixed; top:3.25rem; left:1rem; right:1rem; margin:0; min-height:0; font-size:.75rem; }

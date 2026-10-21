@@ -8,7 +8,8 @@ const copy = {
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: "Time’s up", newRun: 'Start again', overtime: 'Overtime',
         openMenu: 'Open preferences', closeMenu: 'Close preferences',
         preset: minutes => `Set ${minutes} minutes`,
-        adjustments: 'Add time', total: 'Total', planned: 'Planned', limit: 'The total budget cannot exceed 99:59:59.',
+        addDuration: 'Add to duration', extendRemaining: 'Extend remaining time', extendBudget: 'Extend time budget',
+        total: 'Total', planned: 'Planned', limit: 'The total budget cannot exceed 99:59:59.',
         addTime: seconds => `Add ${seconds} seconds`,
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
@@ -19,7 +20,8 @@ const copy = {
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Zeit abgelaufen', newRun: 'Erneut starten', overtime: 'Überzeit',
         openMenu: 'Einstellungen öffnen', closeMenu: 'Einstellungen schließen',
         preset: minutes => `${minutes} Minuten einstellen`,
-        adjustments: 'Zeit hinzufügen', total: 'Gesamt', planned: 'Geplant', limit: 'Das Gesamtbudget darf 99:59:59 nicht überschreiten.',
+        addDuration: 'Dauer ergänzen', extendRemaining: 'Restzeit verlängern', extendBudget: 'Zeitbudget verlängern',
+        total: 'Gesamt', planned: 'Geplant', limit: 'Das Gesamtbudget darf 99:59:59 nicht überschreiten.',
         addTime: seconds => `${seconds} Sekunden hinzufügen`,
         fullscreen: 'Vollbild', exitFullscreen: 'Vollbild verlassen', expand: 'Ansicht vergrößern', exitExpanded: 'Vergrößerte Ansicht verlassen',
     },
@@ -115,6 +117,8 @@ function render() {
     document.documentElement.lang = language;
     document.documentElement.dataset.theme = theme;
     document.querySelectorAll('[data-copy]').forEach(el => { el.textContent = t[el.dataset.copy]; });
+    document.querySelector('.duration-config').hidden = timer.status !== 'READY';
+    $('adjustment-heading').textContent = t[timer.status === 'READY' ? 'addDuration' : timer.status === 'FINISHED' ? 'extendBudget' : 'extendRemaining'];
     document.querySelectorAll('[data-label]').forEach(el => { el.setAttribute('aria-label', t[el.dataset.label]); });
     document.querySelectorAll('button[data-theme]').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.theme === theme));

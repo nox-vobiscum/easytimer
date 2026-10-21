@@ -2,13 +2,14 @@
 
 A small, dependency-free countdown timer for meetings and personal timeboxing.
 
-The release includes QT-001 overtime and UX-001 unified duration selection with continuous time-budget extensions.
+The release includes QT-001 overtime, UX-001 continuous time-budget extensions, and UX-002 contextual duration controls.
 
 ## Current release
 
 - One timer with Start, Pause, Resume, Restart and Stop.
 - Restart restores the original configured duration and starts immediately. Stop restores it and stays ready.
-- Eight configuration presets: 1, 2, 3, 5, 10, 15, 30 and 60 minutes. Presets are available only while ready and never start the timer.
+- Eight configuration presets: 1, 2, 3, 5, 10, 15, 30 and 60 minutes. Presets are visible only while ready and never start the timer, including in native fullscreen and expanded view. Automatic mobile landscape keeps presets hidden.
+- UX-002 adjustments use contextual headings for ready, running/paused, and overtime. The readout stays anchored when presets appear or disappear.
 - Universal additions (+1 h, +5 min, +1 min, +30 s) remain available in every state and view, up to an effective budget of 99:59:59.
 - Action buttons combine inline SVG icons and localized text. A subtle bottom line always shows the allocated total and, after extensions, the planned duration plus added time.
 - Expiry keeps the main display at 00:00 and shows a subtle, localized overtime counter derived from the original deadline. Start again clears overtime and runs the original duration.
@@ -85,7 +86,7 @@ Owner acceptance checks:
 1. Select 1 min and Start. Pause, wait, add 30 s, and Resume: paused time must not count down, and the added budget must be retained.
 2. Select 15 min, add 5 min before Start, then add 5 min after Start: expect Total 25:00 · Planned 20:00 + 05:00. Restart runs 20 minutes; Stop restores 20 minutes, ready.
 3. Let the timer expire: the main display stays at 00:00 while the smaller overtime counter advances from +00:00. Restart immediately runs the original duration; Stop restores it and clears overtime.
-4. Presets must be disabled while running, paused, and expired. Repeatedly add time up to the supported limit; an addition beyond 99:59:59 must be rejected with localized feedback.
+4. Presets must be hidden while running, paused, and expired, including after Restart; Stop restores them in standard, native fullscreen, and expanded views. Automatic mobile landscape keeps presets hidden. Check contextual adjustment headings in both languages and a stable readout position. Repeatedly add time up to the supported limit; an addition beyond 99:59:59 must be rejected with localized feedback.
 5. Run 30 seconds, switch tabs for at least 10 seconds, and return. Remaining time must reflect elapsed wall time; repeat past expiry.
 6. Switch DE/EN and Light/Dark/System while running, paused, and in overtime. The timer must preserve its progress. Reload to verify preferences; change OS theme with System selected.
 7. Check desktop and 320–393 px portrait widths, including 99:59:59. All eight presets fit one desktop row and wrap on mobile. Verify distinct preset/adjustment styling, 44 px targets, and the mobile preferences menu.

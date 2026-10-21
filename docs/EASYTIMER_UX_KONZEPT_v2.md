@@ -4,6 +4,7 @@
 **Last reviewed:** 2026-10-21
 **Status:** Canonical product and UX direction; MVP-01, MVP-02, PWA delivery, mobile refinements, and QT-001 overtime are implemented in production
 **Release:** UX-001 unified duration selection and continuous time budget are implemented and approved for production.
+**Release:** UX-002 contextual duration controls and layout polish are approved for production; the UX-001 engine and budget semantics are unchanged.
 **Supersedes:** `EASYTIMER_UX_KONZEPT_v1.md`
 **Repository:** https://github.com/nox-vobiscum/easytimer
 **Production:** https://et.rbsnet.at/
@@ -162,6 +163,10 @@ These are presentations of the *same* countdown and actions, not independent fun
 
 UX-001 uses compact voting-style preset chips, visually distinct from neutral outlined additions. Eight chips fit a single desktop row and wrap without horizontal scrolling on mobile. Selected state follows an exact match with the configured planned duration. Action buttons always combine an inline SVG icon with localized text.
 
+UX-002 shows the preset section only in READY in standard, native fullscreen, and expanded views. RUNNING, PAUSED, and FINISHED hide the entire section; Restart keeps it hidden and Stop restores it. Automatic mobile landscape keeps presets hidden even in READY unless the user explicitly enters fullscreen or expanded view. Standard countdown positioning is independent of control height. Room views reserve compact preset space above the essential actions to avoid moving the readout when presets appear or disappear; short displays use smaller chips with 44 px touch targets.
+
+The adjustment section stays available in every state and view. Its localized heading is “Add to duration” / “Dauer ergänzen” in READY, “Extend remaining time” / “Restzeit verlängern” in RUNNING and PAUSED, and “Extend time budget” / “Zeitbudget verlängern” in FINISHED. Values, handlers, budget calculation, and overtime semantics remain those of UX-001.
+
 #### UX-001 continuous time budget (approved override)
 
 - Planned duration is the configured duration immediately before Start. Pre-start additions become part of this plan.
@@ -170,7 +175,7 @@ UX-001 uses compact voting-style preset chips, visually distinct from neutral ou
 - Overtime additions recalculate against that same elapsed history. For 15:00 planned and 16:23 elapsed, +5 min gives 03:37 remaining; +1 min leaves +00:23 overtime. Exact compensation shows 00:00 and +00:00, continuing from that deadline.
 - Restart discards post-start additions and immediately starts planned duration. Stop discards them and restores planned duration in READY. A new Start after expiry also clears the prior extension breakdown.
 - The progress strip uses remaining time divided by effective total, clamped to 0–100%; overtime stays fully elapsed.
-- All four additions remain directly visible in Standard, Fullscreen, Expanded View, and Mobile Landscape. Presets alone are hidden during presentation.
+- All four additions remain directly visible in Standard, Fullscreen, Expanded View, and Mobile Landscape. Presets appear only in READY in Standard, Fullscreen, and Expanded View; automatic Mobile Landscape keeps them hidden.
 - A small bottom-center line above the progress strip shows `Total 15:00` or `Total 21:30 · Planned 15:00 + 06:30`, localized in German. It respects safe areas, avoids control overlap, and changes only when budget or language changes. It does not announce each tick.
 - Only `data-duration-entry="presets-adjustments"` is delivered. Presets-only and manual variants remain future scope without hidden controls or a selection setting.
 
