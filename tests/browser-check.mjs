@@ -173,6 +173,14 @@ try {
             console.log(`Screenshot: ${path}`);
         }
     }
+    await cdp('Emulation.setDeviceMetricsOverride', { width:393, height:852, deviceScaleFactor:3, mobile:true, screenOrientation:{type:'portraitPrimary',angle:0} });
+    assert.equal(await evaluate(`(()=>{const brand=document.querySelector('.brand').getBoundingClientRect();const preferences=document.querySelector('.preferences').getBoundingClientRect();return Math.abs((brand.left+brand.right)/2-innerWidth/2)<2&&Math.abs((preferences.left+preferences.right)/2-innerWidth/2)<2&&preferences.top>=brand.bottom})()`), true);
+    if (process.env.EASYTIMER_SCREENSHOT_DIR) {
+        const screenshot = await cdp('Page.captureScreenshot', { format:'png' });
+        const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, 'easytimer-iphone-portrait.png');
+        await writeFile(path,Buffer.from(screenshot.data,'base64'));
+        console.log(`Screenshot: ${path}`);
+    }
     await evaluate(`document.querySelector('#primary').focus()`);
     await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13 });
     await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
@@ -239,9 +247,9 @@ try {
     assert.ok(progress > 70 && progress < 95);
     const pausedTime = await text('#time');
     await cdp('Emulation.setTouchEmulationEnabled', { enabled: true });
-    for (const [width,height] of [[844,390],[667,375],[568,320]]) {
-        await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor:1, mobile:true });
-        await cdp('Page.captureScreenshot', { format: 'png' });
+    for (const [width,height] of [[852,393],[844,390],[667,375],[568,320]]) {
+        await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor:1, mobile:true, screenOrientation:{type:'landscapePrimary',angle:90} });
+        const screenshot = await cdp('Page.captureScreenshot', { format: 'png' });
         for (let i = 0; i < 30; i++) {
             if (await evaluate('document.body.classList.contains("presentation")')) break;
             await delay(100);
@@ -250,6 +258,12 @@ try {
         assert.equal(await text('#time'), pausedTime);
         assert.equal(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining'))`), progress);
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=a.top})()`), true, `Digits fit at ${width}x${height}`);
+        assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();return Math.abs((r.left+r.right)/2-innerWidth/2)<2&&Math.abs((r.top+r.bottom)/2-innerHeight/2)<innerHeight*.08})()`), true, `Digits are centered at ${width}x${height}`);
+        if (process.env.EASYTIMER_SCREENSHOT_DIR && width === 852) {
+            const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, 'easytimer-iphone-landscape.png');
+            await writeFile(path,Buffer.from(screenshot.data,'base64'));
+            console.log(`Screenshot: ${path}`);
+        }
     }
     await cdp('Emulation.setDeviceMetricsOverride', { width:390,height:844,deviceScaleFactor:1,mobile:true });
     await cdp('Page.captureScreenshot', { format: 'png' });

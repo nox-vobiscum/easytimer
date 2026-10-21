@@ -10,7 +10,18 @@ button { min-height:44px; padding:.65rem 1.1rem; border:1px solid var(--border);
 button:hover:not(:disabled) { border-color:var(--accent); background:var(--selected); }
 button:disabled { opacity:.55; cursor:default; }
 :focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; padding:12px clamp(24px,2.5vw,32px); border-bottom:1px solid var(--border); }
+header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:1rem;
+  padding-top:max(12px,env(safe-area-inset-top));
+  padding-right:max(clamp(24px,2.5vw,32px),env(safe-area-inset-right));
+  padding-bottom:12px;
+  padding-left:max(clamp(24px,2.5vw,32px),env(safe-area-inset-left));
+  border-bottom:1px solid var(--border);
+}
 .brand { display:flex; align-items:center; gap:8px; font-size:1.8rem; font-weight:700; letter-spacing:-.035em; }
 .brand-mark { display:grid; width:32px; height:32px; flex:none; }
 .brand-logo { grid-area:1 / 1; display:block; width:32px; height:32px; object-fit:contain; }
@@ -121,17 +132,33 @@ noscript { text-align:center; padding:1rem; }
 body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
 .presentation header, .presentation footer, .presentation form { display: none; }
 .presentation h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.presentation main { padding: 2.5rem 1rem 6rem; min-height: 0; }
+.presentation main {
+  padding-top:max(2.5rem,calc(env(safe-area-inset-top) + 2rem));
+  padding-right:max(1rem,env(safe-area-inset-right));
+  padding-bottom:max(4rem,calc(env(safe-area-inset-bottom) + 3rem));
+  padding-left:max(1rem,env(safe-area-inset-left));
+  min-height:0;
+}
 .presentation .timer { width: 100%; min-width: 0; }
-.presentation #time { font-size: min(30vw, calc((100dvh - 150px) * .75)); line-height: 1; }
+.presentation #time {
+  font-size:min(30vw,calc((100dvh - 150px) * .75));
+  line-height:1;
+}
 .presentation #time[data-hours="true"] { font-size: min(20vw, calc((100dvh - 150px) * .75)); }
-.presentation #status { position: fixed; top: max(.75rem, env(safe-area-inset-top)); left: 0; right: 0; margin: 0; font-size: .85rem; }
-.presentation .fullscreen-button { position:fixed; top:max(.75rem,env(safe-area-inset-top)); right:max(.75rem,env(safe-area-inset-right)); color:var(--muted); }
-.presentation .actions { position: fixed; bottom: max(1.25rem, env(safe-area-inset-bottom)); left: 1rem; right: 1rem; gap: .5rem; }
+.presentation #status { position: fixed; top: max(.75rem, calc(env(safe-area-inset-top) + .5rem)); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); margin: 0; font-size: .85rem; }
+.presentation .fullscreen-button { position:fixed; top:max(.75rem,calc(env(safe-area-inset-top) + .5rem)); right:max(.75rem,calc(env(safe-area-inset-right) + .5rem)); color:var(--muted); }
+.presentation .actions { position: fixed; bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + .75rem)); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); gap: .5rem; }
 .presentation .actions button { font-size: .8rem; padding: .5rem .75rem; }
 .presentation .actions .primary { min-width: 6rem; }
 @media(max-width:560px) {
-  header { justify-content:space-between; gap:8px; padding:8px 16px; }
+  header {
+    justify-content:space-between;
+    gap:8px;
+    padding-top:max(8px,env(safe-area-inset-top));
+    padding-right:max(16px,env(safe-area-inset-right));
+    padding-bottom:8px;
+    padding-left:max(16px,env(safe-area-inset-left));
+  }
   .brand { font-size:1.4rem; }
   .preferences { margin-left:auto; gap:8px; }
   main { padding-top:2rem; }
@@ -141,7 +168,9 @@ body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidd
   .fullscreen-button { top:-.65rem; right:0; padding:0; }
 }
 @media(max-width:440px) {
-  .brand { width:100%; }
+  header { display:grid; grid-template-columns:minmax(0,1fr); justify-items:center; gap:10px; }
+  .brand { justify-self:center; }
+  .preferences { justify-self:center; margin-left:0; max-width:100%; }
   .preferences { gap:6px; }
   .switch { gap:3px; }
 }
