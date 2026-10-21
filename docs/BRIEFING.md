@@ -1,105 +1,109 @@
-# RBS' easyTimer — Project Briefing
+# easyTimer — Project Briefing
 
-**Last reviewed:** 2026-10-19  
+**Last reviewed:** 2026-10-21
 **Repository:** https://github.com/nox-vobiscum/easytimer  
-**Production URL (reported):** https://et.rbsnet.at/
+**Production:** https://et.rbsnet.at/
 
-## 1. Purpose and scope
+## 1. Current product
 
-easyTimer is a lightweight, browser-based timer for meetings, facilitation, and workshops. The timer display should be exceptionally easy to read on external meeting-room screens. Keep the tool simple, intuitive, dependency-free where practical, and inexpensive to host.
+easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The current production release provides one basic timer. Session timing, ad-hoc timing, overtime, in-flight duration adjustments, alarms, and user-configurable presentation settings remain future scope.
 
-Three use cases define the product:
+The countdown is the dominant element. Desktop, mobile portrait, mobile landscape, fullscreen, and the expanded-view fallback are presentations of the same timer state rather than separate modes.
 
-1. **Quick Timer:** Set a duration, start, pause/resume, restart, stop/reset, and switch to an enlarged presentation view.
-2. **Ad-hoc Timer:** Temporarily pause the main countdown for a separately timeboxed discussion.
-3. **Session Timer:** Prepare workshop phases with their own durations and show both the current phase and total remaining session time.
+## 2. Implemented behavior
 
-The Quick Timer is the primary use case. The countdown is the primary visual element. Advanced controls should appear in context instead of competing with the clock.
+- Configure hours, minutes, and seconds up to `99:59:59`, or use one of three presets.
+- `Start` begins the configured duration.
+- `Pause` freezes the exact remaining duration; `Resume` continues from it.
+- `Restart` restores the original configured duration and starts immediately.
+- `Stop` restores the original configured duration and remains ready.
+- Expiry remains at `00:00` with a localized finished status and no overtime.
+- Zero, blank, fractional, negative, and out-of-range durations are rejected.
+- Duration inputs are locked while the timer is running or paused.
+- Remaining time is derived from a deadline. Delayed callbacks and background-tab throttling do not accumulate timer drift.
+- A theme, language, orientation, viewport, or presentation change never resets the timer.
+- An active countdown is not restored after a complete page reload.
 
-## 2. Current implementation (repository snapshot, not a production browser test)
+## 3. Interface and responsive behavior
 
-- **Runtime:** Static client-side web application; no backend required.
-- **Stack:** HTML, CSS, vanilla JavaScript; no external runtime dependencies documented.
-- **Main files:** `src/index.html`, `src/css/styles.css`, `src/js/app.js`.
-- **Styling:** CSS custom properties, including Light/Dark/System appearance.
-- **Application state:** Implemented in `app.js`; some preferences/session configuration use browser `localStorage`.
-- **Timing:** The current implementation decrements counters using `setInterval(..., 1000)`. Accuracy during tab throttling/backgrounding needs review.
-- **Presentation view:** Implemented as a CSS fullscreen-style display; do not assume the browser Fullscreen API is in use.
-- **Existing session features:** Session editor; automatic/manual phase transitions; option to show time inputs.
-- **Existing navigation:** Hamburger menu currently contains mode, theme, and session-related settings.
-- **Testing:** No automated test suite or coverage level has been verified for the repository. Do not assume JUnit, Playwright, or a build pipeline is configured.
-- **Deployment:** The production URL is known; hosting, deployment mechanics, and any CDN/proxy need verification before changes.
+- Product identity is `easyTimer`, using dedicated standard and dark stopwatch artwork with a matching multi-size favicon.
+- Every user-facing string, tooltip, status, and accessible label is available in German and English.
+- Light, Dark, and System appearance options are supported. System follows the operating-system preference.
+- Language and appearance preferences are stored in browser-local storage.
+- Desktop keeps language and appearance controls visible in the header.
+- At widths up to 440 px, an accessible hamburger button opens those controls in a safe-area-aware dropdown. Escape and an outside click close it; Escape restores focus to the trigger.
+- Mobile portrait, including installed iPhone PWA presentation, respects display cutouts and safe areas.
+- Touch landscape up to 600 px high automatically uses the reduced presentation layout and returns to the standard layout in portrait.
+- Native Fullscreen API is used where available. A reversible full-viewport fallback is used when fullscreen is unavailable or rejected.
+- Native fullscreen and its expanded-view fallback show a small, nearly opaque stopwatch-and-wordmark identity at the safe top-left edge without displaying the standard header.
+- The presentation view retains Start/Pause/Resume, Restart, Stop, and exit controls.
+- A five-pixel bottom strip shows remaining time in pink and elapsed time in green. It is decorative and is not announced on every timer tick.
 
-Treat the actual checked-out files as the source of truth for implementation details. The UX concept describes desired behavior, not proof of existing behavior.
+## 4. Progressive Web App
 
-## 3. Language policy — mandatory
+easyTimer is installable from supported browsers through `src/manifest.webmanifest`. The manifest declares standalone display, app colors, and 192 px and 512 px icons. An Apple touch icon is included for iOS.
 
-- **Chat and planning conversations with the user:** German.
-- **Everything committed to the repository:** English, including README, briefings, concepts, backlog, user-facing UI copy, code, comments, identifiers, tests, commit messages, and future agent instructions stored in the repository.
-- **Current product language:** English. Translation/localization is not part of the approved scope.
-- Do not mix German text into repository documents or source files.
+`src/service-worker.js` precaches the same-origin app shell after the first successful online visit. Navigation falls back to the cached index while offline. The cache name is versioned; activating a new version removes older `easytimer-` caches. Service workers require HTTPS or localhost.
 
-## 4. Product decisions and design direction
+Offline reload starts a fresh ready timer because cross-reload timer persistence is outside the current scope.
 
-### Approved: Manual return from ad-hoc timer
+## 5. Architecture
 
-- Opening an ad-hoc timer pauses a running main timer and preserves its remaining duration.
-- Ad-hoc pause/resume does not modify the main timer.
-- At ad-hoc completion, clearly indicate that its timebox has ended; the main timer **must not** resume automatically.
-- A deliberate **Return to main timer** action returns to the saved main countdown; only a separate, deliberate **Resume** action restarts it.
-- If the main timer was already paused when ad-hoc began, it remains paused afterward.
-- Details for prematurely stopping/closing ad-hoc, and the exact completion signal, remain unresolved.
+- `src/index.html`: semantic single-timer interface, PWA metadata, header, controls, and progress strip.
+- `src/css/styles.css`: design tokens, themes, safe areas, responsive standard and presentation layouts, and mobile menu.
+- `src/js/timer.mjs`: DOM-independent timer state and transitions.
+- `src/js/app.js`: rendering, localization, browser events, fullscreen behavior, responsive presentation, preferences, and service-worker registration.
+- `src/manifest.webmanifest`: install metadata and app icon declarations.
+- `src/service-worker.js`: versioned offline app-shell cache.
+- `tests/timer.test.mjs`: deterministic timer transition and formatting tests.
+- `tests/browser-check.mjs`: Chromium regression test for UI, timing, accessibility-related geometry, fullscreen/fallback behavior, mobile layouts, PWA registration, and offline reload.
 
-### Preferred but not yet approved for implementation: Menu-free navigation
+The timer object is the single authoritative state source. It contains status, original duration, remaining milliseconds, and a deadline. Rendering and browser presentation do not own independent timer state.
 
-- Consider removing the hamburger menu and placing labeled **Timer / Session** mode selection and compact **Light / Dark / System** theme controls in the header.
-- Desktop concept: one header row; mobile concept: a compact two-row header is acceptable.
-- Move session-specific actions to the session context, not a global menu: editing phases, transition mode, and visibility of time inputs.
-- Mode switching while a countdown is active must not silently discard progress. Exact treatment is still an open decision.
-- Preserve current behavior until a specific implementation task has been reviewed and approved.
+## 6. Local development and validation
 
-**Canonical discussion record and ASCII wireframes:** `docs/EASYTIMER_UX_CONCEPT.md`.
+The application uses native ES modules and must be served over HTTP rather than opened with `file://`:
 
-## 5. Collaboration workflow (developer ↔ AI coding agent)
+```sh
+python -m http.server 8000 --directory src
+```
 
-1. **Read first:** Inspect `README.md`, this briefing, the UX concept, and the current relevant source files before suggesting edits.
-2. **Verify before changing:** Inspect current branch, worktree status, exact code paths, and available tests. Do not assume old chat context matches the repository.
-3. **Plan before implementation:** State the specific goal, files, risks, and targeted validation. Ask about unresolved product decisions; do not invent answers.
-4. **One small scope at a time:** Avoid bundling layout changes with changes to timer mechanics. Prefer minimal, reversible patches and one focused commit per approved task.
-5. **Respect approval gates:** Discussion and documentation do not authorize implementation or deployment. Stop after the agreed task and report changes and tests. Do not push or deploy unless explicitly instructed.
-6. **Keep dependencies lean:** No framework or backend migration is planned. Justify any new dependency beforehand.
-7. **CSS centralization:** Put styles in `src/css/styles.css`, reuse existing tokens/classes, avoid inline styles where practical.
-8. **Test honestly:** Run the checks that actually exist; for changed timing behavior, manually validate the relevant states and browser-background behavior. Do not claim a test suite or coverage metric that was not observed.
-9. **Documentation hygiene:** Update documents only to reflect verified implementation or explicitly labeled design decisions. Do not silently convert proposals into completed features.
+Run the dependency-free checks with Node.js 22 or newer:
 
-## 6. Immediate workstream (planning only)
+```sh
+node --test tests/timer.test.mjs
+node --check src/js/app.js
+node --check src/js/timer.mjs
+node --check src/service-worker.js
+node --check tests/browser-check.mjs
+node tests/browser-check.mjs
+```
 
-- **ET-001:** Specify timer states and exact Start/Pause/Resume/Restart/Stop/Reset behavior; establish ad-hoc stop/close/finish semantics.
-- **ET-002:** Simplify navigation/header without changing timer mechanics.
-- **ET-003:** Improve Quick Timer controls and presentation display.
-- **ET-004:** Improve ad-hoc/session interactions and session editor usability.
-- **ET-005 (later):** User-configurable colors and additional visual polish.
+The browser check uses an installed Chromium-based browser and an isolated temporary profile. On Windows it defaults to Microsoft Edge; `EASYTIMER_BROWSER` can select another Chromium executable.
 
-This sequence is proposed, not an authorization to edit code.
+## 7. Deployment
 
-## 7. Open questions
+`.github/workflows/deploy.yaml` deploys pushes to `main` through the existing FTP action. Deployment credentials remain in GitHub secrets. Do not modify the workflow, push, merge, or deploy without separate owner authorization.
 
-- What should a mode switch do while the main timer is active or paused?
-- What exactly differentiates Restart from Stop & Reset in Quick Timer and Session Timer?
-- What should Stop and Close mean for an active or paused ad-hoc timer?
-- How should total session time behave when phases are skipped, restarted, extended, or exceeded?
-- Should presentation mode remain CSS-only or use the browser Fullscreen API where supported?
-- How should session rows be edited, reordered, validated, and summarized?
-- Should countdowns use a monotonic clock/deadline to avoid `setInterval` drift?
-- What are the actual deployment and testing procedures for this repository?
+The production workflow currently uploads the static repository contents. There is no build step, backend, database, or runtime package installation.
 
-## 8. Accessibility and quality expectations
+## 8. Language policy
 
-- Controls should be keyboard-operable, visibly focused, accurately labeled, and understandable without relying only on icons or color.
-- Modal dialogs and overlays need deliberate focus/escape behavior; do not introduce regressions while refactoring navigation.
-- Time readouts need strong contrast, clear state labels, and sensible behavior at zero.
-- Test desktop, mobile, and presentation-size viewports; verify behavior in background tabs if timing logic changes.
+- Product-owner and agent conversation is in German.
+- Repository code, comments, documentation, test names, and commit messages are in English.
+- German product translation resources are an approved repository exception because the interface supports German and English.
 
-## 9. Starting a future working session
+## 9. Product direction
 
-Open the **easytimer** folder as the VS Code workspace, not the separate Planning Poker repository. Confirm branch/status and source files; read this briefing and `docs/EASYTIMER_UX_CONCEPT.md`; propose one bounded next action in German to the user, while keeping all repository text and coding-agent deliverables in English.
+`docs/EASYTIMER_UX_KONZEPT_v2.md` is the canonical product and UX direction. Its 56 ET-001 decisions describe accepted long-term behavior, not current production functionality and not automatic authorization to implement future features.
+
+Future work may include enhanced quick-timer controls, session timing, ad-hoc timing, overtime, signals, restoration, and customization. Each next feature requires a bounded plan and explicit approval.
+
+## 10. Collaboration workflow
+
+1. Inspect the current branch, worktree, relevant documentation, source files, and available tests.
+2. Propose one bounded task with affected files, state implications, risks, model recommendation, and validation.
+3. Wait for explicit implementation approval.
+4. Keep the patch focused and preserve existing dependencies and deployment infrastructure.
+5. Run applicable checks and report changed files, results, unrun tests, and remaining limitations.
+6. Stop after the approved task. Commit, merge, push, external-service changes, and production deployment require explicit authorization.
