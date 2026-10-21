@@ -143,6 +143,8 @@ function render() {
     $('time').dataset.hours = String(time.length > 5);
     $('time').setAttribute('aria-label', `${t.countdown}: ${time}`);
     const overtime = formatOvertime(timer.overtimeMs);
+    const title = timer.status === 'READY' ? 'easyTimer' : `${timer.status === 'FINISHED' ? overtime : time}${timer.status === 'PAUSED' ? ' ⏸' : ''} · easyTimer`;
+    if (document.title !== title) document.title = title;
     $('overtime').hidden = timer.status !== 'FINISHED';
     $('overtime-time').textContent = overtime;
     $('overtime').setAttribute('aria-label', `${t.overtime}: ${overtime}`);

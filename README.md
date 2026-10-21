@@ -6,6 +6,8 @@ The release includes QT-001 overtime, UX-001 continuous time-budget extensions, 
 
 ## Current release
 
+UX-004: the browser tab title shows remaining time while running, adds a pause marker while paused, and shows signed overtime after expiry. READY uses `easyTimer`. Existing deadline-based updates correct the title when browser execution resumes; background updates can be throttled by the browser.
+
 - One timer with Start, Pause, Resume, Restart and Stop.
 - Restart restores the original configured duration and starts immediately. Stop restores it and stays ready.
 - Eight configuration presets: 1, 2, 3, 5, 10, 15, 30 and 60 minutes. Presets are visible only while ready and never start the timer, including in native fullscreen and expanded view. Automatic mobile landscape keeps presets hidden.

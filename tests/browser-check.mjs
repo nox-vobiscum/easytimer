@@ -60,6 +60,11 @@ try {
     }
     const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
     const text = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent`);
+    async function checkTitle(state) {
+        const { title, time, overtime } = await evaluate(`({title:document.title,time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent})`);
+        const expected = state === 'READY' ? 'easyTimer' : `${state === 'FINISHED' ? overtime : time}${state === 'PAUSED' ? ' ⏸' : ''} · easyTimer`;
+        assert.equal(title,expected,`Title matches ${state}`);
+    }
     async function configure(h, m, s) {
         // Exercise the real configuration handler with short deterministic test durations.
         await evaluate(`(()=>{const el=document.querySelector('[data-preset]');const original=el.dataset.preset;el.dataset.preset=${(h*3600+m*60+s)*1000};el.click();el.dataset.preset=original;})()`);
@@ -72,6 +77,7 @@ try {
         await delay(50);
     }
     assert.equal(await text('#time'), '05:00');
+    await checkTitle('READY');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'flex');
@@ -133,16 +139,21 @@ try {
     await click('#primary');
     await click('[data-adjustment="30000"]');
     assert.equal(await text('#status'),'Running');
+    await checkTitle('RUNNING');
     await click('#primary');
     const pausedBeforeAddition = await text('#time');
     await click('[data-adjustment="300000"]');
     assert.equal(await text('#status'),'Paused');
     assert.equal(await text('#time-budget'),'Total 25:30 · Planned 20:00 + 05:30');
+    await checkTitle('PAUSED');
     assert.notEqual(await text('#time'),pausedBeforeAddition);
     await click('#restart');
     assert.equal(await text('#time-budget'),'Total 20:00');
     await click('#stop');
     await configure(99,59,59);
+    await click('#primary');
+    assert.equal(await evaluate('document.title'),'99:59:59 · easyTimer');
+    await click('#stop');
     await click('[data-adjustment="30000"]');
     assert.equal(await text('#time'),'99:59:59');
     assert.match(await text('#help'),/99:59:59/);
@@ -157,11 +168,18 @@ try {
     await delay(1100);
     assert.equal(await text('#time'), frozen);
     assert.equal(await text('#status'), 'Paused');
+    await checkTitle('PAUSED');
+    const frozenTitle = await evaluate('document.title');
+    await evaluate(`window.titleMutations=0;window.titleObserver=new MutationObserver(records=>{window.titleMutations+=records.length});window.titleObserver.observe(document.querySelector('title'),{childList:true,subtree:true,characterData:true});`);
     await click('[data-language="de"]');
     assert.equal(await text('#status'), 'Pausiert');
     assert.equal(await text('#primary'), 'Fortsetzen');
     await click('[data-theme="dark"]');
     assert.equal(await text('#time'), frozen);
+    assert.equal(await evaluate('document.title'),frozenTitle);
+    await evaluate(`document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('pageshow'));`);
+    assert.equal(await evaluate('window.titleMutations'),0,'Unchanged titles are not reassigned');
+    await evaluate('window.titleObserver.disconnect()');
     assert.equal(await evaluate('document.documentElement.dataset.theme'), 'dark');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.brand-logo-dark')).display`), 'block');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.brand-logo-standard')).display`), 'none');
@@ -173,17 +191,24 @@ try {
     }
     await click('#primary');
     assert.equal(await text('#status'), 'Läuft');
+    await checkTitle('RUNNING');
+    await delay(1100);
+    await checkTitle('RUNNING');
+    assert.notEqual(await evaluate('document.title'),`${frozen} · easyTimer`,'Resume advances the remaining title time');
     await click('#restart');
     assert.equal(await text('#time'), '00:05');
+    assert.equal(await evaluate('document.title'),'00:05 · easyTimer');
     assert.equal(await text('#status'), 'Läuft');
     await click('#stop');
     assert.equal(await text('#time'), '00:05');
     assert.equal(await text('#status'), 'Bereit');
+    await checkTitle('READY');
     await configure(0,0,1);
     await click('#primary');
     await delay(1200);
     assert.equal(await text('#time'), '00:00');
     assert.equal(await text('#status'), 'Zeit abgelaufen');
+    await checkTitle('FINISHED');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), false);
     assert.match(await text('#overtime-time'), /^\+00:0[01]$/);
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).every(b=>b.disabled)`),true);
@@ -192,6 +217,7 @@ try {
     assert.equal(await text('#status'), 'Time’s up');
     assert.equal(await text('.overtime-label'), 'Overtime');
     await click('[data-theme="light"]');
+    await checkTitle('FINISHED');
     assert.ok(await text('#overtime-time') >= overtimeBeforePreferences);
     assert.equal(await text('#primary'), 'Start again');
     await click('#primary');
@@ -210,9 +236,11 @@ try {
     assert.equal(await text('#status'), 'Time’s up');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), false);
     assert.ok(Number((await text('#overtime-time')).slice(-2)) >= 1);
+    await checkTitle('FINISHED');
     await click('[data-adjustment="30000"]');
     assert.equal(await text('#status'),'Running');
     assert.equal(await text('#time-budget'),'Total 00:32 · Planned 00:02 + 00:30');
+    await checkTitle('RUNNING');
     assert.ok(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining')) > 0`));
     await click('#restart');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), true);
@@ -468,7 +496,7 @@ try {
     assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    console.log('PASS: preset chips, action icons, universal additions, planned/extended budget, limit feedback, PWA offline reload, countdown and overtime regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen lifecycle/fallback, landscape and progress.');
+    console.log('PASS: dynamic tab titles, unchanged-title mutation guard, preset chips, action icons, universal additions, planned/extended budget, limit feedback, PWA offline reload, countdown and overtime regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen lifecycle/fallback, landscape and progress.');
     await cdp('Browser.close');
 } finally {
     socket?.close();

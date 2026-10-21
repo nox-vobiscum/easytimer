@@ -31,6 +31,8 @@ The countdown is the dominant element. Desktop, mobile portrait, mobile landscap
 
 ## 3. Interface and responsive behavior
 
+UX-004 adds a dynamic browser tab title: READY uses `easyTimer`; RUNNING uses `04:37 · easyTimer`; PAUSED uses `04:37 ⏸ · easyTimer`; FINISHED uses `+01:23 · easyTimer`. Existing formatters include hours as needed. The render loop writes the title only when its formatted value changes. No extra interval or timer state is introduced; existing visibility/page-show events reconcile deadline-based time after throttling. Installed PWAs require no special behavior.
+
 - Product identity is `easyTimer`, using dedicated standard and dark stopwatch artwork with a matching multi-size favicon.
 - Every user-facing string, tooltip, status, and accessible label is available in German and English.
 - Light, Dark, and System appearance options are supported. System follows the operating-system preference.
