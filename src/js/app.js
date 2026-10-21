@@ -8,6 +8,7 @@ const copy = {
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: "Time’s up", newRun: 'Start again',
         invalid: 'Enter a duration greater than zero: 0–99 hours, 0–59 minutes and 0–59 seconds. Use whole numbers.',
         locked: 'Stop the timer to change its duration.', hint: 'Set a duration, then start.',
+        openMenu: 'Open preferences', closeMenu: 'Close preferences',
         preset: minutes => `Set ${minutes} minutes`,
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
@@ -18,6 +19,7 @@ const copy = {
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Zeit abgelaufen', newRun: 'Erneut starten',
         invalid: 'Eine Dauer größer als null eingeben: 0–99 Stunden, 0–59 Minuten und 0–59 Sekunden. Ganze Zahlen verwenden.',
         locked: 'Timer stoppen, um die Dauer zu ändern.', hint: 'Dauer einstellen und starten.',
+        openMenu: 'Einstellungen öffnen', closeMenu: 'Einstellungen schließen',
         preset: minutes => `${minutes} Minuten einstellen`,
         fullscreen: 'Vollbild', exitFullscreen: 'Vollbild verlassen', expand: 'Ansicht vergrößern', exitExpanded: 'Vergrößerte Ansicht verlassen',
     },
@@ -38,7 +40,19 @@ let invalid = false;
 let expanded = false;
 let fullscreenRequested = false;
 let fullscreenRequestId = 0;
+let menuOpen = false;
 const landscape = matchMedia('(orientation: landscape) and (max-height: 600px) and (pointer: coarse)');
+const mobileMenu = matchMedia('(max-width: 440px)');
+
+function setMenuOpen(open, restoreFocus = false) {
+    menuOpen = Boolean(open && mobileMenu.matches);
+    document.querySelector('header').dataset.menuOpen = String(menuOpen);
+    $('menu-toggle').setAttribute('aria-expanded', String(menuOpen));
+    const label = copy[language][menuOpen ? 'closeMenu' : 'openMenu'];
+    $('menu-toggle').setAttribute('aria-label', label);
+    $('menu-toggle').title = label;
+    if (restoreFocus) $('menu-toggle').focus({ preventScroll: true });
+}
 
 function updatePresentation() {
     document.body.classList.toggle('presentation', Boolean(document.fullscreenElement) || expanded || landscape.matches);
@@ -105,6 +119,9 @@ function render() {
     $('fullscreen').title = fullscreenLabel;
     $('fullscreen').setAttribute('aria-label', fullscreenLabel);
     $('fullscreen').setAttribute('aria-pressed', String(fullscreen || expanded));
+    const menuLabel = t[menuOpen ? 'closeMenu' : 'openMenu'];
+    $('menu-toggle').setAttribute('aria-label', menuLabel);
+    $('menu-toggle').title = menuLabel;
     const remaining = Math.max(0, Math.min(1, timer.remainingMs / timer.durationMs));
     $('progress').style.setProperty('--remaining', `${remaining * 100}%`);
     const active = ['RUNNING', 'PAUSED'].includes(timer.status);
@@ -182,6 +199,11 @@ document.querySelectorAll('[data-language]').forEach(button => button.addEventLi
     savePreference('easyTimerLanguage', language);
     render();
 }));
+$('menu-toggle').addEventListener('click', () => setMenuOpen(!menuOpen));
+document.addEventListener('click', event => {
+    if (menuOpen && !document.querySelector('header').contains(event.target)) setMenuOpen(false);
+});
+mobileMenu.addEventListener('change', event => { if (!event.matches) setMenuOpen(false); });
 // Callbacks only refresh the display; the deadline remains authoritative.
 setInterval(() => { if (timer.status === 'RUNNING') dispatch({ type: 'TICK' }); }, 100);
 document.addEventListener('visibilitychange', () => dispatch({ type: 'TICK' }));
@@ -198,6 +220,10 @@ document.addEventListener('fullscreenchange', () => {
 landscape.addEventListener('change', updatePresentation);
 window.addEventListener('resize', updatePresentation);
 document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && menuOpen) {
+        setMenuOpen(false, true);
+        return;
+    }
     if (event.key === 'Escape' && document.fullscreenElement) {
         fullscreenRequestId += 1;
         fullscreenRequested = false;

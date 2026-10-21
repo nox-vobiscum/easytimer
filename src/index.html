@@ -20,7 +20,15 @@
       </span>
       easyTimer
     </div>
-    <div class="preferences">
+    <button id="menu-toggle" class="menu-toggle" type="button" aria-expanded="false" aria-controls="preferences" aria-label="Open preferences" title="Open preferences">
+      <svg class="menu-icon menu-icon-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 7h16M4 12h16M4 17h16"/>
+      </svg>
+      <svg class="menu-icon menu-icon-close" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="m6 6 12 12M18 6 6 18"/>
+      </svg>
+    </button>
+    <div id="preferences" class="preferences">
       <div class="switch" role="group" data-label="language">
         <button type="button" data-language="de">DE</button>
         <button type="button" data-language="en">EN</button>

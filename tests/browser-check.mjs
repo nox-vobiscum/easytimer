@@ -71,6 +71,8 @@ try {
         await delay(50);
     }
     assert.equal(await text('#time'), '05:00');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'none');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'flex');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
     assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
     assert.equal(await evaluate(`document.querySelector('link[rel="manifest"]').getAttribute('href')`), 'manifest.webmanifest');
@@ -164,7 +166,7 @@ try {
     for (const width of [320,390,1280]) {
         await cdp('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width < 500 });
         assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true, `No horizontal overflow at ${width}px`);
-        assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).every(el=>el.getBoundingClientRect().height>=44)`), true);
+        assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).filter(el=>el.getClientRects().length).every(el=>el.getBoundingClientRect().height>=44)`), true);
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})()`), true);
         if (process.env.EASYTIMER_SCREENSHOT_DIR) {
             const screenshot = await cdp('Page.captureScreenshot', { format: 'png' });
@@ -174,13 +176,34 @@ try {
         }
     }
     await cdp('Emulation.setDeviceMetricsOverride', { width:393, height:852, deviceScaleFactor:3, mobile:true, screenOrientation:{type:'portraitPrimary',angle:0} });
-    assert.equal(await evaluate(`(()=>{const brand=document.querySelector('.brand').getBoundingClientRect();const preferences=document.querySelector('.preferences').getBoundingClientRect();return Math.abs((brand.left+brand.right)/2-innerWidth/2)<2&&Math.abs((preferences.left+preferences.right)/2-innerWidth/2)<2&&preferences.top>=brand.bottom})()`), true);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
+    await click('#menu-toggle');
+    assert.equal(await evaluate(`document.querySelector('#menu-toggle').getAttribute('aria-expanded')`), 'true');
+    assert.equal(await evaluate(`(()=>{const header=document.querySelector('header').getBoundingClientRect();const preferences=document.querySelector('#preferences').getBoundingClientRect();return getComputedStyle(document.querySelector('#preferences')).display==='flex'&&preferences.top>=header.bottom&&preferences.left>=0&&preferences.right<=innerWidth})()`), true);
     if (process.env.EASYTIMER_SCREENSHOT_DIR) {
         const screenshot = await cdp('Page.captureScreenshot', { format:'png' });
-        const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, 'easytimer-iphone-portrait.png');
+        const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, 'easytimer-iphone-menu.png');
         await writeFile(path,Buffer.from(screenshot.data,'base64'));
         console.log(`Screenshot: ${path}`);
     }
+    await cdp('Input.dispatchKeyEvent', { type:'keyDown', key:'Escape', code:'Escape', windowsVirtualKeyCode:27 });
+    assert.equal(await evaluate(`document.querySelector('#menu-toggle').getAttribute('aria-expanded')`), 'false');
+    assert.equal(await evaluate(`document.activeElement === document.querySelector('#menu-toggle')`), true);
+    await click('#primary');
+    await click('#primary');
+    const mobileFrozen = await text('#time');
+    await click('#menu-toggle');
+    await click('[data-theme="dark"]');
+    await click('[data-language="en"]');
+    assert.equal(await text('#time'), mobileFrozen);
+    assert.equal(await text('#status'), 'Paused');
+    await click('[data-language="de"]');
+    await click('[data-theme="light"]');
+    await cdp('Input.dispatchKeyEvent', { type:'keyDown', key:'Escape', code:'Escape', windowsVirtualKeyCode:27 });
+    await click('#menu-toggle');
+    await click('main');
+    assert.equal(await evaluate(`document.querySelector('#menu-toggle').getAttribute('aria-expanded')`), 'false');
     await evaluate(`document.querySelector('#primary').focus()`);
     await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13 });
     await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
