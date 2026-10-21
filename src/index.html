@@ -4,12 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>easyTimer</title>
-  <link rel="icon" href="stopwatch.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/branding/favicon.ico" sizes="any">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <header>
-    <div class="brand"><img src="stopwatch.svg" width="32" height="32" alt="">easyTimer</div>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <img class="brand-logo brand-logo-standard" src="assets/branding/stopwatch-header-standard-96.png" width="32" height="32" alt="">
+        <img class="brand-logo brand-logo-dark" src="assets/branding/stopwatch-header-dark-96.png" width="32" height="32" alt="">
+      </span>
+      easyTimer
+    </div>
     <div class="preferences">
       <div class="switch" role="group" data-label="language">
         <button type="button" data-language="de">DE</button>

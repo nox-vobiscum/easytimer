@@ -70,6 +70,8 @@ try {
         await delay(50);
     }
     assert.equal(await text('#time'), '05:00');
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
+    assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Ready');
     await configure(0, 0, 5);
@@ -88,6 +90,8 @@ try {
     await click('[data-theme="dark"]');
     assert.equal(await text('#time'), frozen);
     assert.equal(await evaluate('document.documentElement.dataset.theme'), 'dark');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.brand-logo-dark')).display`), 'block');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.brand-logo-standard')).display`), 'none');
     if (process.env.EASYTIMER_SCREENSHOT_DIR) {
         const screenshot = await cdp('Page.captureScreenshot', { format: 'png' });
         const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, 'easytimer-header-dark.png');
@@ -132,8 +136,10 @@ try {
     await click('[data-theme="system"]');
     await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
     assert.equal(await evaluate('getComputedStyle(document.documentElement).colorScheme'), 'dark');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.brand-logo-dark')).display`), 'block');
     await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
     assert.equal(await evaluate('getComputedStyle(document.documentElement).colorScheme'), 'light');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.brand-logo-standard')).display`), 'block');
     await click('[data-theme="light"]');
     await click('[data-language="de"]');
     await cdp('Page.reload');

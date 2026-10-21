@@ -11,7 +11,7 @@ A small, dependency-free countdown timer for meetings and personal timeboxing.
 - Expiry stays at 00:00 with a localized finished status; Start again runs the original duration.
 - German and English UI, Light/Dark/System appearance, and browser-local language/theme preferences.
 - System appearance follows OS changes through CSS media queries.
-- Responsive standard view for desktop and mobile portrait; original stopwatch SVG identity.
+- Responsive standard view for desktop and mobile portrait; dedicated stopwatch PNG identity and ICO favicon.
 
 MVP-02 adds native fullscreen with a full-viewport fallback, an automatic reduced landscape presentation on touch devices up to 600 px high, and a five-pixel progress strip. Essential controls remain visible and keyboard/touch accessible. Escape or the view button exits the expanded view; rotating back to portrait restores the standard layout unless fullscreen is still active.
 
@@ -36,7 +36,9 @@ Then open `http://localhost:8000`. No build, package installation or backend is 
 - `src/css/styles.css`: responsive standard view and appearance tokens.
 - `src/js/timer.mjs`: DOM-independent state transitions and duration validation.
 - `src/js/app.js`: browser events, rendering, DE/EN resources and preference persistence.
-- `src/stopwatch.svg`: original vector identity and favicon.
+- `src/assets/branding/stopwatch-header-standard-96.png`: light header identity at 3x display resolution.
+- `src/assets/branding/stopwatch-header-dark-96.png`: dark header identity at 3x display resolution.
+- `src/assets/branding/favicon.ico`: multi-size browser favicon.
 
 The authoritative timer object holds status, original duration, remaining milliseconds and a deadline.
 An injected timestamp makes the timer engine deterministic in tests. The browser uses `Date.now()`;

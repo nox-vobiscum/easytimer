@@ -12,6 +12,15 @@ button:disabled { opacity:.55; cursor:default; }
 :focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
 header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; padding:12px clamp(24px,2.5vw,32px); border-bottom:1px solid var(--border); }
 .brand { display:flex; align-items:center; gap:8px; font-size:1.8rem; font-weight:700; letter-spacing:-.035em; }
+.brand-mark { display:grid; width:32px; height:32px; flex:none; }
+.brand-logo { grid-area:1 / 1; display:block; width:32px; height:32px; object-fit:contain; }
+.brand-logo-dark { display:none; }
+:root[data-theme="dark"] .brand-logo-standard { display:none; }
+:root[data-theme="dark"] .brand-logo-dark { display:block; }
+@media(prefers-color-scheme:dark) {
+  :root[data-theme="system"] .brand-logo-standard { display:none; }
+  :root[data-theme="system"] .brand-logo-dark { display:block; }
+}
 .preferences { display:flex; align-items:center; gap:10px; }
 .switch {
   display:inline-flex;
