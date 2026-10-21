@@ -55,7 +55,9 @@ function setMenuOpen(open, restoreFocus = false) {
 }
 
 function updatePresentation() {
-    document.body.classList.toggle('presentation', Boolean(document.fullscreenElement) || expanded || landscape.matches);
+    const roomPresentation = Boolean(document.fullscreenElement) || expanded;
+    document.body.classList.toggle('presentation', roomPresentation || landscape.matches);
+    document.body.classList.toggle('room-presentation', roomPresentation);
     render();
 }
 
@@ -236,6 +238,7 @@ document.addEventListener('keydown', event => {
         updatePresentation();
         $('fullscreen').focus({ preventScroll: true });
     }
+    if (event.key === 'Escape') setTimeout(updatePresentation, 0);
 });
 updatePresentation();
 

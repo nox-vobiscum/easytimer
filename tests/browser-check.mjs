@@ -71,6 +71,7 @@ try {
         await delay(50);
     }
     assert.equal(await text('#time'), '05:00');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'flex');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
@@ -227,11 +228,18 @@ try {
     const nativeFullscreen = await evaluate('Boolean(document.fullscreenElement)');
     if (!nativeFullscreen) console.log(`SKIP: native fullscreen did not complete in this browser run (${await evaluate('window.fullscreenTestError || "request did not settle"')}); verifying fallback and API lifecycle separately.`);
     assert.equal(await evaluate('document.body.classList.contains("presentation")'), true);
+    assert.equal(await evaluate('document.body.classList.contains("room-presentation")'), true);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'flex');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).opacity`), '0.94');
     assert.equal(await text('#time'), presentationTime);
     assert.equal(await evaluate(`document.querySelector('#fullscreen').getAttribute('aria-label')`), nativeFullscreen ? 'Vollbild verlassen' : 'Vergrößerte Ansicht verlassen');
     await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-    await delay(200);
+    for (let i=0;i<20;i++) {
+        if (!await evaluate('document.body.classList.contains("room-presentation")')) break;
+        await delay(100);
+    }
     assert.equal(await evaluate('Boolean(document.fullscreenElement)'), false);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await text('#time'), presentationTime);
     // Exercise successful API lifecycle even on headless hosts that deny native fullscreen.
     await evaluate(`Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>window.testFullscreenElement || null});
@@ -278,6 +286,8 @@ try {
             await delay(100);
         }
         assert.equal(await evaluate('document.body.classList.contains("presentation")'), true, JSON.stringify(await evaluate(`({width:innerWidth,height:innerHeight,coarse:matchMedia('(pointer:coarse)').matches,landscape:matchMedia('(orientation:landscape)').matches})`)));
+        assert.equal(await evaluate('document.body.classList.contains("room-presentation")'), false);
+        assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
         assert.equal(await text('#time'), pausedTime);
         assert.equal(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining'))`), progress);
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=a.top})()`), true, `Digits fit at ${width}x${height}`);

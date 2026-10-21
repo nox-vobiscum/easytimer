@@ -38,6 +38,7 @@ header {
 .menu-icon-close { display:none; }
 .menu-toggle[aria-expanded="true"] .menu-icon-open { display:none; }
 .menu-toggle[aria-expanded="true"] .menu-icon-close { display:block; }
+.presentation-brand { display:none; }
 .switch {
   display:inline-flex;
   align-items:center;
@@ -135,6 +136,22 @@ noscript { text-align:center; padding:1rem; }
 }
 /* Presentation changes layout only; all controls use the existing timer. */
 body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
+.room-presentation .presentation-brand {
+  position:fixed;
+  z-index:1;
+  top:max(.75rem,calc(env(safe-area-inset-top) + .5rem));
+  left:max(1rem,calc(env(safe-area-inset-left) + .5rem));
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+  color:var(--text);
+  font-size:1rem;
+  font-weight:700;
+  letter-spacing:-.025em;
+  opacity:.94;
+}
+.presentation-brand-mark { display:grid; width:22px; height:22px; flex:none; }
+.presentation-brand-logo { grid-area:1 / 1; display:block; width:22px; height:22px; object-fit:contain; }
 .presentation header, .presentation footer, .presentation form { display: none; }
 .presentation h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .presentation main {
