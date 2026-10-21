@@ -94,6 +94,10 @@ h1 { font-size:.95rem; font-weight:500; color:var(--muted); margin:0 0 1rem; }
 .fullscreen-button[aria-pressed="true"] .fullscreen-icon-exit { display:block; }
 #time { font-size:clamp(3.3rem,16vw,12rem); font-weight:650; font-variant-numeric:tabular-nums; letter-spacing:-.02em; line-height:1.15; white-space:nowrap; }
 #time[data-hours="true"] { font-size:clamp(2.8rem,11vw,8.5rem); }
+.overtime { display:flex; align-items:baseline; justify-content:center; gap:.45rem; min-height:1.5em; color:var(--muted); font-size:clamp(.85rem,2vw,1.05rem); font-variant-numeric:tabular-nums; }
+.overtime[hidden] { display:none; }
+.overtime-label { font-size:.75em; text-transform:uppercase; letter-spacing:.08em; }
+#overtime-time { font-weight:650; letter-spacing:.02em; }
 #status { min-height:1.5em; color:var(--muted); margin:.8rem 0 1.75rem; }
 .actions { display:flex; justify-content:center; flex-wrap:wrap; gap:.65rem; }
 .actions .primary { min-width:8rem; background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
@@ -167,6 +171,7 @@ body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidd
   line-height:1;
 }
 .presentation #time[data-hours="true"] { font-size: min(20vw, calc((100dvh - 150px) * .75)); }
+.presentation .overtime { margin-top:.35rem; font-size:clamp(.85rem,2.2vw,1.35rem); }
 .presentation #status { position: fixed; top: max(.75rem, calc(env(safe-area-inset-top) + .5rem)); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); margin: 0; font-size: .85rem; }
 .presentation .fullscreen-button { position:fixed; top:max(.75rem,calc(env(safe-area-inset-top) + .5rem)); right:max(.75rem,calc(env(safe-area-inset-right) + .5rem)); color:var(--muted); }
 .presentation .actions { position: fixed; bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + .75rem)); left: max(1rem,env(safe-area-inset-left)); right: max(1rem,env(safe-area-inset-right)); gap: .5rem; }

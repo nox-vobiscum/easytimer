@@ -1,11 +1,11 @@
-import { createTimer, durationFromFields, formatTime, transition } from './timer.mjs';
+import { createTimer, durationFromFields, formatOvertime, formatTime, transition } from './timer.mjs';
 
 const copy = {
     en: {
         countdown: 'Countdown', light: 'Light', dark: 'Dark', system: 'System', theme: 'Appearance', language: 'Language',
         de: 'German', en: 'English', duration: 'Duration', hours: 'Hours', minutes: 'Minutes', seconds: 'Seconds',
         start: 'Start', pause: 'Pause', resume: 'Resume', restart: 'Restart', stop: 'Stop', credit: 'Created by',
-        READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: "Time’s up", newRun: 'Start again',
+        READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: "Time’s up", newRun: 'Start again', overtime: 'Overtime',
         invalid: 'Enter a duration greater than zero: 0–99 hours, 0–59 minutes and 0–59 seconds. Use whole numbers.',
         locked: 'Stop the timer to change its duration.', hint: 'Set a duration, then start.',
         openMenu: 'Open preferences', closeMenu: 'Close preferences',
@@ -16,7 +16,7 @@ const copy = {
         countdown: 'Countdown', light: 'Hell', dark: 'Dunkel', system: 'System', theme: 'Darstellung', language: 'Sprache',
         de: 'Deutsch', en: 'Englisch', duration: 'Dauer', hours: 'Stunden', minutes: 'Minuten', seconds: 'Sekunden',
         start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', restart: 'Neustart', stop: 'Stoppen', credit: 'Erstellt von',
-        READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Zeit abgelaufen', newRun: 'Erneut starten',
+        READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Zeit abgelaufen', newRun: 'Erneut starten', overtime: 'Überzeit',
         invalid: 'Eine Dauer größer als null eingeben: 0–99 Stunden, 0–59 Minuten und 0–59 Sekunden. Ganze Zahlen verwenden.',
         locked: 'Timer stoppen, um die Dauer zu ändern.', hint: 'Dauer einstellen und starten.',
         openMenu: 'Einstellungen öffnen', closeMenu: 'Einstellungen schließen',
@@ -151,6 +151,10 @@ function render() {
     if ($('time').textContent !== time) $('time').textContent = time;
     $('time').dataset.hours = String(time.length > 5);
     $('time').setAttribute('aria-label', `${t.countdown}: ${time}`);
+    const overtime = formatOvertime(timer.overtimeMs);
+    $('overtime').hidden = timer.status !== 'FINISHED';
+    $('overtime-time').textContent = overtime;
+    $('overtime').setAttribute('aria-label', `${t.overtime}: ${overtime}`);
     if ($('status').textContent !== t[timer.status]) $('status').textContent = t[timer.status];
     const primary = timer.status === 'RUNNING' ? 'pause' : timer.status === 'PAUSED' ? 'resume' : timer.status === 'FINISHED' ? 'newRun' : 'start';
     $('primary').textContent = t[primary];
@@ -207,7 +211,7 @@ document.addEventListener('click', event => {
 });
 mobileMenu.addEventListener('change', event => { if (!event.matches) setMenuOpen(false); });
 // Callbacks only refresh the display; the deadline remains authoritative.
-setInterval(() => { if (timer.status === 'RUNNING') dispatch({ type: 'TICK' }); }, 100);
+setInterval(() => { if (['RUNNING', 'FINISHED'].includes(timer.status)) dispatch({ type: 'TICK' }); }, 100);
 document.addEventListener('visibilitychange', () => dispatch({ type: 'TICK' }));
 window.addEventListener('pageshow', () => dispatch({ type: 'TICK' }));
 $('fullscreen').addEventListener('click', toggleFullscreen);

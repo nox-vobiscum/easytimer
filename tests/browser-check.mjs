@@ -20,7 +20,7 @@ const server = createServer(async (req, res) => {
 await new Promise(done => server.listen(0, '127.0.0.1', done));
 const profile = await mkdtemp(join(tmpdir(), 'easytimer-browser-'));
 const browser = spawn(process.env.EASYTIMER_BROWSER || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    ['--headless=new', '--disable-gpu', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'],
+    ['--headless=new', '--disable-gpu', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--no-first-run', '--no-default-browser-check', '--remote-allow-origins=*', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'],
     { windowsHide: true, stdio: 'ignore' });
 let launchError;
 browser.on('error', error => { launchError = error; });
@@ -133,22 +133,33 @@ try {
     await delay(1200);
     assert.equal(await text('#time'), '00:00');
     assert.equal(await text('#status'), 'Zeit abgelaufen');
+    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), false);
+    assert.match(await text('#overtime-time'), /^\+00:0[01]$/);
+    const overtimeBeforePreferences = await text('#overtime-time');
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Time’s up');
+    assert.equal(await text('.overtime-label'), 'Overtime');
+    await click('[data-theme="light"]');
+    assert.ok(await text('#overtime-time') >= overtimeBeforePreferences);
     assert.equal(await text('#primary'), 'Start again');
     await click('#primary');
     assert.equal(await text('#time'), '00:01');
+    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), true);
     await click('#stop');
     // Emulate a tab whose callbacks cannot execute, then resume past its deadline.
     await configure(0,0,2);
     await click('#primary');
     await cdp('Page.setWebLifecycleState', { state: 'frozen' });
-    await delay(2400);
+    await delay(3400);
     await cdp('Page.setWebLifecycleState', { state: 'active' });
     await cdp('Page.bringToFront');
     await delay(1200);
     assert.equal(await text('#time'), '00:00');
     assert.equal(await text('#status'), 'Time’s up');
+    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), false);
+    assert.ok(Number((await text('#overtime-time')).slice(-2)) >= 1);
+    await click('#restart');
+    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), true);
     await click('#stop');
     await click('[data-theme="system"]');
     await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
@@ -345,6 +356,24 @@ try {
             console.log(`Screenshot: ${path}`);
         }
     }
+    await click('#fullscreen');
+    await configure(0,0,1);
+    await click('#primary');
+    await delay(2100);
+    const overtimeBeforePresentation = await text('#overtime-time');
+    await click('#fullscreen');
+    await delay(100);
+    assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
+    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+    assert.ok(await text('#overtime-time') >= overtimeBeforePresentation);
+    assert.equal(await evaluate(`(()=>{const r=document.querySelector('#overtime').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.top>=t.bottom&&r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits presentation view');
+    await cdp('Emulation.setDeviceMetricsOverride', {width:568,height:320,deviceScaleFactor:1,mobile:true,screenOrientation:{type:'landscapePrimary',angle:90}});
+    assert.equal(await evaluate(`(()=>{const r=document.querySelector('#overtime').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.top>=t.bottom&&r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits mobile landscape presentation');
+    await click('[data-language="de"]');
+    assert.equal(await text('.overtime-label'),'Überzeit');
+    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+    await click('#stop');
+    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),true);
     await cdp('Network.enable');
     await cdp('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
     await cdp('Page.reload');
@@ -356,7 +385,7 @@ try {
     assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    console.log('PASS: PWA manifest, service worker offline reload, countdown regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen API lifecycle, Escape, fallback, landscape rotation, preserved countdown and progress.');
+    console.log('PASS: PWA manifest, service worker offline reload, countdown and overtime regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen API lifecycle, Escape, fallback, landscape rotation, preserved countdown and progress.');
     await cdp('Browser.close');
 } finally {
     socket?.close();

@@ -2,13 +2,13 @@
 
 **Date:** 2026-10-20
 **Last reviewed:** 2026-10-21
-**Status:** Canonical product and UX direction; MVP-01, MVP-02, PWA delivery, and mobile refinements are implemented in production
+**Status:** Canonical product and UX direction; MVP-01, MVP-02, PWA delivery, mobile refinements, and QT-001 overtime are implemented in production
 **Supersedes:** `EASYTIMER_UX_KONZEPT_v1.md`
 **Repository:** https://github.com/nox-vobiscum/easytimer
 **Production:** https://et.rbsnet.at/
 **Language policy:** All repository text, code, identifiers, documentation, comments, UI copy, and agent prompts are in English. Product-owner conversation remains in German.
 
-> **Read this distinction first:** Production currently implements one basic countdown timer plus its responsive presentation and installable PWA shell. The complete product vision and the 56 approved ET-001 behavior decisions remain future target behavior, not current functionality or automatic authorization for further implementation.
+> **Read this distinction first:** Production currently implements one basic countdown timer, subtle deadline-derived overtime, its responsive presentation, and an installable PWA shell. The remaining product vision and ET-001 decisions are future target behavior, not current functionality or automatic authorization for further implementation.
 
 ---
 
@@ -86,7 +86,7 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 - `Restart`: restores the *original configured duration* and starts immediately.
 - `Stop`: restores the *original configured duration* and remains stopped/ready.
 - The main action changes contextually: `Start` / `Pause` / `Resume`. Secondary `Restart` and `Stop` are accessible without overwhelming the display.
-- At `00:00`, stop cleanly, keep the main display at `00:00`, and show a discreet, translatable “Time's up”/“Zeit abgelaufen” status. **No overtime counter in this MVP.**
+- At `00:00`, keep the main display fixed, show a discreet, translatable “Time's up”/“Zeit abgelaufen” status, and display the QT-001 overtime counter below it.
 - Reject a zero/invalid duration for Start. Edits to duration must not silently override a running or paused countdown; the simple MVP may allow editing only in ready/stopped state.
 - Compute remaining time from an absolute time reference, rather than decrementing an integer once per `setInterval` tick. Restore correct remaining time when a throttled/background tab becomes active again.
 - The timer must not restart or reset because the theme, language, viewport, orientation, or display presentation changes.
@@ -117,7 +117,7 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 - No `Quick Timer` mode selector, expanded Quick Timer features, or in-flight `+1/+5/-1 minute` time adjustment controls.
 - No Session mode, phases, phase editor, transitions, workshop completion, or statistics.
 - No Ad-hoc timebox.
-- No overtime counting or overtime controls.
+- No overtime controls, time adjustments, or ability to add time after expiry. QT-001 provides only the subtle automatic counter from decisions 30 and 31.
 - No configurable signals/alarms or event-specific signal gates.
 - No recovery dialog, multi-hour workshop recovery rules, or full cross-reload persistence of an active timer. **Background-tab accuracy within an open page remains required.**
 - No extra themes, custom color picker, configurable progress-bar visibility, custom layout presets, or settings panel.
@@ -131,7 +131,7 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 | Ready | Configured duration | Start | Start again from configured duration | Remain ready at configured duration |
 | Running | Computed remaining time | Pause | Reset and immediately run | Reset and remain ready |
 | Paused | Frozen remaining time | Resume | Reset and immediately run | Reset and remain ready |
-| Expired | 00:00 | Start a new run from original duration, clearly indicated | Reset and immediately run | Reset and remain ready |
+| Expired / overtime | 00:00 plus subtle overtime | Start a new run from original duration, clearly indicated | Clear overtime, reset and immediately run | Clear overtime, reset and remain ready |
 
 A single timer state object should represent this contract; avoid unrelated `running` and `paused` booleans. The precise object shape is an implementation detail.
 
@@ -270,7 +270,7 @@ MVP-01 and MVP-02 were delivered as bounded, separately reviewed changes. Later 
 
 This roadmap preserves the product decisions made during the requirements-engineering discussion. The order is indicative, not a commitment to deliver all features at once.
 
-1. **Enhanced Quick Timer:** Overtime and temporary +/- adjustments, with original-duration restart behavior.
+1. **Enhanced Quick Timer:** Temporary +/- adjustments and related overtime interactions, with original-duration restart behavior. The initial subtle overtime counter is delivered in QT-001.
 2. **Session Timer:** Named phases, manual/automatic transitions, upcoming phase preview, total remaining, completion and overtime.
 3. **Ad-hoc Timer:** Independent temporary timebox, preserving and pausing any main countdown/overtime state.
 4. **Workshop editing and statistics:** Live editor, stable phase identifiers, conflict resolution, time savings and overtime tracking.
@@ -345,7 +345,7 @@ The following summarizes the **56 approved product decisions**. Their numbered o
 
 ### Decision precedence and validation
 
-- The 56 ET-001 decisions are accepted **future product behavior**, not a directive to implement every feature in MVP-01/MVP-02.
+- The 56 ET-001 decisions are accepted product behavior. Decisions 30 and 31 are implemented by QT-001; the remaining decisions are not a directive to implement every future feature.
 - The MVP-specific scope in Sections 3 and 5 takes precedence for the first delivery.
 - If a detailed future rule conflicts with a proposed new UX behavior, raise it in planning; do not silently reinterpret requirements.
 - State contracts and tests should be finalized per epic before expanding beyond the basic MVP.
