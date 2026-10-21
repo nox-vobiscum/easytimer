@@ -9,9 +9,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 const root = resolve('src');
 const server = createServer(async (req, res) => {
     try {
-        const path = resolve(root, '.' + (req.url === '/' ? '/index.html' : req.url));
+        const requestPath = new URL(req.url, 'http://localhost').pathname;
+        const path = resolve(root, '.' + (requestPath === '/' ? '/index.html' : requestPath));
         if (!path.startsWith(root + '/') && !path.startsWith(root + '\\')) throw new Error('Invalid path');
-        const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
+        const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
         res.writeHead(200, { 'Content-Type': mime[extname(path)] || 'text/plain' });
         res.end(await readFile(path));
     } catch { res.writeHead(404); res.end(); }
@@ -72,6 +73,19 @@ try {
     assert.equal(await text('#time'), '05:00');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
     assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
+    assert.equal(await evaluate(`document.querySelector('link[rel="manifest"]').getAttribute('href')`), 'manifest.webmanifest');
+    assert.equal(await evaluate(`document.querySelector('link[rel="apple-touch-icon"]').getAttribute('href')`), 'assets/branding/apple-touch-icon.png');
+    assert.deepEqual(await evaluate(`fetch('manifest.webmanifest').then(response => response.json()).then(manifest => ({name:manifest.name,display:manifest.display,sizes:manifest.icons.map(icon => icon.sizes)}))`), { name: 'easyTimer', display: 'standalone', sizes: ['192x192', '512x512'] });
+    assert.equal(await evaluate(`Promise.race([
+        navigator.serviceWorker.ready.then(registration => new Promise(resolve => {
+            const worker = registration.active || registration.waiting || registration.installing;
+            if (worker?.state === 'activated') return resolve('activated');
+            worker?.addEventListener('statechange', () => {
+                if (worker.state === 'activated') resolve('activated');
+            });
+        })),
+        new Promise(resolve => setTimeout(() => resolve('timeout'),5000))
+    ])`), 'activated');
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Ready');
     await configure(0, 0, 5);
@@ -284,8 +298,18 @@ try {
             console.log(`Screenshot: ${path}`);
         }
     }
+    await cdp('Network.enable');
+    await cdp('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
+    await cdp('Page.reload');
+    for (let i=0;i<100;i++) {
+        if (await evaluate(`document.querySelector('#primary')?.title?.length > 0`)) break;
+        await delay(50);
+    }
+    assert.equal(await text('#time'), '05:00');
+    assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
+    await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    console.log('PASS: countdown regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen API lifecycle, Escape, fallback, landscape rotation, preserved countdown and progress.');
+    console.log('PASS: PWA manifest, service worker offline reload, countdown regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen API lifecycle, Escape, fallback, landscape rotation, preserved countdown and progress.');
     await cdp('Browser.close');
 } finally {
     socket?.close();

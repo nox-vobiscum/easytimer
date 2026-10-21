@@ -12,6 +12,7 @@ A small, dependency-free countdown timer for meetings and personal timeboxing.
 - German and English UI, Light/Dark/System appearance, and browser-local language/theme preferences.
 - System appearance follows OS changes through CSS media queries.
 - Responsive standard view for desktop and mobile portrait; dedicated stopwatch PNG identity and ICO favicon.
+- Installable Progressive Web App with an offline app shell after the first successful online visit.
 
 MVP-02 adds native fullscreen with a full-viewport fallback, an automatic reduced landscape presentation on touch devices up to 600 px high, and a five-pixel progress strip. Essential controls remain visible and keyboard/touch accessible. Escape or the view button exits the expanded view; rotating back to portrait restores the standard layout unless fullscreen is still active.
 
@@ -36,6 +37,8 @@ Then open `http://localhost:8000`. No build, package installation or backend is 
 - `src/css/styles.css`: responsive standard view and appearance tokens.
 - `src/js/timer.mjs`: DOM-independent state transitions and duration validation.
 - `src/js/app.js`: browser events, rendering, DE/EN resources and preference persistence.
+- `src/manifest.webmanifest`: install metadata and app icon declarations.
+- `src/service-worker.js`: versioned same-origin app-shell cache and offline navigation fallback.
 - `src/assets/branding/stopwatch-header-standard-96.png`: light header identity at 3x display resolution.
 - `src/assets/branding/stopwatch-header-dark-96.png`: dark header identity at 3x display resolution.
 - `src/assets/branding/favicon.ico`: multi-size browser favicon.
@@ -45,6 +48,8 @@ An injected timestamp makes the timer engine deterministic in tests. The browser
 refresh callbacks never decrement the timer. Returning to a backgrounded page recalculates from its deadline.
 Manual system-clock changes can affect a running countdown. Active countdowns are not restored after reload.
 Unavailable local storage falls back to in-memory preferences.
+
+The service worker is available only in secure contexts such as HTTPS or localhost. It precaches the static app shell after the first successful visit. Updating `CACHE_NAME` in `src/service-worker.js` activates a fresh cache and removes older easyTimer caches. A page reload still resets the timer because active countdown persistence is outside the current scope.
 
 ## Validation
 

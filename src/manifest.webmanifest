@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "easyTimer",
+  "short_name": "easyTimer",
+  "description": "A clear countdown timer for meetings and personal timeboxing.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7fc",
+  "theme_color": "#0f1827",
+  "icons": [
+    {
+      "src": "assets/branding/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/branding/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
