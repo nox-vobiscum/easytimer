@@ -107,18 +107,28 @@ h1 { font-size:.95rem; font-weight:500; color:var(--muted); margin:0 0 1rem; }
 .actions .primary:hover { background:var(--accent); filter:brightness(.93); }
 #help { color:var(--muted); font-size:.8rem; min-height:3em; line-height:1.5; margin-bottom:0; }
 #help[data-error="true"] { color:var(--error); }
-footer { text-align:center; padding:1rem; color:var(--muted); font-size:.75rem; }
+footer { flex:none; text-align:center; padding:6px max(12px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-right)); color:var(--muted); font-size:.75rem; }
 footer a { color:inherit; text-underline-offset:.2em; }
 noscript { text-align:center; padding:1rem; }
+.bottom-dock {
+  position:sticky;
+  z-index:2;
+  bottom:0;
+  flex:none;
+  padding-top:4px;
+  padding-bottom:env(safe-area-inset-bottom);
+  background:var(--bg);
+}
+.time-budget { margin:0; padding:0 max(12px,env(safe-area-inset-right)) 4px max(12px,env(safe-area-inset-left)); text-align:center; color:var(--muted); font-size:.75rem; line-height:1.4; font-variant-numeric:tabular-nums; }
 .progress-strip {
   --progress-elapsed-color: #b8dfc5;
   --progress-remaining-color: #f2bfc9;
   --progress-height: 5px;
   --remaining: 100%;
-  position: fixed;
-  z-index: 2;
-  inset: auto 0 0;
+  position:relative;
+  margin:0 max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
   height: var(--progress-height);
+  border-radius:999px;
   background: linear-gradient(to right, var(--progress-remaining-color) 0 var(--remaining), var(--progress-elapsed-color) var(--remaining) 100%);
 }
 .progress-marker {
@@ -156,9 +166,16 @@ noscript { text-align:center; padding:1rem; }
   .adjustment-buttons button { padding:.4rem; }
 }
 .adjustment-buttons button { background:transparent; font-size:.8rem; font-weight:500; padding:.45rem .65rem; }
-.time-budget { position:fixed; z-index:1; bottom:max(12px,calc(env(safe-area-inset-bottom) + 8px)); left:max(12px,env(safe-area-inset-left)); right:max(12px,env(safe-area-inset-right)); margin:0; text-align:center; color:var(--muted); font-size:.75rem; line-height:1.4; font-variant-numeric:tabular-nums; }
-footer { padding-bottom:calc(env(safe-area-inset-bottom) + 3rem); }
 #help:empty { display:none; }
+@media(max-height:600px) {
+  body:not(.presentation) main { padding-top:clamp(.75rem,2vh,1rem); padding-bottom:clamp(.75rem,2vh,1rem); }
+  body:not(.presentation) h1 { margin-bottom:.5rem; }
+  body:not(.presentation) #status { margin:.4rem 0 .75rem; }
+  body:not(.presentation) .duration-config { margin-top:.5rem; }
+  body:not(.presentation) .control-bar { margin-top:.75rem; }
+  body:not(.presentation) .timer:has(.duration-config:not([hidden])) #time { font-size:clamp(3rem,min(16vw,14vh),7rem); }
+  body:not(.presentation) .timer:has(.duration-config:not([hidden])) #time[data-hours="true"] { font-size:clamp(2.8rem,min(11vw,11vh),6rem); }
+}
 /* Presentation changes layout only; all controls use the existing timer. */
 body.presentation { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
 .room-presentation .presentation-brand {

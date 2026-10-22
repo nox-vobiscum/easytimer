@@ -96,6 +96,46 @@ try {
         })),
         new Promise(resolve => setTimeout(() => resolve('timeout'),5000))
     ])`), 'activated');
+    await cdp('Emulation.setDeviceMetricsOverride', {width:1280,height:720,deviceScaleFactor:1,mobile:false});
+    const shortPageDock = await evaluate(`(()=>{
+        const dock=document.querySelector('.bottom-dock').getBoundingClientRect();
+        const footer=document.querySelector('footer').getBoundingClientRect();
+        return {footerVisible:footer.top<innerHeight&&footer.bottom<=innerHeight+1,dockAboveFooter:dock.bottom<=footer.top+1,scrollHeight:document.documentElement.scrollHeight};
+    })()`);
+    assert.equal(shortPageDock.footerVisible,true,'Compact footer is visible on a short standard page');
+    assert.equal(shortPageDock.dockAboveFooter,true,'Dock remains directly above the footer');
+    await evaluate(`(()=>{const spacer=document.createElement('div');spacer.id='dock-test-spacer';spacer.style.height='180vh';spacer.setAttribute('aria-hidden','true');document.querySelector('main').append(spacer);window.scrollTo(0,0);})()`);
+    await delay(50);
+    const pinnedDock = await evaluate(`(()=>{
+        const dock=document.querySelector('.bottom-dock').getBoundingClientRect();
+        const budget=document.querySelector('#time-budget').getBoundingClientRect();
+        const progress=document.querySelector('#progress').getBoundingClientRect();
+        const marker=document.querySelector('.progress-marker').getBoundingClientRect();
+        const footer=document.querySelector('footer').getBoundingClientRect();
+        return {footerBelow:footer.top>innerHeight,dockBottom:dock.bottom,viewportBottom:innerHeight,budgetAboveProgress:budget.bottom<=progress.top+1,
+            progressHeight:progress.height,progressInset:progress.left>=11&&progress.right<=innerWidth-11,
+            markerWithin:marker.left>=progress.left-1&&marker.right<=progress.right+1,
+            progressRadius:parseFloat(getComputedStyle(document.querySelector('#progress')).borderTopLeftRadius),overflow:document.documentElement.scrollWidth>innerWidth};
+    })()`);
+    assert.equal(pinnedDock.footerBelow,true,'Long page keeps the footer below the viewport');
+    assert.ok(Math.abs(pinnedDock.dockBottom-pinnedDock.viewportBottom)<2,'Sticky dock stays at the visible bottom edge');
+    assert.equal(pinnedDock.budgetAboveProgress,true,'Budget remains above the progress strip');
+    assert.equal(pinnedDock.progressHeight,5,'Progress strip remains five pixels high');
+    assert.equal(pinnedDock.progressInset,true,'Progress strip has a horizontal inset');
+    assert.equal(pinnedDock.markerWithin,true,'Progress marker stays within the inset strip at 100%');
+    assert.ok(pinnedDock.progressRadius>=2,'Progress strip has rounded ends');
+    assert.equal(pinnedDock.overflow,false,'Dock does not cause horizontal overflow');
+    await evaluate('window.scrollTo(0,document.documentElement.scrollHeight)');
+    await delay(50);
+    const dockAtFooter = await evaluate(`(()=>{
+        const dock=document.querySelector('.bottom-dock').getBoundingClientRect();
+        const footer=document.querySelector('footer').getBoundingClientRect();
+        return {touching:Math.abs(dock.bottom-footer.top)<2,footerVisible:footer.top<innerHeight&&footer.bottom<=innerHeight+1};
+    })()`);
+    assert.equal(dockAtFooter.touching,true,'Dock settles directly above the footer at page end');
+    assert.equal(dockAtFooter.footerVisible,true,'Footer remains visible and reachable');
+    await evaluate(`document.querySelector('#dock-test-spacer').remove();window.scrollTo(0,0)`);
+    await cdp('Emulation.clearDeviceMetricsOverride');
     // Contextual controls must not move the readout when the preset section collapses.
     for (const width of [1280,390,320]) {
         await cdp('Emulation.setDeviceMetricsOverride', {width,height:900,deviceScaleFactor:1,mobile:width<500});
@@ -199,6 +239,7 @@ try {
     await click('#stop');
     await evaluate(`document.documentElement.style.fontSize=''`);
     await cdp('Emulation.clearDeviceMetricsOverride');
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Ready');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.textContent)`), ['1 min','2 min','3 min','5 min','10 min','15 min','30 min','60 min']);
@@ -498,6 +539,7 @@ try {
         await delay(100);
     }
     assert.equal(await evaluate(`document.querySelector('#progress').style.getPropertyValue('--remaining')`), '0%');
+    assert.equal(await evaluate(`(()=>{const progress=document.querySelector('#progress').getBoundingClientRect();const marker=document.querySelector('.progress-marker').getBoundingClientRect();return marker.left>=progress.left-1&&marker.right<=progress.right+1})()`),true,'Progress marker stays within the inset strip at 0%');
     await click('#stop');
     await configure(99,59,59);
     if (await evaluate(`document.querySelector('#fullscreen').getAttribute('aria-pressed') === 'true'`)) await click('#fullscreen');
@@ -529,7 +571,7 @@ try {
         await click('#stop');
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true,'Stop restores room presets');
         assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>b.getClientRects().length>0)`),true,'All additions visible in expanded view');
-        assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();return d.bottom<=b.top&&b.bottom<innerHeight-5})()`),true,'Budget line fits above progress and below additions');
+        assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();const p=document.querySelector('#progress').getBoundingClientRect();return d.bottom<=b.top&&b.bottom<=p.top+1&&p.bottom<=innerHeight})()`),true,'Budget line fits above progress and below additions');
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=a.top})()`),true,`Long duration fits at ${width}x${height}`);
         if (process.env.EASYTIMER_SCREENSHOT_DIR) {
             const path = join(process.env.EASYTIMER_SCREENSHOT_DIR, `easytimer-presentation-${width}.png`);
@@ -561,7 +603,7 @@ try {
     await click('[data-adjustment="300000"]');
     assert.equal(await text('#status'),'Läuft');
     assert.equal(await text('#time-budget'),'Gesamt 05:01 · Geplant 00:01 + 05:00');
-    assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const a=document.querySelector('.duration-adjustments').getBoundingClientRect();return b.top>=a.bottom&&b.bottom<innerHeight-5})()`),true,'Extended budget fits short landscape');
+    assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const a=document.querySelector('.duration-adjustments').getBoundingClientRect();const p=document.querySelector('#progress').getBoundingClientRect();return b.top>=a.bottom&&b.bottom<=p.top+1&&p.bottom<=innerHeight})()`),true,'Extended budget fits short landscape');
     await click('#stop');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),true);
     await cdp('Network.enable');
