@@ -1,6 +1,6 @@
 # easyTimer — Project Briefing
 
-**Last reviewed:** 2026-10-22
+**Last reviewed:** 2026-10-23
 **Repository:** https://github.com/nox-vobiscum/easytimer  
 **Production:** https://et.rbsnet.at/
 
@@ -59,6 +59,16 @@ easyTimer is installable from supported browsers through `src/manifest.webmanife
 Offline reload starts a fresh ready timer because cross-reload timer persistence is outside the current scope.
 
 ## 5. Architecture
+
+ST-001 adds the Session Planner as a separate application workspace, reachable from the universal menu without reloading. It manages reusable planning data only; Session Timer execution is not implemented. The Quick Timer instance and deadline-based updates continue while the workspace is open. Explicit fullscreen/expanded presentation is cleared on entry and never restored automatically; smartphone landscape presentation resumes normally when returning to the timer.
+
+`src/js/templates.mjs` provides schema validation, isolated draft cloning, stable-ID reordering and local load/save persistence. `src/js/planner.js` renders the library/editor with German and English labels. Schema version 1 under `easyTimerTemplates` contains templates with `id`, `name`, `transitionMode` and ordered `phases` (`id`, `title`, `durationSeconds`). A future Session Run owns separate execution state, statistics, deadlines and overtime. No runtime data is persisted inside templates.
+
+Names/titles allow 1–120 trimmed characters; at least one phase is required. Each phase has a positive integer duration up to 99:59:59; derived totals are capped at 999:59:59. Hours/minutes/seconds fields reject fractions and out-of-range values. Save validates before persistence; Cancel/close confirms changed drafts. Deletion is confirmed.
+
+Invalid or unsupported stored data blocks writes without deleting records. Read/write errors retain drafts and existing storage. A raw-snapshot optimistic check blocks detected cross-tab conflicts on save/delete; simultaneous writes in the comparison/write window remain a documented localStorage limitation. Reload is explicit and confirms draft loss. Optional JSON export/import can later reuse schema validation with explicit ID-collision decisions; cloud storage and authentication are not included.
+
+Service-worker shell v16 includes both new modules. Run `node --test tests/timer.test.mjs tests/templates.test.mjs` and the existing browser regression, now including `tests/planner-browser.mjs`. The latter covers localized field-error associations, normalized unsaved-change detection, duplicate template names, stable IDs after full reload and genuine cross-tab storage conflicts. Native iOS keyboard, safe-area and fullscreen checks remain manual.
 
 - `src/index.html`: semantic single-timer interface, PWA metadata, header, controls, and progress strip.
 - `src/css/styles.css`: design tokens, themes, safe areas, responsive standard and presentation layouts, and universal menu.

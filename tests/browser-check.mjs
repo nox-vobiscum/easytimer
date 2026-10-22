@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { checkPlanner } from './planner-browser.mjs';
 
 const root = resolve('src');
 const server = createServer(async (req, res) => {
@@ -101,7 +102,7 @@ try {
         await evaluate(`document.querySelector('#menu-toggle').focus()`);
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-        assert.equal(await evaluate(`document.activeElement===document.querySelector('[data-language="de"]')`),true,'Tab reaches visible preferences');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-planner')`),true,'Tab reaches planner navigation in the shared menu');
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
         assert.equal(await evaluate(`document.querySelector('#preferences').hidden&&document.activeElement===document.querySelector('#menu-toggle')`),true,'Escape closes menu and restores focus');
         assert.equal(await evaluate(`document.body.classList.contains('presentation')`),before.presentation,'Menu Escape preserves presentation');
@@ -122,8 +123,8 @@ try {
     }
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=14'&&js==='js/app.js?v=14'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>source.includes("'./css/styles.css?v=14'")&&source.includes("'./js/app.js?v=14'"))`),true,'Worker precaches the same versioned resources as HTML');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=16'&&js==='js/app.js?v=16'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>source.includes("'./css/styles.css?v=16'")&&source.includes("'./js/app.js?v=16'")&&source.includes("'./js/planner.js?v=16'"))`),true,'Worker precaches the same versioned resources as HTML and the imported planner');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -772,6 +773,7 @@ try {
     assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const a=document.querySelector('.duration-adjustments').getBoundingClientRect();const p=document.querySelector('#progress').getBoundingClientRect();return b.top>=a.bottom&&b.bottom<=p.top+1&&p.bottom<=innerHeight})()`),true,'Extended budget fits short landscape');
     await click('#stop');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),true);
+    await checkPlanner({ evaluate, click, text, cdp, configure });
     await cdp('Network.enable');
     await cdp('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
     await cdp('Page.reload');
@@ -781,6 +783,9 @@ try {
     }
     assert.equal(await text('#time'), '05:00');
     assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
+    await click('#menu-toggle'); await click('#open-planner');
+    assert.match(await text('.template-library'), /Changed elsewhere/, 'Templates and planner modules survive an offline reload');
+    await click('.planner-back');
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');

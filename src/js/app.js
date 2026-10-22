@@ -1,7 +1,9 @@
 import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs';
+import { createPlanner } from './planner.js?v=16';
 
 const copy = {
     en: {
+        planner: 'Session Planner',
         countdown: 'Countdown', light: 'Light', dark: 'Dark', system: 'System', theme: 'Appearance', language: 'Language',
         de: 'German', en: 'English', duration: 'Duration',
         start: 'Start', pause: 'Pause', resume: 'Resume', stop: 'Stop', credit: 'Created by',
@@ -14,6 +16,7 @@ const copy = {
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
     de: {
+        planner: 'Session-Planer',
         countdown: 'Countdown', light: 'Hell', dark: 'Dunkel', system: 'System', theme: 'Darstellung', language: 'Sprache',
         de: 'Deutsch', en: 'Englisch', duration: 'Dauer',
         start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', stop: 'Stoppen', credit: 'Erstellt von',
@@ -42,6 +45,14 @@ let expanded = false;
 let fullscreenRequested = false;
 let fullscreenRequestId = 0;
 let menuOpen = false;
+let plannerOpen = false;
+const planner = createPlanner($('planner'), () => {
+    plannerOpen = false;
+    document.body.classList.remove('planner-open');
+    $('planner').hidden = true;
+    updatePresentation();
+    $('menu-toggle').focus({ preventScroll: true });
+}, language);
 const landscape = matchMedia('(orientation: landscape)');
 const coarsePointer = matchMedia('(any-pointer: coarse)');
 function isSmartphone() {
@@ -71,15 +82,15 @@ function updatePresentation() {
     }
     const roomPresentation = !phone && (Boolean(document.fullscreenElement) || expanded);
     document.body.dataset.device = phone ? 'smartphone' : 'desktop-tablet';
-    $('fullscreen').hidden = phone;
+    $('fullscreen').hidden = phone || plannerOpen;
     if (phone && document.activeElement === $('fullscreen')) $('menu-toggle').focus({ preventScroll: true });
-    document.body.classList.toggle('presentation', roomPresentation || (phone && landscape.matches));
+    document.body.classList.toggle('presentation', !plannerOpen && (roomPresentation || (phone && landscape.matches)));
     document.body.classList.toggle('room-presentation', roomPresentation);
     render();
 }
 
 async function toggleFullscreen() {
-    if (isSmartphone()) return;
+    if (isSmartphone() || plannerOpen) return;
     const requestId = ++fullscreenRequestId;
     if (document.fullscreenElement) {
         fullscreenRequested = false;
@@ -120,6 +131,8 @@ function dispatch(action) {
 }
 function render() {
     const t = copy[language];
+    planner.setLanguage(language);
+    $('planner').setAttribute('aria-label', t.planner);
     const fullscreen = Boolean(document.fullscreenElement);
     const fullscreenLabel = fullscreen ? t.exitFullscreen : expanded ? t.exitExpanded : document.fullscreenEnabled ? t.fullscreen : t.expand;
     $('fullscreen').title = fullscreenLabel;
@@ -217,6 +230,19 @@ document.querySelectorAll('[data-language]').forEach(button => button.addEventLi
     render();
 }));
 $('menu-toggle').addEventListener('click', () => setMenuOpen(!menuOpen));
+$('open-planner').addEventListener('click', async () => {
+    setMenuOpen(false);
+    // Navigation invalidates fullscreen requests; returning never restores them implicitly.
+    fullscreenRequestId += 1;
+    fullscreenRequested = false;
+    expanded = false;
+    plannerOpen = true;
+    document.body.classList.add('planner-open');
+    $('planner').hidden = false;
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    updatePresentation();
+    planner.open();
+});
 document.addEventListener('click', event => {
     if (menuOpen && !$('preferences-menu').contains(event.target)) setMenuOpen(false);
 });

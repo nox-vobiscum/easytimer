@@ -1,7 +1,7 @@
 # easyTimer — Product, UX and MVP Concept v2
 
 **Date:** 2026-10-20
-**Last reviewed:** 2026-10-22
+**Last reviewed:** 2026-10-23
 **Status:** Canonical product and UX direction; MVP-01, MVP-02, PWA delivery, mobile refinements, and QT-001 overtime are implemented in production
 **Release:** UX-001 unified duration selection and continuous time budget are implemented and approved for production.
 **Release:** UX-002 contextual duration controls and layout polish are approved for production; the UX-001 engine and budget semantics are unchanged.
@@ -297,6 +297,18 @@ MVP-01 and MVP-02 were delivered as bounded, separately reviewed changes. Later 
 ---
 
 ## 6. Future product roadmap (NOT MVP scope)
+
+### ST-001 planning foundation
+
+ST-001 introduces a functional Session Planner menu entry and a separate library/editor application view. It is a planning workspace, not a timer stage or Session Timer mode. Multiple reusable templates contain stable template/phase IDs, a workshop name, manual/automatic transition preference and ordered titled phases with integer-second planned durations. No session execution, transition events, active-phase state or workshop statistics are implemented.
+
+The editor uses an isolated draft; Save validates and persists, Cancel discards, and leaving a changed draft requires confirmation. Reordering uses accessible up/down buttons. Names/titles are 1–120 trimmed characters, phases are positive up to 99:59:59, at least one phase is required and the calculated total cannot exceed 999:59:59. Desktop/tablet use a bounded workspace; phone portrait and landscape remain ordinary scrollable editing views with safe-area-aware application branding and the universal menu.
+
+Version-1 local storage separates reusable templates from a future Session Run. Corrupt/unsupported data blocks writes; storage failures preserve drafts, and optimistic snapshot comparisons prevent detected cross-tab conflicts from overwriting templates. Reloading stored data is explicit, with confirmation before dropping draft changes. This is not atomic synchronization. A later JSON portability increment can reuse the schema and validation, with deliberate collision handling; no import/export UI, Drive or authentication is included now.
+
+Quick Timer remains alive with its existing deadline, additions, pause and overtime semantics while planning. The planner hides the timer stage/dock, not the engine. Entering from native fullscreen exits it and clears explicit expanded presentation; returning never re-enters native fullscreen or activates a fallback automatically. Smartphone landscape returns to the normal automatic presentation. All timer-view progress/footer geometry remains unchanged.
+
+ET-001 runtime editing rules (39–43, 45–48, 53, 55–56) remain future Session Run requirements. ST-001 preserves stable phase identity and draft semantics needed for those rules without implementing active-phase protection, catch-up transitions or runtime editor conflicts. The stored transition preference does not execute decisions 5–7 or change any Quick Timer behavior.
 
 This roadmap preserves the product decisions made during the requirements-engineering discussion. The order is indicative, not a commitment to deliver all features at once.
 

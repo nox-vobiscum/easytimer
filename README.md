@@ -4,6 +4,8 @@ A small, dependency-free countdown timer for meetings and personal timeboxing.
 
 The release includes QT-001 overtime, UX-001 continuous time-budget extensions, contextual controls, the universal menu, and the UX-007 responsive timer stage.
 
+ST-001 adds a local Session Planner workspace for reusable workshop templates. It does not execute sessions or introduce a Session Timer mode.
+
 ## Current release
 
 UX-004: the browser tab title shows remaining time while running, adds a pause marker while paused, and shows signed overtime after expiry. READY uses `easyTimer`. Existing deadline-based updates correct the title when browser execution resumes; background updates can be throttled by the browser.
@@ -30,7 +32,7 @@ The common CSS-sized timer stage allocates space after accounting for actual pre
 
 The strip shows remaining time in pink on the left and elapsed time in green on the right. Its marker moves right to left; pause freezes it, Stop restores it, and expiry leaves it fully green. It is decorative and never announces timer ticks to screen readers.
 
-Session, ad-hoc, subtraction, manual duration entry, and user-configurable presentation settings remain outside scope.
+Session execution, ad-hoc, subtraction, Quick Timer manual duration entry, and user-configurable presentation settings remain outside scope.
 
 ## Run locally
 
@@ -72,6 +74,7 @@ Node.js 22 or newer is suitable for the dependency-free checks:
 
 ```sh
 node --test tests/timer.test.mjs
+node --test tests/templates.test.mjs
 node --check src/js/app.js
 node --check src/js/timer.mjs
 node --check src/service-worker.js
@@ -103,6 +106,28 @@ Owner acceptance checks:
 
 Native iOS acceptance remains manual: verify Safari and installed-PWA portrait/landscape with browser chrome and safe areas, menu taps, READY presets versus the larger active clock, and returning to portrait without timer changes. On iPad, check full-size landscape and narrow split view both stay Standard until explicit Presentation entry, with the direct exit remaining available. Browser emulation is not a substitute for those platform checks.
 
+## ST-001 Session Planner
+
+Open Session Planner from the universal menu. The library supports multiple templates, creation, editing, renaming and confirmed deletion. Each template contains a workshop name, manual/automatic transition preference and ordered phases with titles and planned durations. These are planning preferences only; no phase execution is implemented. Accessible up/down buttons reorder stable phase IDs.
+
+The editor works on an isolated draft. Save validates and persists; Cancel or Back to timer asks before discarding changed drafts. Reopening the planner menu entry retains the current draft. A browser unload warning protects changed drafts where supported; mobile operating systems may terminate a page without delivering that event.
+
+Names and titles contain 1–120 characters after trimming. At least one phase is required. Duration fields accept integer hours 0–99 and minutes/seconds 0–59, with positive phase totals up to 99:59:59. Derived workshop totals cannot exceed 999:59:59. Durations are stored as integer seconds; totals are not independently editable.
+
+`src/js/templates.mjs` owns validation, draft cloning, stable-ID reordering and a small load/save store. `src/js/planner.js` owns the workspace and DE/EN copy. `easyTimerTemplates` stores `{ schemaVersion: 1, templates: [{ id, name, transitionMode, phases: [{ id, title, durationSeconds }] }] }`. IDs are generated with `crypto.randomUUID()` in secure contexts (HTTPS or localhost). A future Session Run must reference or copy this planning data into separate runtime state; templates never store deadlines, statistics, overtime or active phase state.
+
+Loading rejects the complete library on malformed data, invalid templates or unsupported schema versions, blocking writes rather than silently dropping records. Storage access/quota errors retain drafts and existing stored data. Each save/delete compares the current raw storage value with the last successfully loaded/written snapshot. A detected cross-tab conflict blocks the write and retains the draft. Explicit Reload saved templates asks before discarding changes, and keeps the draft if loading fails. This is optimistic detection, not an atomic cross-tab transaction: simultaneous writes between comparison and storage cannot be fully prevented with localStorage. No synchronization framework is introduced.
+
+Opening the planner keeps the existing Quick Timer object, deadline, additions, overtime, refresh loop and dynamic tab title. Timer controls and the sticky dock are hidden only while editing. The workspace uses the standard header and scrollable layout in all orientations. Opening clears explicit expanded presentation and exits native fullscreen; returning never requests fullscreen or enables an expanded fallback automatically. Smartphone landscape returns to its normal automatic timer presentation. The timer engine and active-view dock geometry are unchanged.
+
+PWA shell v16 caches the planner modules and uses matching versioned HTML/CSS/app/planner URLs. Templates persist across reloads, but an active timer and unsaved draft do not.
+
+Field validation retains the failing input's identity and localized feedback association across language changes. Unsaved-change detection compares trimmed names/titles and parsed duration values, including stable IDs and phase order; temporary input fields do not make a reverted edit dirty. Invalid or incomplete duration edits still require discard confirmation. Browser regression coverage includes both cases, duplicate names, full-reload identities and genuine cross-tab storage conflicts.
+
+Run both unit suites and `node tests/browser-check.mjs`; the latter includes `tests/planner-browser.mjs`. Manual acceptance: create two templates, edit/reorder/remove phases, cancel a changed draft, reload, delete with confirmation, test two-tab conflicting saves, and verify feedback for blocked storage. Check DE/EN and Light/Dark/System at desktop, tablet split view, phone portrait and landscape. Let Quick Timer run into overtime while editing and return; verify time, additions and title. Check native iOS keyboard/safe areas and fullscreen exit on actual hardware.
+
+Next small portability increment: export the validated schema as JSON and import through the same validation, with explicit collision handling and confirmation before replacing any saved template. Import/export UI, Drive, authentication and Session Run remain future work.
+
 ## Scope and delivery
 
 `docs/EASYTIMER_UX_KONZEPT_v2.md` is the canonical product and UX direction. It distinguishes the delivered QT-001/UX-001 behavior from remaining future ET-001 decisions.
@@ -112,7 +137,7 @@ Code, comments and documentation remain English.
 The existing `.github/workflows/deploy.yaml` FTP pipeline deploys pushes to `main`.
 Changes belong on a development branch. Commit, push, merge and deployment require separate owner authorization.
 
-UX-006 uses one shared trigger and preferences structure outside the hidden presentation header. The anchored dropdown scrolls internally on short screens. Escape closes the open menu before the application exits presentation; closing never leaves focus inside hidden preferences. There are no new settings, navigation routes, About view, or footer links. Native browser/platform behavior outside the application's keyboard handlers remains browser-controlled.
+UX-006 uses one shared trigger and preferences structure outside the hidden presentation header. The anchored dropdown scrolls internally on short screens. Escape closes the open menu before the application exits presentation; closing never leaves focus inside hidden preferences. ST-001 adds the Session Planner navigation action to that same menu. About and extra footer links remain outside scope. Native browser/platform behavior outside the application's keyboard handlers remains browser-controlled.
 
 
 ## UX-003 responsive control bar

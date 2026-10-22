@@ -257,3 +257,29 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
 @media(max-width:440px) {
   .switch { gap:3px; }
 }
+/* The planner is a document workspace, independent of timer presentation. */
+.planner[hidden], .planner-open .timer, .planner-open .bottom-dock { display:none; }
+.planner-open { height:auto; overflow-y:auto; }
+.planner-open main { display:block; }
+.planner { width:100%; max-width:900px; margin:0 auto; padding-bottom:1rem; }
+.planner h1 { font-size:1.5rem; color:var(--text); margin:0; }
+.planner h2 { font-size:1rem; margin:1rem 0 .5rem; overflow-wrap:anywhere; }
+.planner-top, .template-library li { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+.planner-hint, .planner-feedback, .template-library p { color:var(--muted); font-size:.85rem; }
+.planner-feedback { overflow-wrap:anywhere; }
+.planner-feedback:empty { display:none; }
+.planner-feedback[data-error="true"] { color:var(--error); }
+.planner-actions, .phase-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+.planner .primary { background:var(--accent); color:var(--on-accent); }
+.template-library { list-style:none; padding:0; }
+.template-library li { padding:1rem 0; border-bottom:1px solid var(--border); }
+.template-library li > div { min-width:0; }
+.planner label { display:flex; flex-direction:column; gap:.4rem; font-size:.85rem; margin-bottom:1rem; min-width:0; }
+.planner input, .planner select { font:inherit; min-height:44px; width:100%; min-width:0; padding:.65rem; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:.5rem; }
+.planner form > label { max-width:32rem; }
+.phase-list { padding-left:1.5rem; }
+.phase-list li { padding:.75rem 0 1rem .25rem; border-bottom:1px solid var(--border); }
+.phase-duration { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; max-width:26rem; }
+.phase-actions button { padding:.5rem .7rem; font-size:.85rem; }
+#planner-total { font-variant-numeric:tabular-nums; }
+.planner-open footer { margin-top:auto; }
