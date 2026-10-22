@@ -18,7 +18,7 @@ UX-004: the browser tab title shows remaining time while running, adds a pause m
 - German and English UI, Light/Dark/System appearance, and browser-local language/theme preferences.
 - System appearance follows OS changes through CSS media queries.
 - Responsive standard view for desktop and mobile portrait; dedicated stopwatch PNG identity and ICO favicon.
-- Desktop header controls remain visible; mobile widths up to 440 px use an accessible preferences menu.
+- UX-006: one upper-right menu contains DE/EN and Light/Dark/System on every screen size, including fullscreen and automatic mobile landscape. Preference keys, defaults, and System appearance behavior are preserved.
 - Safe-area-aware iPhone portrait and optically centered touch-landscape presentation.
 - Installable Progressive Web App with an offline app shell after the first successful online visit.
 
@@ -42,7 +42,7 @@ Then open `http://localhost:8000`. No build, package installation or backend is 
 ## Architecture
 
 - `src/index.html`: semantic single-timer interface.
-- `src/css/styles.css`: appearance tokens, safe areas, responsive views and mobile preferences menu.
+- `src/css/styles.css`: appearance tokens, safe areas, responsive views and universal preferences menu.
 - `src/js/timer.mjs`: DOM-independent state transitions and duration validation.
 - `src/js/app.js`: browser events, rendering, DE/EN resources and preference persistence.
 - `src/manifest.webmanifest`: install metadata and app icon declarations.
@@ -91,7 +91,7 @@ Owner acceptance checks:
 4. Presets must be hidden while running, paused, and expired, including after New Run; Stop restores them in standard, native fullscreen, and expanded views. READY presets also appear in automatic mobile landscape. Check contextual adjustment headings in both languages and a stable readout position. Repeatedly add time up to the supported limit; an addition beyond 99:59:59 must be rejected with localized feedback.
 5. Run 30 seconds, switch tabs for at least 10 seconds, and return. Remaining time must reflect elapsed wall time; repeat past expiry.
 6. Switch DE/EN and Light/Dark/System while running, paused, and in overtime. The timer must preserve its progress. Reload to verify preferences; change OS theme with System selected.
-7. Check desktop and 320–393 px portrait widths, including 99:59:59. All eight presets fit one desktop row and wrap on mobile. Verify distinct preset/adjustment styling, 44 px targets, and the mobile preferences menu.
+7. Check desktop and 320–393 px portrait widths, including 99:59:59. All eight presets fit one desktop row and wrap on mobile. Verify distinct preset/adjustment styling and 44 px targets. Open preferences in standard, landscape, fullscreen and expanded views; check Tab access, Escape focus return, outside close, open-menu resize/rotation and no collision with the fullscreen control.
 8. Enter fullscreen while running and paused. Check that digits fit, controls remain usable and time does not reset. Exit using the button and Escape. Where fullscreen is unavailable or denied, verify the expanded-view fallback; it cannot remove browser chrome.
 9. Rotate a touch device into landscape and back. All four additions and the budget line remain visible without overlapping actions, digits, overtime, or the progress strip, including 568×320 screens. Native fullscreen remains active until explicitly exited.
 10. Check the progress strip at start, halfway, pause, Stop, New Run and expiry. Run the browser regression check for emulated orientation changes, native fullscreen, rejection/unavailability fallback and Escape.
@@ -105,6 +105,8 @@ Code, comments and documentation remain English.
 
 The existing `.github/workflows/deploy.yaml` FTP pipeline deploys pushes to `main`.
 Changes belong on a development branch. Commit, push, merge and deployment require separate owner authorization.
+
+UX-006 uses one shared trigger and preferences structure outside the hidden presentation header. The anchored dropdown scrolls internally on short screens. Escape closes the open menu before the application exits presentation; closing never leaves focus inside hidden preferences. There are no new settings, navigation routes, About view, or footer links. Native browser/platform behavior outside the application's keyboard handlers remains browser-controlled.
 
 
 ## UX-003 responsive control bar

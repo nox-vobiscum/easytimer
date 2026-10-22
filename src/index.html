@@ -20,6 +20,8 @@
       </span>
       easyTimer
     </div>
+  </header>
+  <div id="preferences-menu" class="preferences-menu">
     <button id="menu-toggle" class="menu-toggle" type="button" aria-expanded="false" aria-controls="preferences" aria-label="Open preferences" title="Open preferences">
       <svg class="menu-icon menu-icon-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M4 7h16M4 12h16M4 17h16"/>
@@ -28,11 +30,13 @@
         <path d="m6 6 12 12M18 6 6 18"/>
       </svg>
     </button>
-    <div id="preferences" class="preferences">
+    <div id="preferences" class="preferences" hidden>
+      <span class="preference-heading" data-copy="language">Language</span>
       <div class="switch" role="group" data-label="language">
         <button type="button" data-language="de">DE</button>
         <button type="button" data-language="en">EN</button>
       </div>
+      <span class="preference-heading" data-copy="theme">Appearance</span>
       <div class="switch" role="group" data-label="theme">
         <button type="button" data-theme="light" aria-label="Light" title="Light">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -51,7 +55,7 @@
         </button>
       </div>
     </div>
-  </header>
+  </div>
   <div class="presentation-brand" aria-hidden="true">
     <span class="presentation-brand-mark">
       <img class="presentation-brand-logo brand-logo-standard" src="assets/branding/stopwatch-header-standard-96.png" width="22" height="22" alt="">

@@ -43,16 +43,16 @@ let fullscreenRequested = false;
 let fullscreenRequestId = 0;
 let menuOpen = false;
 const landscape = matchMedia('(orientation: landscape) and (max-height: 600px) and (pointer: coarse)');
-const mobileMenu = matchMedia('(max-width: 440px)');
 
 function setMenuOpen(open, restoreFocus = false) {
-    menuOpen = Boolean(open && mobileMenu.matches);
-    document.querySelector('header').dataset.menuOpen = String(menuOpen);
+    const focusWasInside = $('preferences').contains(document.activeElement);
+    menuOpen = Boolean(open);
+    $('preferences').hidden = !menuOpen;
     $('menu-toggle').setAttribute('aria-expanded', String(menuOpen));
     const label = copy[language][menuOpen ? 'closeMenu' : 'openMenu'];
     $('menu-toggle').setAttribute('aria-label', label);
     $('menu-toggle').title = label;
-    if (restoreFocus) $('menu-toggle').focus({ preventScroll: true });
+    if (restoreFocus || (!menuOpen && focusWasInside)) $('menu-toggle').focus({ preventScroll: true });
 }
 
 function updatePresentation() {
@@ -201,9 +201,8 @@ document.querySelectorAll('[data-language]').forEach(button => button.addEventLi
 }));
 $('menu-toggle').addEventListener('click', () => setMenuOpen(!menuOpen));
 document.addEventListener('click', event => {
-    if (menuOpen && !document.querySelector('header').contains(event.target)) setMenuOpen(false);
+    if (menuOpen && !$('preferences-menu').contains(event.target)) setMenuOpen(false);
 });
-mobileMenu.addEventListener('change', event => { if (!event.matches) setMenuOpen(false); });
 // Callbacks only refresh the display; the deadline remains authoritative.
 setInterval(() => { if (['RUNNING', 'FINISHED'].includes(timer.status)) dispatch({ type: 'TICK' }); }, 100);
 document.addEventListener('visibilitychange', () => dispatch({ type: 'TICK' }));
@@ -221,6 +220,8 @@ landscape.addEventListener('change', updatePresentation);
 window.addEventListener('resize', updatePresentation);
 document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && menuOpen) {
+        event.preventDefault();
+        event.stopPropagation();
         setMenuOpen(false, true);
         return;
     }

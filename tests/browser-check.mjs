@@ -58,7 +58,7 @@ try {
         assert.ok(!result.exceptionDetails, JSON.stringify(result.exceptionDetails));
         return result.result.value;
     }
-    const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+    const click = selector => evaluate(`(()=>{const target=document.querySelector(${JSON.stringify(selector)});const preference=target.closest('#preferences');const wasHidden=preference?.hidden;if(wasHidden)document.querySelector('#menu-toggle').click();target.click();if(wasHidden)document.querySelector('#menu-toggle').click();})()`);
     const text = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent`);
     async function checkTitle(state) {
         const { title, time, overtime } = await evaluate(`({title:document.title,time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent})`);
@@ -68,6 +68,32 @@ try {
     async function configure(h, m, s) {
         // Exercise the real configuration handler with short deterministic test durations.
         await evaluate(`(()=>{const el=document.querySelector('[data-preset]');const original=el.dataset.preset;el.dataset.preset=${(h*3600+m*60+s)*1000};el.click();el.dataset.preset=original;})()`);
+    }
+    async function checkMenu(state) {
+        const before=await evaluate(`({status:document.querySelector('#status').textContent,time:document.querySelector('#time').textContent,budget:document.querySelector('#time-budget').textContent,presentation:document.body.classList.contains('presentation')})`);
+        assert.equal(await evaluate(`document.querySelectorAll('#menu-toggle').length===1&&document.querySelectorAll('#preferences').length===1&&document.querySelectorAll('button[data-language]').length===2&&document.querySelectorAll('button[data-theme]').length===3`),true,'One shared menu and preferences');
+        await click('#menu-toggle');
+        const geometry=await evaluate(`(()=>{const trigger=document.querySelector('#menu-toggle').getBoundingClientRect();const panel=document.querySelector('#preferences').getBoundingClientRect();const fullscreen=document.querySelector('#fullscreen').getBoundingClientRect();return {expanded:document.querySelector('#menu-toggle').getAttribute('aria-expanded'),visible:!document.querySelector('#preferences').hidden,triggerFits:trigger.width>=44&&trigger.height>=44&&trigger.left>=0&&trigger.top>=0&&trigger.right<=innerWidth&&trigger.bottom<=innerHeight,panelFits:panel.left>=0&&panel.right<=innerWidth&&panel.top>=trigger.bottom&&panel.bottom<=innerHeight,noCollision:trigger.right<=fullscreen.left||fullscreen.right<=trigger.left||trigger.bottom<=fullscreen.top||fullscreen.bottom<=trigger.top}})()`);
+        assert.ok(geometry.expanded==='true'&&geometry.visible&&geometry.triggerFits&&geometry.panelFits&&geometry.noCollision,JSON.stringify(geometry));
+        if(process.env.EASYTIMER_SCREENSHOT_DIR&&state==='PAUSED') {
+            const view=await evaluate(`innerWidth+'-'+(document.body.classList.contains('presentation')?'presentation':'standard')`);
+            const screenshot=await cdp('Page.captureScreenshot',{format:'png'});
+            await writeFile(join(process.env.EASYTIMER_SCREENSHOT_DIR,`universal-menu-${view}.png`),Buffer.from(screenshot.data,'base64'));
+        }
+        await evaluate(`document.querySelector('#menu-toggle').focus()`);
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('[data-language="de"]')`),true,'Tab reaches visible preferences');
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+        assert.equal(await evaluate(`document.querySelector('#preferences').hidden&&document.activeElement===document.querySelector('#menu-toggle')`),true,'Escape closes menu and restores focus');
+        assert.equal(await evaluate(`document.body.classList.contains('presentation')`),before.presentation,'Menu Escape preserves presentation');
+        await click('#menu-toggle');
+        await evaluate(`document.querySelector('[data-theme="system"]').focus()`);
+        await click('main');
+        assert.equal(await evaluate(`document.querySelector('#preferences').hidden&&document.activeElement===document.querySelector('#menu-toggle')`),true,'Outside close never leaves focus hidden');
+        assert.equal(await text('#status'),before.status,'Menu preserves timer state');
+        assert.equal(await text('#time-budget'),before.budget,'Menu preserves budget');
+        if(state==='READY'||state==='PAUSED') assert.equal(await text('#time'),before.time,'Menu preserves frozen time');
     }
     await cdp('Runtime.enable');
     await cdp('Page.enable');
@@ -79,8 +105,9 @@ try {
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
-    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'none');
-    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'flex');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
+    await checkMenu('READY');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
     assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
     assert.equal(await evaluate(`document.querySelector('link[rel="manifest"]').getAttribute('href')`), 'manifest.webmanifest');
@@ -96,7 +123,21 @@ try {
         })),
         new Promise(resolve => setTimeout(() => resolve('timeout'),5000))
     ])`), 'activated');
+    // An open menu remains anchored and usable across responsive changes.
+    await click('#menu-toggle');
+    for(const [width,height] of [[1920,1080],[1280,720],[1024,768],[844,390],[667,375],[390,844],[320,568],[568,240]]) {
+        await cdp('Emulation.setTouchEmulationEnabled',{enabled:width<900});
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<900,screenOrientation:{type:width>height?'landscapePrimary':'portraitPrimary',angle:width>height?90:0}});
+        await cdp('Page.captureScreenshot',{format:'png'});
+        assert.equal(await evaluate(`(()=>{const p=document.querySelector('#preferences').getBoundingClientRect();return !document.querySelector('#preferences').hidden&&p.left>=0&&p.top>=0&&p.right<=innerWidth&&p.bottom<=innerHeight})()`),true,'Open menu survives resize/rotation without clipping');
+        assert.equal(await evaluate(`Array.from(document.querySelectorAll('#preferences button')).every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44})`),true,'Preferences retain touch targets');
+        await checkTitle('READY');
+    }
+    await click('#menu-toggle');
+    await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+    await cdp('Emulation.clearDeviceMetricsOverride');
     await cdp('Emulation.setDeviceMetricsOverride', {width:1280,height:720,deviceScaleFactor:1,mobile:false});
+    await cdp('Page.captureScreenshot',{format:'png'});
     const shortPageDock = await evaluate(`(()=>{
         const dock=document.querySelector('.bottom-dock').getBoundingClientRect();
         const footer=document.querySelector('footer').getBoundingClientRect();
@@ -176,6 +217,7 @@ try {
             await configure(1,0,0);
             for (const state of ['READY','RUNNING','PAUSED']) {
                 if (state !== 'READY') await click('#primary');
+                await checkMenu(state);
                 const geometry = await evaluate(`(()=>{
                     const bar=document.querySelector('.control-bar');
                     const buttons=Array.from(bar.querySelectorAll('button')).filter(b=>b.getClientRects().length);
@@ -444,6 +486,7 @@ try {
     if (!nativeFullscreen) console.log(`SKIP: native fullscreen did not complete in this browser run (${await evaluate('window.fullscreenTestError || "request did not settle"')}); verifying fallback and API lifecycle separately.`);
     assert.equal(await evaluate('document.body.classList.contains("presentation")'), true);
     assert.equal(await evaluate('document.body.classList.contains("room-presentation")'), true);
+    await checkMenu('PAUSED');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>b.getClientRects().length>0)`),true,'Additions visible in native/fallback fullscreen');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'flex');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).opacity`), '0.94');
@@ -464,6 +507,7 @@ try {
         document.exitFullscreen=async()=>{window.testFullscreenElement=null;document.dispatchEvent(new Event('fullscreenchange'));};`);
     await click('#fullscreen');
     assert.equal(await evaluate(`document.querySelector('#fullscreen').getAttribute('aria-label')`), 'Vollbild verlassen');
+    await checkMenu('PAUSED');
     await click('#fullscreen');
     assert.equal(await evaluate('document.body.classList.contains("presentation")'), false);
     await evaluate('delete document.fullscreenElement; delete document.fullscreenEnabled; delete document.exitFullscreen');
@@ -557,6 +601,7 @@ try {
         await cdp('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:width<1000});
         const screenshot = await cdp('Page.captureScreenshot', {format:'png'});
         assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
+        await checkMenu('READY');
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true,'READY presets visible in expanded view');
         assert.equal(await evaluate(`(()=>{const p=document.querySelector('.duration-config').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return p.top>=t.bottom&&p.bottom<=a.top&&p.left>=0&&p.right<=innerWidth})()`),true,'READY presets fit between readout and actions');
         const readyTop = await evaluate(`document.querySelector('#time').getBoundingClientRect().top`);
@@ -588,6 +633,7 @@ try {
     await delay(100);
     assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+    await checkMenu('FINISHED');
     assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Overtime presets hidden in presentation');
     assert.ok(await text('#overtime-time') >= overtimeBeforePresentation);
     assert.equal(await evaluate(`(()=>{const r=document.querySelector('#overtime').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.top>=t.bottom&&r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits presentation view');
@@ -617,7 +663,7 @@ try {
     assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    console.log('PASS: dynamic tab titles, unchanged-title mutation guard, preset chips, action icons, universal additions, planned/extended budget, limit feedback, PWA offline reload, countdown and overtime regression, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen lifecycle/fallback, landscape and progress.');
+    console.log('PASS: universal menu, focus restoration, menu-first Escape, open-menu resize/rotation, dynamic tab titles, preset chips, action icons, universal additions, budget, PWA offline reload, countdown/overtime, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen lifecycle/fallback, landscape and sticky progress dock.');
     await cdp('Browser.close');
 } finally {
     socket?.close();

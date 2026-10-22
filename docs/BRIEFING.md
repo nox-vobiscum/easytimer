@@ -37,8 +37,9 @@ UX-004 adds a dynamic browser tab title: READY uses `easyTimer`; RUNNING uses `0
 - Every user-facing string, tooltip, status, and accessible label is available in German and English.
 - Light, Dark, and System appearance options are supported. System follows the operating-system preference.
 - Language and appearance preferences are stored in browser-local storage.
-- Desktop keeps language and appearance controls visible in the header.
-- At widths up to 440 px, an accessible hamburger button opens those controls in a safe-area-aware dropdown. Escape and an outside click close it; Escape restores focus to the trigger.
+- UX-006 replaces permanently visible desktop preferences with one shared upper-right hamburger trigger across all widths and presentations. The existing DE/EN and Light/Dark/System controls live in an anchored, safe-area-aware dropdown with separate visible group headings.
+- Escape, an outside click, or the trigger closes the menu. Escape restores focus and is handled before application fullscreen/expanded-view exit; other close paths also prevent focus remaining in hidden content. Closed preferences are hidden from display and keyboard navigation.
+- The menu and trigger sit outside the standard header, so presentation can hide that header without hiding preferences. Fullscreen exit has a separate 44 px area beside the menu. On short displays the dropdown scrolls internally; open menus remain anchored through resize and rotation.
 - Mobile portrait, including installed iPhone PWA presentation, respects display cutouts and safe areas.
 - Touch landscape up to 600 px high automatically uses the reduced presentation layout and returns to the standard layout in portrait.
 - Native Fullscreen API is used where available. A reversible full-viewport fallback is used when fullscreen is unavailable or rejected.
@@ -59,7 +60,7 @@ Offline reload starts a fresh ready timer because cross-reload timer persistence
 ## 5. Architecture
 
 - `src/index.html`: semantic single-timer interface, PWA metadata, header, controls, and progress strip.
-- `src/css/styles.css`: design tokens, themes, safe areas, responsive standard and presentation layouts, and mobile menu.
+- `src/css/styles.css`: design tokens, themes, safe areas, responsive standard and presentation layouts, and universal menu.
 - `src/js/timer.mjs`: DOM-independent timer state and transitions.
 - `src/js/app.js`: rendering, localization, browser events, fullscreen behavior, responsive presentation, preferences, and service-worker registration.
 - `src/manifest.webmanifest`: install metadata and app icon declarations.

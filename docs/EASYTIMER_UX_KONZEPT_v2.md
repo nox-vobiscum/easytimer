@@ -5,6 +5,7 @@
 **Status:** Canonical product and UX direction; MVP-01, MVP-02, PWA delivery, mobile refinements, and QT-001 overtime are implemented in production
 **Release:** UX-001 unified duration selection and continuous time budget are implemented and approved for production.
 **Release:** UX-002 contextual duration controls and layout polish are approved for production; the UX-001 engine and budget semantics are unchanged.
+**Release:** UX-006 universal preferences menu is implemented and approved for production.
 **Supersedes:** `EASYTIMER_UX_KONZEPT_v1.md`
 **Repository:** https://github.com/nox-vobiscum/easytimer
 **Production:** https://et.rbsnet.at/
@@ -140,7 +141,7 @@ A single timer state object should represent this contract; avoid unrelated `run
 ### MVP acceptance status
 
 - [x] Only the basic countdown timer is accessible; no Quick/Session/Ad-hoc features or inactive mode-switch UI.
-- [x] Header displays the easyTimer stopwatch identity plus theme and DE/EN controls. Desktop shows them directly; mobile up to 440 px uses an accessible hamburger menu.
+- [x] Header displays the easyTimer stopwatch identity. UX-006 places theme and DE/EN preferences behind the same accessible hamburger menu at every width and in every presentation.
 - [x] Every visible text/status/tooltip/accessible label belongs to the selected language; switching languages preserves timer state.
 - [x] Light/Dark/System appearance works and is persisted; selecting a theme never alters the clock.
 - [x] The time readout is the most prominent element on desktop, tablet, and mobile.
@@ -200,7 +201,9 @@ The adjustment section stays available in every state and view. Its localized he
 
 The actual layout need not follow this diagram pixel-for-pixel. Controls adjust to state; preset and additive controls remain distinct, unobtrusive, and accessible.
 
-Production keeps both preference groups visible on desktop. At viewport widths up to 440 px, the standard view keeps the brand and a hamburger trigger in one compact header row. The trigger opens a localized, safe-area-aware preference dropdown containing the same DE/EN and Light/Dark/System controls. Escape and an outside click close it; Escape restores focus to the trigger. This responsive navigation change does not create a timer mode or a general settings system.
+UX-006 supersedes the mobile-only preference menu: one upper-right trigger opens the same DE/EN and Light/Dark/System groups in every view. The trigger and dropdown share a container outside the standard header, which stays hidden in presentation. Menu and fullscreen exit occupy separate touch areas; no controls or handlers are duplicated. Existing storage keys, defaults, selected states and OS-theme tracking remain unchanged.
+
+The dropdown uses existing theme tokens, visible Language/Appearance headings, normal buttons and grouped semantics without an ARIA application-menu pattern. Closed preferences are fully hidden. Escape closes the menu and returns focus before application fullscreen exit is handled; outside click and the trigger also close it without leaving focus hidden. The panel remains anchored across resize/rotation and scrolls internally on short displays. Closed-menu geometry leaves the countdown and shared control bar unchanged apart from the simpler standard header. Timer state, tab title, budget, footer, and sticky progress dock are preserved. About and future legal/navigation entries are deferred.
 
 ### 4.2 Fullscreen / room display
 
@@ -245,7 +248,7 @@ Production retains a small, nearly opaque easyTimer stopwatch-and-wordmark ident
 - Do not announce every second to screen readers; provide a meaningful status when the timer changes phase/state.
 - Essential controls remain reachable for keyboard, mouse, and touch input.
 - Respect reduced-motion preferences when using optional animations.
-- The mobile preference trigger exposes expanded state and its controlled region; all preference targets retain at least 44 px touch geometry.
+- The universal preference trigger exposes expanded state and its controlled region; all preference targets retain at least 44 px touch geometry. Keyboard focus remains visible and cannot be left inside hidden preferences.
 
 ### 4.6 Progressive Web App shell
 
