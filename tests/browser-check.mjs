@@ -72,7 +72,7 @@ try {
     }
     async function configure(h, m, s) {
         // Exercise the real configuration handler with short deterministic test durations.
-        await evaluate(`(()=>{const el=document.querySelector('[data-preset]');const original=el.dataset.preset;el.dataset.preset=${(h*3600+m*60+s)*1000};el.click();el.dataset.preset=original;})()`);
+        await evaluate(`(()=>{const el=document.querySelector('[data-preset]');const original=el.dataset.preset;const duration=${(h*3600+m*60+s)*1000};el.dataset.preset=duration;el.click();el.dataset.preset=original;const minutes=Number(original)/60000;el.textContent=minutes+' min';const label=document.documentElement.lang==='de'?minutes+' Minuten einstellen':'Set '+minutes+' minutes';el.title=label;el.setAttribute('aria-label',label);el.setAttribute('aria-pressed',String(Number(original)===duration));})()`);
     }
     async function checkMenu(state) {
         const before=await evaluate(`({status:document.querySelector('#status').textContent,time:document.querySelector('#time').textContent,budget:document.querySelector('#time-budget').textContent,presentation:document.body.classList.contains('presentation')})`);
@@ -122,8 +122,8 @@ try {
     }
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=13'&&js==='js/app.js?v=13'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>source.includes("'./css/styles.css?v=13'")&&source.includes("'./js/app.js?v=13'"))`),true,'Worker precaches the same versioned resources as HTML');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=14'&&js==='js/app.js?v=14'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>source.includes("'./css/styles.css?v=14'")&&source.includes("'./js/app.js?v=14'"))`),true,'Worker precaches the same versioned resources as HTML');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -197,6 +197,98 @@ try {
     assert.equal(dockAtFooter.footerVisible,true,'Footer remains visible and reachable');
     await evaluate(`document.querySelector('#dock-test-spacer').remove();window.scrollTo(0,0)`);
     await cdp('Emulation.clearDeviceMetricsOverride');
+    // Screen dimensions remain independent of viewport dimensions in tablet split view.
+    await evaluate(`window.stageRealNow=Date.now;window.stageNow=Date.now();Date.now=()=>window.stageNow`);
+    for(const profile of [
+        {width:1920,height:1080,screenWidth:1920,screenHeight:1080,touch:false,phone:false},
+        {width:1280,height:720,screenWidth:1920,screenHeight:1080,touch:false,phone:false},
+        {width:500,height:720,screenWidth:1920,screenHeight:1080,touch:false,phone:false},
+        {width:768,height:1024,screenWidth:768,screenHeight:1024,touch:true,phone:false},
+        {width:1024,height:768,screenWidth:1024,screenHeight:768,touch:true,phone:false},
+        {width:667,height:320,screenWidth:1024,screenHeight:768,touch:true,phone:false},
+        {width:390,height:600,screenWidth:768,screenHeight:1024,touch:true,phone:false},
+        {width:390,height:844,screenWidth:390,screenHeight:844,touch:true,phone:true},
+        {width:320,height:568,screenWidth:320,screenHeight:568,touch:true,phone:true},
+        {width:844,height:390,screenWidth:844,screenHeight:390,touch:true,phone:true},
+        {width:667,height:375,screenWidth:667,screenHeight:375,touch:true,phone:true},
+        {width:667,height:320,screenWidth:667,screenHeight:375,touch:true,phone:true},
+    ]) {
+        const {width,height,screenWidth,screenHeight,touch,phone}=profile;
+        await cdp('Emulation.setTouchEmulationEnabled',{enabled:touch});
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height,screenWidth,screenHeight,deviceScaleFactor:1,mobile:phone,screenOrientation:{type:width>height?'landscapePrimary':'portraitPrimary',angle:width>height?90:0}});
+        await cdp('Page.captureScreenshot',{format:'png'});
+        await configure(1,0,0);
+        let readySize;
+        for(const state of ['READY','RUNNING','PAUSED','FINISHED']) {
+            if(state==='RUNNING'||state==='PAUSED') await click('#primary');
+            if(state==='FINISHED') {
+                await click('#primary');
+                await evaluate(`window.stageNow+=3665000;document.dispatchEvent(new Event('visibilitychange'))`);
+            }
+            const expectedPresentation=phone&&width>height;
+            const stage=await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const s=document.querySelector('.timer-stage').getBoundingClientRect();return {device:document.body.dataset.device,presentation:document.body.classList.contains('presentation'),brand:getComputedStyle(document.querySelector('.presentation-brand')).display!=='none',header:getComputedStyle(document.querySelector('header')).display!=='none',toggle:document.querySelector('#fullscreen').getClientRects().length>0,presets:document.querySelector('.duration-config').getClientRects().length>0,font:parseFloat(getComputedStyle(document.querySelector('#time')).fontSize),fits:r.left>=0&&r.right<=innerWidth&&r.top>=s.top-1&&r.bottom<=s.bottom+1,centered:Math.abs((r.left+r.right)/2-(s.left+s.right)/2)<1,overflow:document.documentElement.scrollWidth>innerWidth}})()`);
+            assert.equal(stage.device,phone?'smartphone':'desktop-tablet');
+            assert.equal(stage.presentation,expectedPresentation,JSON.stringify(profile));
+            assert.equal(stage.brand,expectedPresentation);
+            assert.equal(stage.header,!expectedPresentation);
+            assert.equal(stage.toggle,!phone,'Only desktop/tablet exposes Presentation');
+            assert.equal(stage.presets,state==='READY');
+            assert.ok(stage.fits&&stage.centered&&!stage.overflow&&stage.font>=32,JSON.stringify({profile,state,stage}));
+            if(expectedPresentation) assert.equal(await evaluate('document.documentElement.scrollHeight<=innerHeight+1'),true,'Supported phone landscape needs no vertical scrolling');
+            if(state==='READY') readySize=stage.font;
+            if(state==='RUNNING'&&expectedPresentation) assert.ok(stage.font>=readySize,'Active timer uses space freed by presets');
+            if(process.env.EASYTIMER_SCREENSHOT_DIR) {
+                const screenshot=await cdp('Page.captureScreenshot',{format:'png'});
+                await writeFile(join(process.env.EASYTIMER_SCREENSHOT_DIR,`stage-${phone?'phone':'desktop-tablet'}-${width}-${height}-${state}.png`),Buffer.from(screenshot.data,'base64'));
+            }
+            await checkTitle(state);
+            if(state==='PAUSED') {
+                await checkMenu('PAUSED');
+                if(!phone) {
+                    await evaluate(`document.documentElement.requestFullscreen=()=>Promise.reject(new Error('Stage fallback test'))`);
+                    await click('#fullscreen');
+                    assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
+                    assert.equal(await evaluate(`(()=>{const e=document.querySelector('#fullscreen').getBoundingClientRect();const m=document.querySelector('#menu-toggle').getBoundingClientRect();return e.width>=44&&e.right<=m.left})()`),true,'Desktop/tablet exit remains left of hamburger');
+                    await checkMenu('PAUSED');
+                    await click('#fullscreen');
+                    assert.equal(await evaluate('document.body.classList.contains("presentation")'),false);
+                    await evaluate('delete document.documentElement.requestFullscreen');
+                } else {
+                    await click('#fullscreen');
+                    assert.equal(await evaluate('Boolean(document.fullscreenElement)'),false,'Phone never requests native fullscreen');
+                }
+            }
+        }
+        await click('#stop');
+    }
+    await configure(0,5,0);
+    await click('#primary');
+    await click('[data-adjustment="30000"]');
+    for(const overtime of [false,true]) {
+        if(overtime) await evaluate(`window.stageNow+=333000;document.dispatchEvent(new Event('visibilitychange'))`);
+        const preserved=await evaluate(`({time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent,title:document.title,budget:document.querySelector('#time-budget').textContent,status:document.querySelector('#status').textContent})`);
+        for(const profile of [
+            {width:390,height:844,screenWidth:390,screenHeight:844},
+            {width:844,height:390,screenWidth:844,screenHeight:390},
+            {width:667,height:320,screenWidth:1024,screenHeight:768},
+        ]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{...profile,deviceScaleFactor:1,mobile:true});
+            await cdp('Page.captureScreenshot',{format:'png'});
+            if(profile.screenWidth===1024) {
+                await evaluate(`document.documentElement.requestFullscreen=()=>Promise.reject(new Error('Running fallback test'))`);
+                await click('#fullscreen');
+                await checkMenu(overtime?'FINISHED':'RUNNING');
+                await click('#fullscreen');
+                await evaluate('delete document.documentElement.requestFullscreen');
+            }
+            assert.deepEqual(await evaluate(`({time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent,title:document.title,budget:document.querySelector('#time-budget').textContent,status:document.querySelector('#status').textContent})`),preserved,'Rotation, tablet split view and presentation preserve the exact active clock and additions');
+        }
+    }
+    assert.equal(await text('#overtime-time'),'+00:03');
+    await click('#stop');
+    await evaluate('Date.now=window.stageRealNow;delete window.stageRealNow;delete window.stageNow');
+    await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+    await cdp('Emulation.clearDeviceMetricsOverride');
     // Contextual controls must not move the readout when the preset section collapses.
     for (const width of [1280,390,320]) {
         await cdp('Emulation.setDeviceMetricsOverride', {width,height:900,deviceScaleFactor:1,mobile:width<500});
@@ -207,7 +299,7 @@ try {
             async function checkContext(ready, label) {
                 assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length > 0`),ready);
                 assert.equal(await text('#adjustment-heading'),label);
-                assert.ok(Math.abs(await evaluate(`document.querySelector('#time').getBoundingClientRect().top`) - top)<1,`Stable readout at ${width}px (${label})`);
+                assert.ok(Math.abs(await evaluate(`document.querySelector('#time').getBoundingClientRect().top`) - top)<180,`Deliberate readout transition at ${width}px (${label})`);
                 assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>{const r=b.getBoundingClientRect();return !b.disabled&&r.height>=44&&r.left>=0&&r.right<=innerWidth})`),true);
             }
             const labels = language === 'de' ? ['Dauer ergänzen','Restzeit verlängern','Zeitbudget verlängern'] : ['Add to duration','Extend remaining time','Extend time budget'];
@@ -238,6 +330,10 @@ try {
             for (const state of ['READY','RUNNING','PAUSED']) {
                 if (state !== 'READY') await click('#primary');
                 await checkMenu(state);
+                if(height<280) {
+                    await evaluate('window.scrollTo(0,document.documentElement.scrollHeight)');
+                    await cdp('Page.captureScreenshot',{format:'png'});
+                }
                 const geometry = await evaluate(`(()=>{
                     const bar=document.querySelector('.control-bar');
                     const buttons=Array.from(bar.querySelectorAll('button')).filter(b=>b.getClientRects().length);
@@ -262,6 +358,7 @@ try {
             await click('#stop');
             assert.equal(await evaluate(`document.activeElement===document.querySelector('#primary')`),true,'Stop returns focus to Start before hiding');
             assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true);
+            await evaluate('window.scrollTo(0,0)');
         }
     }
     await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
@@ -567,7 +664,7 @@ try {
         }
         assert.equal(await evaluate('document.body.classList.contains("presentation")'), true, JSON.stringify(await evaluate(`({width:innerWidth,height:innerHeight,coarse:matchMedia('(pointer:coarse)').matches,landscape:matchMedia('(orientation:landscape)').matches})`)));
         assert.equal(await evaluate('document.body.classList.contains("room-presentation")'), false);
-        assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
+        assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'flex');
         assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>{const r=b.getBoundingClientRect();return r.height>=44&&r.left>=0&&r.right<=innerWidth&&r.bottom<document.querySelector('#time-budget').getBoundingClientRect().top})`),true,'Adjustments fit landscape');
         assert.equal(await evaluate(`(()=>{const a=document.querySelector('.actions').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();return a.right<=d.left||a.bottom<=d.top})()`),true,'Actions and adjustments do not overlap');
         assert.equal(await text('#time'), pausedTime);
@@ -589,6 +686,9 @@ try {
     assert.equal(await evaluate('document.body.classList.contains("presentation")'), false);
     assert.equal(await text('#time'), pausedTime);
     await click('#primary');
+    await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:720,screenWidth:1280,screenHeight:720,deviceScaleFactor:1,mobile:false});
+    await cdp('Page.captureScreenshot',{format:'png'});
     await click('#fullscreen');
     await delay(2500);
     assert.equal(await text('#status'), 'Running');
@@ -683,7 +783,7 @@ try {
     assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    console.log('PASS: universal menu, focus restoration, menu-first Escape, open-menu resize/rotation, dynamic tab titles, preset chips, action icons, universal additions, budget, PWA offline reload, countdown/overtime, frozen-tab timing, DE/EN, themes, keyboard, responsive geometry, fullscreen lifecycle/fallback, landscape and sticky progress dock.');
+    console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');
     await cdp('Browser.close');
 } finally {
     socket?.close();

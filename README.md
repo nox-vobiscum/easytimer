@@ -2,7 +2,7 @@
 
 A small, dependency-free countdown timer for meetings and personal timeboxing.
 
-The release includes QT-001 overtime, UX-001 continuous time-budget extensions, and UX-002 contextual duration controls.
+The release includes QT-001 overtime, UX-001 continuous time-budget extensions, contextual controls, the universal menu, and the UX-007 responsive timer stage.
 
 ## Current release
 
@@ -19,10 +19,14 @@ UX-004: the browser tab title shows remaining time while running, adds a pause m
 - System appearance follows OS changes through CSS media queries.
 - Responsive standard view for desktop and mobile portrait; dedicated stopwatch PNG identity and ICO favicon.
 - UX-006: one upper-right menu contains DE/EN and Light/Dark/System on every screen size, including fullscreen and automatic mobile landscape. Preference keys, defaults, and System appearance behavior are preserved.
-- Safe-area-aware iPhone portrait and optically centered touch-landscape presentation.
+- Safe-area-aware smartphone portrait and a centered, state-responsive timer stage in smartphone landscape.
 - Installable Progressive Web App with an offline app shell after the first successful online visit.
 
-MVP-02 adds native fullscreen with a full-viewport fallback, an automatic reduced landscape presentation on touch devices up to 600 px high, and a five-pixel progress strip. Fullscreen and its fallback retain a small easyTimer identity at the top left without restoring the standard header. Essential controls remain visible and keyboard/touch accessible. Escape or the view button exits the expanded view; rotating back to portrait restores the standard layout unless fullscreen is still active.
+UX-007 consolidates two layout families. Standard serves desktop, tablet (including landscape and split view), and smartphone portrait, retaining the header, sticky progress dock and scroll-reachable footer. Presentation serves explicit desktop/tablet fullscreen or expanded view and automatic smartphone landscape, with small branding at top left, the universal menu at top right, and no footer. Desktop/tablet retain a separate 44 px presentation exit to the left of the menu; smartphones hide the toggle in both orientations and never request native fullscreen on rotation.
+
+Smartphone classification combines a coarse-pointer capability with a short `screen.width`/`screen.height` side below 600 CSS px, rather than viewport dimensions alone. Landscape is then determined from the viewport. Tablet split views retain the tablet's screen dimensions and therefore stay Standard. Very small tablets, foldables, external displays and browser-reported/zoomed screen dimensions are unavoidable heuristic edge cases; no user-agent sniffing is used.
+
+The common CSS-sized timer stage allocates space after accounting for actual preset/control rows. READY keeps all configuration accessible; Running, Paused and Finished reclaim that space for larger digits, including hours and separate overtime. Extremely short screens may scroll instead of clipping controls. The budget/progress dock retains its colors, five-pixel height, rounded ends and responsive insets.
 
 The strip shows remaining time in pink on the left and elapsed time in green on the right. Its marker moves right to left; pause freezes it, Stop restores it, and expiry leaves it fully green. It is decorative and never announces timer ticks to screen readers.
 
@@ -92,10 +96,12 @@ Owner acceptance checks:
 5. Run 30 seconds, switch tabs for at least 10 seconds, and return. Remaining time must reflect elapsed wall time; repeat past expiry.
 6. Switch DE/EN and Light/Dark/System while running, paused, and in overtime. The timer must preserve its progress. Reload to verify preferences; change OS theme with System selected.
 7. Check desktop and 320–393 px portrait widths, including 99:59:59. All eight presets fit one desktop row and wrap on mobile. Verify distinct preset/adjustment styling and 44 px targets. Open preferences in standard, landscape, fullscreen and expanded views; check Tab access, Escape focus return, outside close, open-menu resize/rotation and no collision with the fullscreen control.
-8. Enter fullscreen while running and paused. Check that digits fit, controls remain usable and time does not reset. Exit using the button and Escape. Where fullscreen is unavailable or denied, verify the expanded-view fallback; it cannot remove browser chrome.
-9. Rotate a touch device into landscape and back. All four additions and the budget line remain visible without overlapping actions, digits, overtime, or the progress strip, including 568×320 screens. Native fullscreen remains active until explicitly exited.
+8. On desktop/tablet, enter Presentation while running and paused. Check that digits fit, controls remain usable and time does not reset. Exit using the button left of the hamburger and Escape. Where fullscreen is unavailable or denied, verify the expanded-view fallback; it cannot remove browser chrome.
+9. Rotate a smartphone into landscape and back: branding remains visible, the toggle stays absent, and timer state is preserved. Check tablet landscape and a 667×320 split viewport on a tablet-sized screen: Standard must remain active until explicit Presentation entry. Verify the separate exit left of the menu, all four additions, READY presets, budget and progress; exceptionally short 240 px views may scroll.
 10. Check the progress strip at start, halfway, pause, Stop, New Run and expiry. Run the browser regression check for emulated orientation changes, native fullscreen, rejection/unavailability fallback and Escape.
 11. Install the PWA where supported. After one successful online visit, reload offline and verify that the ready timer opens. Confirm that a full reload intentionally starts a fresh timer.
+
+Native iOS acceptance remains manual: verify Safari and installed-PWA portrait/landscape with browser chrome and safe areas, menu taps, READY presets versus the larger active clock, and returning to portrait without timer changes. On iPad, check full-size landscape and narrow split view both stay Standard until explicit Presentation entry, with the direct exit remaining available. Browser emulation is not a substitute for those platform checks.
 
 ## Scope and delivery
 

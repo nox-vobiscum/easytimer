@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/branding/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="assets/branding/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="css/styles.css?v=13">
+  <link rel="stylesheet" href="css/styles.css?v=14">
 </head>
 <body data-duration-entry="presets-adjustments">
   <header>
@@ -74,12 +74,14 @@
           <path d="M8 3v5H3m13-5v5h5M8 21v-5H3m13 5v-5h5"/>
         </svg>
       </button>
+      <div class="timer-stage">
       <div id="time" role="timer" aria-live="off">05:00</div>
       <div id="overtime" class="overtime" aria-label="Overtime: +00:00" hidden>
         <span class="overtime-label" data-copy="overtime">Overtime</span>
         <span id="overtime-time">+00:00</span>
       </div>
       <p id="status" role="status">Ready</p>
+      </div>
       <div class="controls-region">
       <section class="duration-config" aria-labelledby="duration-heading">
         <h2 id="duration-heading" data-copy="duration">Duration</h2>
@@ -119,6 +121,6 @@
   </div>
   <footer><span data-copy="credit">Created by</span> <a href="https://rolandseper.at">Roland B. Seper</a> · © 2026</footer>
   <noscript>This timer requires JavaScript. / Dieser Timer benötigt JavaScript.</noscript>
-  <script type="module" src="js/app.js?v=13"></script>
+  <script type="module" src="js/app.js?v=14"></script>
 </body>
 </html>

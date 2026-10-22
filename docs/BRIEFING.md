@@ -8,7 +8,7 @@
 
 easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The release includes subtle overtime, unified presets, continuous time-budget extensions, and a persistent budget line. Session timing, ad-hoc timing, alarms, and user-configurable presentation settings remain future scope.
 
-The countdown is the dominant element. Desktop, mobile portrait, mobile landscape, fullscreen, and the expanded-view fallback are presentations of the same timer state rather than separate modes.
+The countdown is the dominant element. UX-007 uses two layout families sharing one timer state: Standard (desktop/tablet and smartphone portrait) and Presentation (explicit desktop/tablet fullscreen/fallback and automatic smartphone landscape).
 
 ## 2. Implemented behavior
 
@@ -41,10 +41,11 @@ UX-004 adds a dynamic browser tab title: READY uses `easyTimer`; RUNNING uses `0
 - Escape, an outside click, or the trigger closes the menu. Escape restores focus and is handled before application fullscreen/expanded-view exit; other close paths also prevent focus remaining in hidden content. Closed preferences are hidden from display and keyboard navigation.
 - The menu and trigger sit outside the standard header, so presentation can hide that header without hiding preferences. Fullscreen exit has a separate 44 px area beside the menu. On short displays the dropdown scrolls internally; open menus remain anchored through resize and rotation.
 - Mobile portrait, including installed iPhone PWA presentation, respects display cutouts and safe areas.
-- Touch landscape up to 600 px high automatically uses the reduced presentation layout and returns to the standard layout in portrait.
+- A coarse-pointer device with a short screen side below 600 CSS px is treated as a smartphone; only its landscape viewport automatically activates Presentation. Screen dimensions, not viewport dimensions alone, keep tablet split views Standard. Small tablets, foldables, external displays and unusual browser/zoom reports are documented heuristic edge cases.
 - Native Fullscreen API is used where available. A reversible full-viewport fallback is used when fullscreen is unavailable or rejected.
-- Native fullscreen and its expanded-view fallback show a small, nearly opaque stopwatch-and-wordmark identity at the safe top-left edge without displaying the standard header.
-- The presentation view retains Start/Pause/Resume/New Run, contextual Stop, and exit controls.
+- Every Presentation, including automatic smartphone landscape, shows small branding at the safe top-left edge and the universal menu at top right, without the regular header or footer.
+- Desktop/tablet expose a direct Presentation toggle; its exit is a separate bordered 44 px button left of the hamburger. Smartphones hide the toggle in both orientations; rotation never requests native fullscreen.
+- The shared stage centers the clock and status above actual preset/control rows. READY accommodates configuration; active and expired runs use the freed space for larger digits. The shared actions, additions, budget and progress remain unchanged. Extreme height constraints allow scrolling instead of inaccessible controls.
 - Actions combine SVG icons and localized text when spacious; constrained control bars show icons with full localized accessible names. All four time additions remain directly visible in every view, with values and units always shown. Presets appear only in READY in all views.
 - A small safe-area-aware budget line above the progress strip shows Total, or Total · Planned + additions. It is not a live region and updates only when budget values or language change.
 - A five-pixel bottom strip shows remaining time in pink and elapsed time in green. It is decorative and is not announced on every timer tick.

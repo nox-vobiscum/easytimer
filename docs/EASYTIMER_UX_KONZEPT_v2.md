@@ -6,6 +6,7 @@
 **Release:** UX-001 unified duration selection and continuous time budget are implemented and approved for production.
 **Release:** UX-002 contextual duration controls and layout polish are approved for production; the UX-001 engine and budget semantics are unchanged.
 **Release:** UX-006 universal preferences menu is implemented and approved for production.
+**Release:** UX-007 responsive timer stage consolidates Standard and Presentation layouts; the shared timing engine is unchanged.
 **Supersedes:** `EASYTIMER_UX_KONZEPT_v1.md`
 **Repository:** https://github.com/nox-vobiscum/easytimer
 **Production:** https://et.rbsnet.at/
@@ -107,12 +108,12 @@ The UI does not label this timer as “Quick Timer”: there is only one timer a
 
 **Fullscreen / presentation view**
 
-- One prominent `Fullscreen` / `Exit fullscreen` action.
+- One direct `Fullscreen` / `Exit fullscreen` action on desktop and tablet. Smartphones hide this control in both orientations.
 - Prefer the standard Fullscreen API where supported, with an acceptable full-viewport CSS fallback when necessary; never promise browser capabilities that are not available on a device.
 - The digits occupy **as much of the available screen as practical**, remaining fully visible without clipping. Very strong contrast, minimal chrome.
 - Only the smallest required controls remain accessible: the contextual primary action, Stop when applicable, all four additions, and Exit fullscreen. Keep them near an edge, subordinate to the clock. Reveal-on-interaction is acceptable, but keyboard and touch users must not be locked out.
 - Header navigation and footer disappear or become visually irrelevant while presenting.
-- On a mobile device, **landscape orientation should automatically favor a nearly time-only layout**, even without fullscreen permission; portrait restores the normal mobile view. Rotation never changes timer state.
+- On a smartphone, landscape automatically activates Presentation without requesting native fullscreen; portrait restores Standard. Tablet landscape remains Standard until explicit Presentation entry. Rotation never changes timer state.
 - A slim (few-pixel) bottom-edge progress indicator visually differentiates elapsed and remaining fractions. Initial styling: soft pastel green for elapsed, pastel red/pink for remaining, with a small moving boundary marker. If the marker moves right-to-left, assign remaining to its left and elapsed to its right to keep the visual meaning consistent. No settings or custom colors now.
 
 ### Explicit MVP exclusions
@@ -224,14 +225,18 @@ The dropdown uses existing theme tokens, visible Language/Appearance headings, n
 
 The time should occupy most of the room display. No standard navigation or dense toolbar competes with it.
 
-Production retains a small, nearly opaque easyTimer stopwatch-and-wordmark identity at the safe top-left edge in native fullscreen and the expanded-view fallback. It is independent of the standard header and does not appear in the automatic mobile-landscape presentation.
+UX-007 retains a small, nearly opaque easyTimer stopwatch-and-wordmark identity at the safe top-left edge in every Presentation, including automatic smartphone landscape. It is independent of the hidden standard header. The universal menu stays upper-right; desktop/tablet keep a distinct, unobtrusive 44 px exit immediately left of it. Smartphones have no Presentation toggle.
+
+Both layout families share one CSS-sized timer stage above the existing control region. The clock uses the stage's available width and height after actual control rows are accommodated, with room for status and overtime. READY presets remain accessible; hiding them frees space for a larger active clock without obsolete fixed preset reserves. Standard retains the sticky budget/progress dock above its scroll-reachable footer; Presentation has no footer and keeps that dock at the usable bottom edge. Very short views can scroll rather than overlap or clip essential controls.
+
+Smartphone classification is deliberately small: `(any-pointer: coarse)` plus a short screen side below 600 CSS px. Viewport orientation then selects smartphone Presentation. A narrow tablet split view retains tablet-sized screen dimensions and therefore does not become a smartphone. Very small tablets, foldable configurations, external displays and browser/zoom-dependent screen reporting cannot be perfectly classified without brittle device detection; those are explicit acceptance edge cases. No separate iOS/PWA mode or user-agent detection is introduced.
 
 ### 4.3 Mobile landscape
 
 - Nearly time-only presentation with appropriately enlarged digits.
 - Essential actions and all four additions remain directly visible with keyboard/touch access. Compact control rows and a safe-area-aware budget line reserve space below the digits.
 - Reverting to portrait restores the standard mobile control layout.
-- Installed iPhone PWA presentation respects display safe areas. Countdown placement is visually and geometrically centered between the localized status and bottom action area.
+- Installed iPhone PWA presentation respects display safe areas. Countdown and status are centered within the usable timer stage above the controls; branding and the universal menu remain visible at the top edge.
 
 ### 4.4 Progress strip
 

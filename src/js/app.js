@@ -42,7 +42,13 @@ let expanded = false;
 let fullscreenRequested = false;
 let fullscreenRequestId = 0;
 let menuOpen = false;
-const landscape = matchMedia('(orientation: landscape) and (max-height: 600px) and (pointer: coarse)');
+const landscape = matchMedia('(orientation: landscape)');
+const coarsePointer = matchMedia('(any-pointer: coarse)');
+function isSmartphone() {
+    // Screen dimensions distinguish phones from tablet split views; viewport size alone cannot.
+    const shortSide = Math.min(screen.width, screen.height);
+    return coarsePointer.matches && shortSide > 0 && shortSide < 600;
+}
 
 function setMenuOpen(open, restoreFocus = false) {
     const focusWasInside = $('preferences').contains(document.activeElement);
@@ -56,13 +62,24 @@ function setMenuOpen(open, restoreFocus = false) {
 }
 
 function updatePresentation() {
-    const roomPresentation = Boolean(document.fullscreenElement) || expanded;
-    document.body.classList.toggle('presentation', roomPresentation || landscape.matches);
+    const phone = isSmartphone();
+    if (phone && (expanded || document.fullscreenElement)) {
+        fullscreenRequestId += 1;
+        fullscreenRequested = false;
+        expanded = false;
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }
+    const roomPresentation = !phone && (Boolean(document.fullscreenElement) || expanded);
+    document.body.dataset.device = phone ? 'smartphone' : 'desktop-tablet';
+    $('fullscreen').hidden = phone;
+    if (phone && document.activeElement === $('fullscreen')) $('menu-toggle').focus({ preventScroll: true });
+    document.body.classList.toggle('presentation', roomPresentation || (phone && landscape.matches));
     document.body.classList.toggle('room-presentation', roomPresentation);
     render();
 }
 
 async function toggleFullscreen() {
+    if (isSmartphone()) return;
     const requestId = ++fullscreenRequestId;
     if (document.fullscreenElement) {
         fullscreenRequested = false;
@@ -217,6 +234,7 @@ document.addEventListener('fullscreenchange', () => {
     updatePresentation();
 });
 landscape.addEventListener('change', updatePresentation);
+coarsePointer.addEventListener('change', updatePresentation);
 window.addEventListener('resize', updatePresentation);
 document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && menuOpen) {
