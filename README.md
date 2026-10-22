@@ -60,7 +60,7 @@ refresh callbacks never decrement the timer. Returning to a backgrounded page re
 Manual system-clock changes can affect a running countdown. Active countdowns are not restored after reload.
 Unavailable local storage falls back to in-memory preferences.
 
-The service worker is available only in secure contexts such as HTTPS or localhost. It precaches the static app shell after the first successful visit. Updating `CACHE_NAME` in `src/service-worker.js` activates a fresh cache and removes older easyTimer caches. A page reload still resets the timer because active countdown persistence is outside the current scope.
+The service worker is available only in secure contexts such as HTTPS or localhost. It precaches the static app shell after the first successful visit. Updating `CACHE_NAME` in `src/service-worker.js` activates a fresh cache and removes older easyTimer caches. Keep the CSS/app JavaScript version queries in `index.html` and the worker's `APP_SHELL` in sync with each release; this prevents new HTML from loading incompatible resources from an older worker. A page reload still resets the timer because active countdown persistence is outside the current scope.
 
 ## Validation
 

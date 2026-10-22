@@ -14,6 +14,11 @@ const server = createServer(async (req, res) => {
         if (!path.startsWith(root + '/') && !path.startsWith(root + '\\')) throw new Error('Invalid path');
         const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
         res.writeHead(200, { 'Content-Type': mime[extname(path)] || 'text/plain' });
+        // A previous service worker may still serve stale files at unversioned URLs.
+        if (!new URL(req.url, 'http://localhost').searchParams.has('v')) {
+            if (requestPath === '/js/app.js') return res.end('throw new Error("Stale unversioned app resource loaded");');
+            if (requestPath === '/css/styles.css') return res.end('#preferences { display:none !important; }');
+        }
         res.end(await readFile(path));
     } catch { res.writeHead(404); res.end(); }
 });
@@ -72,7 +77,20 @@ try {
     async function checkMenu(state) {
         const before=await evaluate(`({status:document.querySelector('#status').textContent,time:document.querySelector('#time').textContent,budget:document.querySelector('#time-budget').textContent,presentation:document.body.classList.contains('presentation')})`);
         assert.equal(await evaluate(`document.querySelectorAll('#menu-toggle').length===1&&document.querySelectorAll('#preferences').length===1&&document.querySelectorAll('button[data-language]').length===2&&document.querySelectorAll('button[data-theme]').length===3`),true,'One shared menu and preferences');
-        await click('#menu-toggle');
+        const point=await evaluate(`(()=>{const button=document.querySelector('#menu-toggle');const r=button.getBoundingClientRect();const x=r.left+r.width/2,y=r.top+r.height/2;return {x,y,hit:button.contains(document.elementFromPoint(x,y)),touch:matchMedia('(pointer:coarse)').matches&&!document.fullscreenElement}})()`);
+        assert.equal(point.hit,true,'Menu is hit-testable at its visible center');
+        if(point.touch) {
+            // Send the complete tap before waiting for compositor acknowledgements.
+            await Promise.all([
+                cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:point.x,y:point.y}]}),
+                cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]}),
+                cdp('Page.captureScreenshot',{format:'png'}),
+            ]);
+            await delay(100);
+        } else {
+            await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x:point.x,y:point.y,button:'left',clickCount:1});
+            await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x,y:point.y,button:'left',clickCount:1});
+        }
         const geometry=await evaluate(`(()=>{const trigger=document.querySelector('#menu-toggle').getBoundingClientRect();const panel=document.querySelector('#preferences').getBoundingClientRect();const fullscreen=document.querySelector('#fullscreen').getBoundingClientRect();return {expanded:document.querySelector('#menu-toggle').getAttribute('aria-expanded'),visible:!document.querySelector('#preferences').hidden,triggerFits:trigger.width>=44&&trigger.height>=44&&trigger.left>=0&&trigger.top>=0&&trigger.right<=innerWidth&&trigger.bottom<=innerHeight,panelFits:panel.left>=0&&panel.right<=innerWidth&&panel.top>=trigger.bottom&&panel.bottom<=innerHeight,noCollision:trigger.right<=fullscreen.left||fullscreen.right<=trigger.left||trigger.bottom<=fullscreen.top||fullscreen.bottom<=trigger.top}})()`);
         assert.ok(geometry.expanded==='true'&&geometry.visible&&geometry.triggerFits&&geometry.panelFits&&geometry.noCollision,JSON.stringify(geometry));
         if(process.env.EASYTIMER_SCREENSHOT_DIR&&state==='PAUSED') {
@@ -104,6 +122,8 @@ try {
     }
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=13'&&js==='js/app.js?v=13'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>source.includes("'./css/styles.css?v=13'")&&source.includes("'./js/app.js?v=13'"))`),true,'Worker precaches the same versioned resources as HTML');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');

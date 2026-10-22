@@ -1,9 +1,9 @@
-const CACHE_NAME = 'easytimer-shell-v12';
+const CACHE_NAME = 'easytimer-shell-v13';
 const APP_SHELL = [
     './',
     './index.html',
-    './css/styles.css',
-    './js/app.js',
+    './css/styles.css?v=13',
+    './js/app.js?v=13',
     './js/timer.mjs',
     './manifest.webmanifest',
     './assets/branding/favicon.ico',
