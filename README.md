@@ -8,6 +8,8 @@ ST-001 adds a local Session Planner workspace for reusable workshop templates. I
 
 ## Current release
 
+The latest deployed ST-001 increment is [516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4), released on 2026-10-23 with PWA shell v22. It includes compact phase rows, shared exact-position reordering, one empty 10-minute phase in new drafts, and the final compact popover with direction SVGs. Release verification passed all 27 unit tests, focused Planner browser checks and the complete browser regression. The FTP deployment succeeded and the served HTML/CSS/JavaScript/service worker matched the tested release. Native iOS Safari/PWA and screen-reader checks remain open; automated Chromium checks do not establish their completion.
+
 UX-004: the browser tab title shows remaining time while running, adds a pause marker while paused, and shows signed overtime after expiry. READY uses `easyTimer`. Existing deadline-based updates correct the title when browser execution resumes; background updates can be throttled by the browser.
 
 - One timer with Start, Pause, Resume, New Run and Stop. UX-003 removes the dedicated Restart UI; Stop is hidden in READY.
@@ -51,6 +53,8 @@ Then open `http://localhost:8000`. No build, package installation or backend is 
 - `src/css/styles.css`: appearance tokens, safe areas, responsive views and universal preferences menu.
 - `src/js/timer.mjs`: DOM-independent state transitions and duration validation.
 - `src/js/app.js`: browser events, rendering, DE/EN resources and preference persistence.
+- `src/js/planner.js`: localized template library/editor, isolated draft UI and shared repositioning popover.
+- `src/js/templates.mjs`: template validation, cloning, stable-ID reordering and protected local storage.
 - `src/manifest.webmanifest`: install metadata and app icon declarations.
 - `src/service-worker.js`: versioned same-origin app-shell cache and offline navigation fallback.
 - `src/assets/branding/stopwatch-header-standard-96.png`: light header identity at 3x display resolution.
@@ -77,8 +81,11 @@ node --test tests/timer.test.mjs
 node --test tests/templates.test.mjs
 node --check src/js/app.js
 node --check src/js/timer.mjs
+node --check src/js/planner.js
+node --check src/js/templates.mjs
 node --check src/service-worker.js
 node --check tests/browser-check.mjs
+node --check tests/planner-browser.mjs
 ```
 
 The optional browser check uses an installed Chromium-based browser and Node's built-in WebSocket:
@@ -134,7 +141,7 @@ Field validation retains the failing input's identity and localized feedback ass
 
 Run both unit suites and `node tests/browser-check.mjs`; the latter includes `tests/planner-browser.mjs`. Manual acceptance: create two templates, edit/reorder/remove phases, cancel a changed draft, reload, delete with confirmation, test two-tab conflicting saves, and verify feedback for blocked storage. Check DE/EN and Light/Dark/System at desktop, tablet split view, phone portrait and landscape. Let Quick Timer run into overtime while editing and return; verify time, additions and title. Native iOS Safari/PWA keyboard, position picker, safe areas, fullscreen exit and screen-reader checks remain open for final release acceptance on actual hardware; Chromium emulation does not replace them.
 
-Next small portability increment: export the validated schema as JSON and import through the same validation, with explicit collision handling and confirmation before replacing any saved template. Import/export UI, Drive, authentication and Session Run remain future work.
+Potential portability increment: export the validated schema as JSON and import through the same validation, with explicit collision handling and confirmation before replacing any saved template. This is a candidate, not a scheduled or approved next task. Import/export UI, Drive, authentication and Session Run remain future work. See [the backlog](docs/BACKLOG.md) for discussed candidates and their status.
 
 ## Scope and delivery
 

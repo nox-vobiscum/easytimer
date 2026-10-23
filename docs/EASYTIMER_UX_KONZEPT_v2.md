@@ -12,7 +12,7 @@
 **Production:** https://et.rbsnet.at/
 **Language policy:** All repository text, code, identifiers, documentation, comments, UI copy, and agent prompts are in English. Product-owner conversation remains in German.
 
-> **Read this distinction first:** Production currently implements one basic countdown timer, subtle deadline-derived overtime, its responsive presentation, and an installable PWA shell. The remaining product vision and ET-001 decisions are future target behavior, not current functionality or automatic authorization for further implementation.
+> **Read this distinction first:** Production currently implements one basic countdown timer, subtle deadline-derived overtime, its responsive presentation, an installable PWA shell and the local ST-001 Session Planner for reusable workshop templates. The planner does not execute sessions. The remaining product vision and ET-001 decisions are future target behavior, not current functionality or automatic authorization for further implementation. German UI translation resources are an approved exception to the English repository-content policy.
 
 ---
 
@@ -296,9 +296,11 @@ MVP-01 and MVP-02 were delivered as bounded, separately reviewed changes. Later 
 
 ---
 
-## 6. Future product roadmap (NOT MVP scope)
+## 6. Session Planner foundation and future product roadmap (NOT MVP scope)
 
 ### ST-001 planning foundation
+
+**Delivery status:** The foundation and subsequent density/reordering, initial-phase and compact arrow-labeled popover refinements are deployed in [516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4) (2026-10-23, PWA shell v22). Functional/regression verification passed; native iOS Safari/PWA and screen-reader checks remain explicitly open. This delivered planning workspace is separate from the future Session Run described below. See [`BACKLOG.md`](BACKLOG.md) for unapproved future candidates.
 
 ST-001 introduces a functional Session Planner menu entry and a separate library/editor application view. It is a planning workspace, not a timer stage or Session Timer mode. Multiple reusable templates contain stable template/phase IDs, a workshop name, manual/automatic transition preference and ordered titled phases with integer-second planned durations. No session execution, transition events, active-phase state or workshop statistics are implemented.
 

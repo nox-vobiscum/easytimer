@@ -1,7 +1,8 @@
 # easyTimer — Future Backlog
 
 **Status:** Living idea backlog · **Prepared:** 2026-10-23  
-**Intended repository path:** `docs/backlog.md`  
+**Repository path:** `docs/BACKLOG.md`
+
 **Repository:** https://github.com/nox-vobiscum/easytimer
 
 ## Purpose and scope
@@ -18,6 +19,8 @@ Capture deferred product ideas and small quality-of-life improvements without lo
 **Priority terms:** `Candidate` = reasonable upcoming increment, not scheduled; `Later` = valuable but dependent on more important work; `Someday` = deliberately low priority; `Spike` = investigate feasibility before committing to an implementation. These are relative labels, not delivery promises.
 
 ## Ideas at a glance
+
+The ST-001 density/reordering, initial-phase default and final repositioning-popover polish shipped in [commit 516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4) on 2026-10-23 (PWA shell v22). They are delivered functionality, not pending backlog items. Native iOS Safari/PWA and screen-reader acceptance checks remain open as documented in the [README](../README.md#st-001-session-planner).
 
 | ID | Idea | Priority | Main dependency / note |
 | --- | --- | --- | --- |
@@ -148,5 +151,5 @@ Consider user-configurable colors, progress-bar treatment/visibility, informatio
 - When an idea is approved, move detailed requirements and acceptance criteria into that increment's plan; leave a short link/status here.
 - If implemented, mark the item delivered and point to the commit/release/docs, or archive it rather than continuing to describe it as future work.
 - Keep accepted product rules in `EASYTIMER_UX_KONZEPT_v2.md`; avoid copying its full ET-001 decision register here.
-- **The current ST-001 density/reordering increment and the already-requested “prepopulate first phase” fix are active work, not backlog candidates.** Reconcile this document with their final implementation before adding it to the repository.
+- Keep delivered ST-001 functionality separate from future planner improvements; direct insertion at a chosen position (PLAN-001) remains unimplemented.
 - Changes to code, branches, commits, pushes, merges, or deployment always require explicit owner approval.

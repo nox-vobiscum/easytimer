@@ -4,6 +4,8 @@
 **Repository:** https://github.com/nox-vobiscum/easytimer  
 **Production:** https://et.rbsnet.at/
 
+**Latest deployed ST-001 increment:** [516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4), 2026-10-23, PWA shell v22. Compact phase rows, shared repositioning, new-template first-phase defaults and final popover polish are delivered. Release validation passed 27 unit tests, focused Planner checks and the complete browser regression; the FTP deployment succeeded and served app files matched the tested release. Native iOS Safari/PWA and screen-reader acceptance remains open.
+
 ## 1. Current product
 
 easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The release includes subtle overtime, unified presets, continuous time-budget extensions, and a persistent budget line. Session timing, ad-hoc timing, alarms, and user-configurable presentation settings remain future scope.
@@ -81,6 +83,8 @@ Service-worker shell v22 includes both planner modules with versioned URLs. Run 
 - `src/manifest.webmanifest`: install metadata and app icon declarations.
 - `src/service-worker.js`: versioned offline app-shell cache.
 - `tests/timer.test.mjs`: deterministic timer transition and formatting tests.
+- `tests/templates.test.mjs`: template validation, isolated drafts, exact-position reordering and storage safeguards.
+- `tests/planner-browser.mjs`: Planner creation/edit/save/cancel, initial phase, localization, validation, storage conflicts, responsive layouts and repositioning interactions; invoked by the browser check.
 - `tests/browser-check.mjs`: Chromium regression test for UI, timing, accessibility-related geometry, fullscreen/fallback behavior, mobile layouts, PWA registration, and offline reload.
 
 The timer object is the single authoritative state source. It contains status, planned duration (`durationMs`), cumulative post-start additions (`adjustmentMs`), remaining milliseconds, a deadline, and deadline-derived overtime. `timeBudget` derives effective total and elapsed active time (excluding pauses); rendering and browser presentation do not own independent timer state.
@@ -96,11 +100,14 @@ python -m http.server 8000 --directory src
 Run the dependency-free checks with Node.js 22 or newer:
 
 ```sh
-node --test tests/timer.test.mjs
+node --test tests/timer.test.mjs tests/templates.test.mjs
 node --check src/js/app.js
 node --check src/js/timer.mjs
+node --check src/js/planner.js
+node --check src/js/templates.mjs
 node --check src/service-worker.js
 node --check tests/browser-check.mjs
+node --check tests/planner-browser.mjs
 node tests/browser-check.mjs
 ```
 
@@ -123,6 +130,8 @@ The production workflow currently uploads the static repository contents. There 
 `docs/EASYTIMER_UX_KONZEPT_v2.md` is the canonical product and UX direction. Its 56 ET-001 decisions describe accepted long-term behavior, not current production functionality and not automatic authorization to implement future features.
 
 Future work may include subtraction controls, manual duration entry, session timing, ad-hoc timing, signals, restoration, and customization. Each next feature requires a bounded plan and explicit approval.
+
+[`BACKLOG.md`](BACKLOG.md) tracks discussed future candidates and their status; it does not select or authorize the next increment. The published ST-001 density/reordering and initial-phase improvements are complete, while insertion at a chosen position remains future scope.
 
 ## 10. Collaboration workflow
 
