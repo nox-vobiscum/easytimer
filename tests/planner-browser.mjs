@@ -28,12 +28,11 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await click('#menu-toggle'); await click('#open-planner');
     assert.equal(await evaluate(`document.querySelector('#template-name').value`), 'Workshop <safe>', 'Reopening navigation retains an unsaved draft');
     await action('Save'); assert.match(await text('.planner-feedback'), /at least one phase/);
-    await action('Add phase');
+    await action('+ Add phase');
     await field('.phase-list input[type="text"]', 'Introduction');
-    await field('.phase-list input[id$="-hours"]', '1');
-    await field('.phase-list input[id$="-minutes"]', '0');
+    await field('.phase-list input[id$="-minutes"]', '60');
     assert.match(await text('#planner-total'), /01:00:00/);
-    await action('Add phase');
+    await action('+ Add phase');
     await field('.phase-list li:last-child input[type="text"]', 'Discussion');
     const ids = await evaluate(`Array.from(document.querySelectorAll('.phase-list li')).map(el=>el.dataset.phaseId)`);
     await click('.phase-list li:last-child [data-direction="-1"]');
@@ -49,9 +48,17 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     assert.equal(await evaluate(`document.querySelector('#template-name').value`), 'Discard this');
     await evaluate('window.acceptConfirm=true'); await action('Cancel');
     assert.equal((await stored()).templates[0].name, 'Workshop <safe>');
-    await action('Create template'); await field('#template-name', 'Second workshop'); await action('Add phase');
+    await action('Create template'); await field('#template-name', 'Second workshop'); await action('+ Add phase');
     await field('.phase-list input[type="text"]', 'Opening');
-    await evaluate(`document.querySelector('#template-transition').value='automatic';document.querySelector('#template-transition').dispatchEvent(new Event('change'));`);
+    await evaluate(`document.querySelector('#transition-manual').focus()`);
+    await cdp('Input.dispatchKeyEvent', { type:'keyDown', key:'ArrowRight', code:'ArrowRight', windowsVirtualKeyCode:39 });
+    await cdp('Input.dispatchKeyEvent', { type:'keyUp', key:'ArrowRight', code:'ArrowRight', windowsVirtualKeyCode:39 });
+    assert.equal(await evaluate(`document.querySelector('#transition-automatic').checked&&document.activeElement.id==='transition-automatic'`), true, 'Native radio keyboard navigation selects Automatic');
+    await click('[data-language="de"]');
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.transition-choice span')).map(el=>el.textContent)`), ['Manuell','Automatisch']);
+    assert.equal(await evaluate(`document.querySelector('#transition-automatic').checked`), true);
+    await click('[data-language="en"]');
+    assert.equal(await evaluate(`document.activeElement.id`), 'transition-automatic', 'A language change restores radio focus without text-selection errors');
     await action('Save');
     assert.equal((await stored()).templates.length, 2);
     assert.equal((await stored()).templates[1].transitionMode, 'automatic');
@@ -70,14 +77,14 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     assert.match(await text('.template-library'), /Changed elsewhere/);
     await action('Edit');
     await field('#template-name', 'Renamed workshop');
-    await field('.phase-list input[id$="-seconds"]', '60');
-    await action('Save'); assert.match(await text('.planner-feedback'), /positive phase duration/);
-    assert.equal(await evaluate(`document.activeElement.id.endsWith('-seconds')&&document.activeElement.getAttribute('aria-invalid')==='true'`), true, 'Validation focuses the invalid duration field');
+    await field('.phase-list input[id$="-minutes"]', '6001');
+    await action('Save'); assert.match(await text('.planner-feedback'), /whole number/);
+    assert.equal(await evaluate(`document.activeElement.id.endsWith('-minutes')&&document.activeElement.getAttribute('aria-invalid')==='true'`), true, 'Validation focuses the invalid duration field');
     assert.equal((await stored()).templates[0].name, 'Workshop <safe>');
-    await field('.phase-list input[id$="-seconds"]', '0');
-    await action('Add phase');
+    await field('.phase-list input[id$="-minutes"]', '10');
+    await action('+ Add phase');
     await field('.phase-list li:last-child input[type="text"]', 'Temporary phase');
-    await evaluate(`Array.from(document.querySelectorAll('.phase-list li:last-child button')).find(b=>b.textContent==='Remove phase').click()`);
+    await click('.phase-list li:last-child .phase-actions button:last-child');
     assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 2);
     assert.equal(await evaluate(`document.activeElement.classList.contains('add-phase')`), true);
     // Check desktop, tablet, portrait and short landscape while editing the same draft.
@@ -139,7 +146,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     const validRaw = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     await evaluate(`localStorage.setItem('easyTimerTemplates','{broken')`);
     await action('Reload saved templates'); assert.match(await text('.planner-feedback'), /invalid/);
-    await action('Create template'); await field('#template-name', 'Blocked'); await action('Add phase'); await field('.phase-list input[type="text"]', 'Phase'); await action('Save');
+    await action('Create template'); await field('#template-name', 'Blocked'); await action('+ Add phase'); await field('.phase-list input[type="text"]', 'Phase'); await action('Save');
     assert.match(await text('.planner-feedback'), /before saving/);
     assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`), '{broken');
     await action('Cancel');
@@ -159,7 +166,98 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     assert.equal(await evaluate('document.activeElement.id'), 'menu-toggle');
     await evaluate(`window.confirm=window.originalConfirm;Date.now=window.plannerRealNow`);
     await checkPlannerCorrections({ evaluate, click, text, cdp });
+    await checkCompactPlanner({ evaluate, click, text, cdp });
     console.log('PASS: Session Planner creation/edit/reorder/save/cancel/delete, storage protection, responsive themes/localization/focus, fullscreen exit and uninterrupted Quick Timer.');
+}
+
+async function checkCompactPlanner({ evaluate, click, text, cdp }) {
+    const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
+    const field = (selector, value) => evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+    await evaluate(`localStorage.setItem('easyTimerTemplates',JSON.stringify({schemaVersion:1,templates:[
+        {id:'compact',name:'W'.repeat(120),transitionMode:'manual',phases:Array.from({length:12},(_,i)=>({id:'compact-'+i,title:'Phase '+(i+1)+' '+ 'T'.repeat(110),durationSeconds:900}))},
+        {id:'hundred',name:'100 hours',transitionMode:'manual',phases:[{id:'hundred-phase',title:'Long phase',durationSeconds:360000}]},
+        {id:'thousand',name:'1000 hours',transitionMode:'manual',phases:Array.from({length:10},(_,i)=>({id:'thousand-'+i,title:'Phase '+i,durationSeconds:360000}))}
+    ]}));window.compactConfirm=window.confirm;window.confirm=()=>true;`);
+    try {
+        await click('#menu-toggle'); await click('#open-planner');
+        assert.match(await text('.template-library li:nth-child(2)'), /100:00:00/);
+        assert.match(await text('.template-library li:nth-child(3)'), /1000:00:00/);
+        await action('Edit');
+        assert.equal(await evaluate(`document.querySelectorAll('.phase-duration input').length`), 12);
+        assert.equal(await evaluate(`document.querySelectorAll('.phase-list input').length`), 24, 'One title and one minute input per phase');
+        await evaluate(`window.compactInput=document.querySelector('.phase-title input');window.compactTitle=window.compactInput.value;window.compactInput.focus();window.compactInput.setSelectionRange(5,9)`);
+        await cdp('Input.insertText', { text:'edit' });
+        assert.equal(await evaluate(`document.activeElement===window.compactInput&&document.activeElement.selectionStart===9`), true, 'Typing preserves the input node and cursor');
+        await click('[data-theme="dark"]');
+        assert.equal(await evaluate(`document.activeElement===window.compactInput`), true, 'Theme changes retain the focused input');
+        await click('[data-language="de"]');
+        assert.equal(await evaluate(`document.activeElement.id===window.compactInput.id&&document.activeElement.selectionStart===9&&document.activeElement.selectionEnd===9`), true, 'Language changes preserve the cursor');
+        await click('[data-language="en"]');
+        await field('.phase-title input', await evaluate('window.compactTitle'));
+        const profiles = [
+            [1920,1080,1920,1080,false],[1280,720,1280,720,false],[1024,768,1024,768,false],
+            [500,720,1280,800,false],[768,1024,768,1024,true],[1024,768,768,1024,true],
+            [390,600,768,1024,true],[390,844,390,844,true],[320,568,320,568,true],[844,390,390,844,true],
+        ];
+        for (const [width,height,screenWidth,screenHeight,touch] of profiles) {
+            await cdp('Emulation.setTouchEmulationEnabled', { enabled:touch });
+            await cdp('Emulation.setDeviceMetricsOverride', { width,height,screenWidth,screenHeight,mobile:touch,deviceScaleFactor:1 });
+            for (const lang of ['de','en']) {
+                await click(`[data-language="${lang}"]`);
+                for (const theme of ['light','dark','system']) {
+                    await click(`[data-theme="${theme}"]`);
+                    const geometry = await evaluate(`(()=>{const row=document.querySelector('.phase-list li');const title=row.querySelector('.phase-title input').getBoundingClientRect();const duration=row.querySelector('.phase-duration input').getBoundingClientRect();const actions=row.querySelector('.phase-actions').getBoundingClientRect();return {overflow:document.documentElement.scrollWidth>innerWidth,presentation:document.body.classList.contains('presentation'),width:document.querySelector('#planner').getBoundingClientRect().width,rowHeight:row.getBoundingClientRect().height,aligned:Math.abs(title.top-duration.top)<1&&Math.abs(title.top-actions.top)<1,noOverlap:[title,duration,actions].every((a,i,all)=>all.slice(i+1).every(b=>a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)),fit:Array.from(document.querySelectorAll('#planner input,#planner select,#planner button')).every(el=>{const r=el.getBoundingClientRect();return r.height>=44&&r.left>=0&&r.right<=innerWidth}),icons:Array.from(document.querySelectorAll('.phase-actions button')).every(el=>{const r=el.getBoundingClientRect();return r.width>=44&&el.querySelector('svg')&&el.getAttribute('aria-label')&&el.title}),labels:Array.from(document.querySelectorAll('#planner input')).every(input=>input.labels.length>0)};})()`);
+                    assert.equal(geometry.overflow, false, `No overflow at ${width}x${height} ${lang}/${theme}`);
+                    assert.equal(geometry.presentation, false);
+                    assert.equal(geometry.fit && geometry.icons && geometry.labels && geometry.noOverlap, true, JSON.stringify(geometry));
+                    if (geometry.width > 672) { assert.equal(geometry.aligned, true); assert.ok(geometry.rowHeight <= 72, 'Desktop phases use one compact row'); }
+                }
+                assert.equal(await evaluate(`document.querySelector('.phase-duration input').labels[0].textContent`), lang === 'de' ? 'Dauer (min)' : 'Duration (min)');
+                assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.transition-choice span')).map(el=>el.textContent)`), lang === 'de' ? ['Manuell','Automatisch'] : ['Manual','Automatic']);
+                assert.equal(await evaluate(`Array.from(document.querySelectorAll('.transition-choice')).length===2&&Array.from(document.querySelectorAll('.transition-choice')).every(el=>{const r=el.getBoundingClientRect();return r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth})&&document.querySelectorAll('.transition-choice input:checked').length===1`), true, 'Both radio options remain visible with touch targets');
+                assert.equal(await text('.add-phase'), lang === 'de' ? '+ Phase hinzufügen' : '+ Add phase');
+                const polish = await evaluate(`(()=>{const input=document.querySelector('#template-name');const label=input.labels[0].querySelector('span').getBoundingClientRect();const field=input.getBoundingClientRect();const back=document.querySelector('.planner-back');const arrow=back.querySelector('svg');return {gap:field.top-label.bottom,segmentWidth:document.querySelector('.transition-options').getBoundingClientRect().width,backText:back.textContent,decorative:arrow?.getAttribute('aria-hidden')==='true'&&arrow.getAttribute('focusable')==='false',arrowFirst:arrow?.getBoundingClientRect().right<=back.querySelector('span').getBoundingClientRect().left};})()`);
+                assert.ok(polish.gap >= 7.5 && polish.gap <= 8.5, 'Workshop label leaves space for the focus outline');
+                assert.ok(polish.segmentWidth < 230, 'Transition choices stay content-sized');
+                assert.equal(polish.backText, lang === 'de' ? 'Zurück zum Timer' : 'Back to timer');
+                assert.equal(polish.decorative && polish.arrowFirst, true, 'Back arrow precedes the unchanged localized label');
+            }
+            assert.equal(await evaluate(`document.querySelector('.phase-actions button[data-direction="-1"]').disabled`), true);
+            assert.equal(await evaluate(`document.querySelector('.phase-list li:last-child button[data-direction="1"]').disabled`), true);
+            if (process.env.EASYTIMER_SCREENSHOT_DIR) {
+                await evaluate('scrollTo(0,0)');
+                const screenshot = await cdp('Page.captureScreenshot', { format:'png' });
+                await writeFile(join(process.env.EASYTIMER_SCREENSHOT_DIR, `planner-compact-${width}-${height}.png`), Buffer.from(screenshot.data,'base64'));
+            }
+            console.log(`Compact planner ${width}x${height}: ${await evaluate(`document.querySelector('.phase-list li').getBoundingClientRect().height`)} px per phase`);
+        }
+        const original = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
+        for (const [minutes,total] of [['1','02:46:00'],['90','04:15:00'],['180','05:45:00'],['6000','102:45:00']]) {
+            await field('.phase-duration input', minutes); assert.match(await text('#planner-total'), new RegExp(total));
+        }
+        await field('.phase-duration input',''); await action('Save');
+        assert.match(await text('.planner-feedback'), /whole number/);
+        await click('[data-language="de"]');
+        assert.equal(await evaluate(`document.querySelector('.phase-duration input').value`), '', 'Incomplete minutes survive language changes');
+        assert.equal(await evaluate(`document.querySelector('.phase-duration input').getAttribute('aria-describedby')`), 'planner-feedback');
+        await click('[data-language="en"]'); await action('Cancel');
+        assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`), original);
+        await click('.template-library li:nth-child(2) button:first-child');
+        assert.equal(await evaluate(`document.querySelector('.phase-duration input').value`), '6000');
+        assert.match(await text('#planner-total'), /100:00:00/);
+        await action('Cancel'); await click('.template-library li:nth-child(3) button:first-child');
+        assert.match(await text('#planner-total'), /1000:00:00/);
+        await action('+ Add phase'); await field('.phase-list li:last-child .phase-title input','Over limit'); await action('Save');
+        assert.match(await text('.planner-feedback'), /60,000/);
+        assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`), original, 'An excessive total never overwrites valid data');
+        await action('Cancel'); await action('Back to timer');
+    } finally {
+        await evaluate(`window.confirm=window.compactConfirm;localStorage.setItem('easyTimerTemplates',${JSON.stringify(baseline)})`);
+        await cdp('Emulation.setTouchEmulationEnabled', { enabled:false });
+        await cdp('Emulation.setDeviceMetricsOverride', { width:1280,height:800,screenWidth:1280,screenHeight:800,mobile:false,deviceScaleFactor:1 });
+    }
+    console.log('PASS: compact phase rows, twelve long titles, minute limits, 100/1000-hour totals, cursor preservation and responsive themes/languages.');
 }
 
 async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
@@ -185,7 +283,7 @@ async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
         await open();
         for (const title of ['First phase', 'Second phase']) {
             await action('Create template'); await field('#template-name', 'Duplicate workshop');
-            await action('Add phase'); await field('.phase-list input[type="text"]', title); await action('Save');
+            await action('+ Add phase'); await field('.phase-list input[type="text"]', title); await action('Save');
         }
         let library = await stored();
         const first = library.templates[offset]; const second = library.templates[offset + 1];
@@ -198,9 +296,10 @@ async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
         for (const [selector, invalid, valid, messages] of [
             ['#template-name', '', first.name, ['workshop name', 'Workshopnamen']],
             ['.phase-list input[type="text"]', '', first.phases[0].title, ['phase needs a title', 'benötigt einen Titel']],
-            ['.phase-list input[id$="-hours"]', '100', '0', ['positive phase duration', 'positive Phasendauer']],
-            ['.phase-list input[id$="-minutes"]', '60', '10', ['positive phase duration', 'positive Phasendauer']],
-            ['.phase-list input[id$="-seconds"]', '60', '0', ['positive phase duration', 'positive Phasendauer']],
+            ['.phase-list input[id$="-minutes"]', '6001', '10', ['whole number', 'ganze Zahl']],
+            ['.phase-list input[id$="-minutes"]', '0', '10', ['whole number', 'ganze Zahl']],
+            ['.phase-list input[id$="-minutes"]', '1.5', '10', ['whole number', 'ganze Zahl']],
+            ['.phase-list input[id$="-minutes"]', '1e2', '10', ['whole number', 'ganze Zahl']],
         ]) {
             await field(selector, invalid); await action('Save');
             const id = await evaluate(`document.querySelector(${JSON.stringify(selector)}).id`);
@@ -221,16 +320,16 @@ async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
         await field('.phase-list input[id$="-minutes"]', '010');
         await field('#template-name', '  Duplicate workshop  ');
         await field('.phase-list input[type="text"]', '  First phase  ');
-        await evaluate(`document.querySelector('#template-transition').value='automatic';document.querySelector('#template-transition').dispatchEvent(new Event('change'));document.querySelector('#template-transition').value='manual';document.querySelector('#template-transition').dispatchEvent(new Event('change'));window.confirmMessages=[];window.acceptConfirm=false;`);
+        await evaluate(`document.querySelector('#template-transition').value='automatic';document.querySelector('#template-transition').dispatchEvent(new Event('change'));document.querySelector('#transition-manual').click();window.confirmMessages=[];window.acceptConfirm=false;`);
         await action('Cancel');
         assert.equal(await evaluate('window.confirmMessages.length'), 0, 'Reverted and normalized values do not request discard');
         assert.equal(await evaluate(`Boolean(document.querySelector('#template-name'))`), false);
         assert.deepEqual(await stored(), library);
-        await editFirst(); await field('.phase-list input[id$="-hours"]', '');
+        await editFirst(); await field('.phase-list input[id$="-minutes"]', '');
         await action('Back to timer');
         assert.equal(await evaluate('window.confirmMessages.length'), 1, 'Incomplete duration edits still require confirmation');
-        assert.equal(await evaluate(`document.querySelector('.phase-list input[id$="-hours"]').value`), '');
-        await field('.phase-list input[id$="-hours"]', '00');
+        assert.equal(await evaluate(`document.querySelector('.phase-list input[id$="-minutes"]').value`), '');
+        await field('.phase-list input[id$="-minutes"]', '0010');
         await action('Back to timer');
         assert.equal(await evaluate('window.confirmMessages.length'), 1, 'Restoring the original duration removes the dirty state');
         await reload(); await mockConfirmation(); await open();

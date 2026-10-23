@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDraft, createTemplateStore, MAX_PHASE_SECONDS, MAX_TOTAL_SECONDS, movePhase, phaseDuration, STORAGE_KEY, totalDuration, validateLibrary, validateTemplate } from '../src/js/templates.mjs';
+import { createTimer } from '../src/js/timer.mjs';
 
 const template = () => ({ id: 'workshop-1', name: ' Workshop ', transitionMode: 'manual', phases: [
     { id: 'phase-1', title: ' Introduction ', durationSeconds: 600 },
@@ -33,22 +34,28 @@ test('names, phase titles, phases, IDs and transition modes are validated', () =
     assert.throws(() => validateTemplate(duplicate), /invalidData/);
     assert.throws(() => validateLibrary({ schemaVersion: 1, templates: [template(), template()] }), /invalidData/);
 });
-test('duration fields reject incomplete, fractional, negative and out-of-range values', () => {
-    assert.equal(phaseDuration('1', '0', '0'), 3600);
-    assert.equal(phaseDuration('99', '59', '59'), MAX_PHASE_SECONDS);
-    for (const fields of [['', 1, 0], [0, 0, 0], [-1, 0, 0], [0, 60, 0], [0, 0, 60], [100, 0, 0], ['1.5', 0, 0], ['1e2', 0, 0], ['NaN', 0, 1]]) {
-        assert.throws(() => phaseDuration(...fields), /duration/);
+test('minute input accepts only positive integers up to 6000 without rounding', () => {
+    for (const minutes of [1, 5, 15, 45, 90, 180, 6000]) assert.equal(phaseDuration(String(minutes)), minutes * 60);
+    assert.equal(phaseDuration('0015'), 900);
+    assert.equal(phaseDuration('6000'), MAX_PHASE_SECONDS);
+    for (const minutes of ['', 0, -1, 6001, '1.5', '1e2', 'NaN', 'Infinity', '+5', ' 5', null, Number.MAX_SAFE_INTEGER]) {
+        assert.throws(() => phaseDuration(minutes), /duration/);
     }
-    for (const durationSeconds of [0, -1, 0.5, NaN, Infinity, '60', MAX_PHASE_SECONDS + 1]) {
+    for (const durationSeconds of [0, -1, 0.5, 1, 59, 61, NaN, Infinity, '60', MAX_PHASE_SECONDS + 60]) {
         assert.throws(() => totalDuration([{ durationSeconds }]), /duration/);
     }
 });
-test('safe total is derived and capped at 999:59:59', () => {
+test('safe workshop totals allow 1000 hours and reject another minute', () => {
     const phases = Array.from({ length: 10 }, (_, id) => ({ id: String(id), title: 'Phase', durationSeconds: MAX_PHASE_SECONDS }));
-    phases.push({ id: 'last', title: 'Last', durationSeconds: 9 });
     assert.equal(totalDuration(phases), MAX_TOTAL_SECONDS);
-    phases.at(-1).durationSeconds = 10;
+    assert.equal(MAX_TOTAL_SECONDS, 1000 * 3600);
+    phases.push({ id: 'last', title: 'Last', durationSeconds: 60 });
     assert.throws(() => totalDuration(phases), /totalLimit/);
+});
+test('workshop limits are independent of the existing Quick Timer limit', () => {
+    assert.equal(phaseDuration('6000'), 100 * 3600);
+    assert.equal(createTimer(359999000).durationMs, 359999000);
+    assert.throws(() => createTimer(360000000), /Invalid duration/);
 });
 test('draft editing, removal and cancellation never mutate saved templates', () => {
     const saved = template(); const before = structuredClone(saved);

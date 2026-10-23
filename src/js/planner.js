@@ -1,16 +1,16 @@
-import { createDraft, createTemplateStore, movePhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs';
+import { createDraft, createTemplateStore, movePhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=19';
 
 const copy = {
     en: {
         planner: 'Session Planner', back: 'Back to timer', create: 'Create template', empty: 'No workshop templates saved yet.',
         edit: 'Edit', remove: 'Delete', templateName: 'Workshop name', transition: 'Phase transitions', manual: 'Manual', automatic: 'Automatic',
         planningOnly: 'Planning only. Session execution is not available yet.', phases: 'Phases', phaseTitleLabel: 'Phase title',
-        hours: 'Hours', minutes: 'Minutes', seconds: 'Seconds', up: 'Move up', down: 'Move down', removePhase: 'Remove phase', add: 'Add phase',
+        durationLabel: 'Duration (min)', actions: 'Actions', up: 'Move up', down: 'Move down', removePhase: 'Remove phase', add: '+ Add phase',
         save: 'Save', cancel: 'Cancel', total: 'Total planned duration', phaseCount: count => `${count} phases`,
         deleteConfirm: name => `Delete “${name}”?`, discard: 'Discard unsaved changes?', reload: 'Reload saved templates', saved: 'Template saved.', deleted: 'Template deleted.',
         name: 'Enter a workshop name containing 1–120 characters.', phaseTitle: 'Each phase needs a title containing 1–120 characters.',
-        duration: 'Enter a positive phase duration: hours 0–99, minutes and seconds 0–59 (maximum 99:59:59).',
-        totalLimit: 'The total workshop duration cannot exceed 999:59:59.', phasesRequired: 'Add at least one phase.',
+        duration: 'Enter a whole number from 1 to 6,000 minutes.',
+        totalLimit: 'The total workshop duration cannot exceed 60,000 minutes (1000:00:00).', phasesRequired: 'Add at least one phase.',
         invalidData: 'Saved template data is invalid or uses an unsupported version. It has not been changed. Saving is blocked.',
         storageRead: 'Templates could not be read. Stored data has not been changed. Try reloading saved templates.',
         storageWrite: 'Saving failed. Your draft is still open; existing saved templates have not been replaced.',
@@ -21,12 +21,12 @@ const copy = {
         planner: 'Session-Planer', back: 'Zurück zum Timer', create: 'Vorlage erstellen', empty: 'Noch keine Workshop-Vorlagen gespeichert.',
         edit: 'Bearbeiten', remove: 'Löschen', templateName: 'Workshopname', transition: 'Phasenübergänge', manual: 'Manuell', automatic: 'Automatisch',
         planningOnly: 'Nur Planung. Sessions können noch nicht ausgeführt werden.', phases: 'Phasen', phaseTitleLabel: 'Phasentitel',
-        hours: 'Stunden', minutes: 'Minuten', seconds: 'Sekunden', up: 'Nach oben', down: 'Nach unten', removePhase: 'Phase entfernen', add: 'Phase hinzufügen',
+        durationLabel: 'Dauer (min)', actions: 'Aktionen', up: 'Nach oben', down: 'Nach unten', removePhase: 'Phase entfernen', add: '+ Phase hinzufügen',
         save: 'Speichern', cancel: 'Abbrechen', total: 'Geplante Gesamtdauer', phaseCount: count => `${count} Phasen`,
         deleteConfirm: name => `„${name}“ löschen?`, discard: 'Ungespeicherte Änderungen verwerfen?', reload: 'Gespeicherte Vorlagen neu laden', saved: 'Vorlage gespeichert.', deleted: 'Vorlage gelöscht.',
         name: 'Einen Workshopnamen mit 1–120 Zeichen eingeben.', phaseTitle: 'Jede Phase benötigt einen Titel mit 1–120 Zeichen.',
-        duration: 'Eine positive Phasendauer eingeben: Stunden 0–99, Minuten und Sekunden 0–59 (maximal 99:59:59).',
-        totalLimit: 'Die Workshop-Gesamtdauer darf 999:59:59 nicht überschreiten.', phasesRequired: 'Mindestens eine Phase hinzufügen.',
+        duration: 'Eine ganze Zahl von 1 bis 6.000 Minuten eingeben.',
+        totalLimit: 'Die Workshop-Gesamtdauer darf 60.000 Minuten (1000:00:00) nicht überschreiten.', phasesRequired: 'Mindestens eine Phase hinzufügen.',
         invalidData: 'Gespeicherte Vorlagen sind ungültig oder haben eine unbekannte Version. Sie bleiben unverändert. Speichern ist blockiert.',
         storageRead: 'Vorlagen konnten nicht gelesen werden. Gespeicherte Daten bleiben unverändert. Bitte erneut laden.',
         storageWrite: 'Speichern fehlgeschlagen. Der Entwurf bleibt geöffnet; bestehende Vorlagen wurden nicht ersetzt.',
@@ -68,6 +68,19 @@ export function createPlanner(root, onClose, initialLanguage) {
         node.addEventListener('click', handler);
         return node;
     }
+    function phaseAction(label, path, handler) {
+        const control = button('', handler);
+        control.setAttribute('aria-label', label);
+        control.title = label;
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        const mark = document.createElementNS(svg.namespaceURI, 'path');
+        mark.setAttribute('d', path);
+        svg.append(mark); control.append(svg);
+        return control;
+    }
     function applyFieldValidation(input) {
         if (input.id === invalidFieldId) {
             input.setAttribute('aria-invalid', 'true');
@@ -96,18 +109,19 @@ export function createPlanner(root, onClose, initialLanguage) {
     }
     function begin(template) {
         draft = createDraft(template);
+        draft.phases.forEach(phase => { phase.minutes = String(phase.durationSeconds / 60); });
         original = JSON.stringify(materialize());
         feedback('');
         render();
         root.querySelector('#template-name').focus();
     }
     function inputField(labelText, value, id, onInput, numeric = false) {
-        const label = element('label', labelText);
+        const label = element('label');
         const input = element('input');
         input.id = id;
         input.value = value;
-        input.type = numeric ? 'number' : 'text';
-        if (numeric) { input.min = '0'; input.max = id.endsWith('-hours') ? '99' : '59'; input.step = '1'; input.inputMode = 'numeric'; }
+        input.type = 'text';
+        if (numeric) { input.inputMode = 'numeric'; input.pattern = '[0-9]*'; input.required = true; }
         else { input.maxLength = 120; input.required = true; }
         applyFieldValidation(input);
         input.addEventListener('input', () => {
@@ -115,12 +129,12 @@ export function createPlanner(root, onClose, initialLanguage) {
             if (!invalidFieldId || invalidFieldId === input.id) feedback('');
             updateTotal();
         });
-        label.append(input);
+        label.append(element('span', labelText), input);
         return label;
     }
-    // Incomplete duration fields remain in the draft until Save validates them.
+    // Incomplete minute input remains in the isolated draft until Save validates it.
     function phaseSeconds(phase) {
-        try { return phase.fields ? phaseDuration(...phase.fields) : phase.durationSeconds; }
+        try { return phaseDuration(phase.minutes); }
         catch (e) { e.phaseId = phase.id; throw e; }
     }
     function materialize() {
@@ -150,10 +164,7 @@ export function createPlanner(root, onClose, initialLanguage) {
                 target = document.getElementById(`phase-${phase.id}-title`);
             }
             if (e.message === 'duration' && e.phaseId) {
-                const phase = draft.phases.find(p => p.id === e.phaseId);
-                const units = ['hours', 'minutes', 'seconds'];
-                const invalid = phase.fields.findIndex((v, i) => !/^\d+$/.test(v) || Number(v) > (i === 0 ? 99 : 59));
-                target = document.getElementById(`phase-${e.phaseId}-${units[Math.max(0, invalid)]}`);
+                target = document.getElementById(`phase-${e.phaseId}-minutes`);
             }
             feedback(e.message, true, target?.tagName === 'INPUT' ? target.id : null);
             target?.focus();
@@ -164,7 +175,10 @@ export function createPlanner(root, onClose, initialLanguage) {
         root.replaceChildren();
         const top = element('div', undefined, 'planner-top');
         const heading = element('h1', text.planner); heading.tabIndex = -1;
-        top.append(heading, button(text.back, () => { if (canDiscard()) { draft = null; active = false; feedback(''); onClose(); } }, 'planner-back'));
+        const back = phaseAction(text.back, 'M19 12H5m6-6-6 6 6 6', () => { if (canDiscard()) { draft = null; active = false; feedback(''); onClose(); } });
+        back.className = 'planner-back';
+        back.append(element('span', text.back));
+        top.append(heading, back);
         root.append(top, element('p', text.planningOnly, 'planner-hint'));
         const notice = element('p', text[message] || '', 'planner-feedback');
         notice.id = 'planner-feedback';
@@ -197,38 +211,51 @@ export function createPlanner(root, onClose, initialLanguage) {
         }
         const form = element('form'); form.noValidate = true;
         form.addEventListener('submit', event => { event.preventDefault(); save(); });
-        form.append(inputField(text.templateName, draft.name, 'template-name', value => { draft.name = value; }));
-        const transition = element('label', text.transition);
-        const select = element('select'); select.id = 'template-transition';
-        for (const mode of ['manual', 'automatic']) { const option = element('option', text[mode]); option.value = mode; select.append(option); }
-        select.value = draft.transitionMode;
-        select.addEventListener('change', () => { draft.transitionMode = select.value; });
-        transition.append(select); form.append(transition, element('h2', text.phases));
+        const metadata = element('div', undefined, 'planner-metadata');
+        metadata.append(inputField(text.templateName, draft.name, 'template-name', value => { draft.name = value; }));
+        const transition = element('fieldset', undefined, 'transition-choice-group');
+        transition.id = 'template-transition';
+        transition.append(element('legend', text.transition));
+        const options = element('div', undefined, 'transition-options');
+        for (const mode of ['manual', 'automatic']) {
+            const label = element('label', undefined, 'transition-choice');
+            const input = element('input');
+            input.type = 'radio'; input.name = 'template-transition'; input.value = mode; input.id = `transition-${mode}`;
+            input.checked = draft.transitionMode === mode;
+            input.addEventListener('change', () => { if (input.checked) draft.transitionMode = mode; });
+            label.append(input, element('span', text[mode])); options.append(label);
+        }
+        transition.append(options); metadata.append(transition);
+        form.append(metadata, element('h2', text.phases));
+        const columns = element('div', undefined, 'phase-columns');
+        columns.setAttribute('aria-hidden', 'true');
+        for (const label of ['#', text.phaseTitleLabel, text.durationLabel, text.actions]) columns.append(element('span', label));
+        form.append(columns);
         const list = element('ol', undefined, 'phase-list');
+        list.setAttribute('role', 'list');
         draft.phases.forEach((phase, index) => {
             const row = element('li');
             row.dataset.phaseId = phase.id;
-            row.append(inputField(text.phaseTitleLabel, phase.title, `phase-${phase.id}-title`, value => { phase.title = value; }));
-            const fields = phase.fields || [Math.floor(phase.durationSeconds / 3600), Math.floor(phase.durationSeconds / 60) % 60, phase.durationSeconds % 60].map(String);
-            const duration = element('div', undefined, 'phase-duration');
-            ['hours', 'minutes', 'seconds'].forEach((unit, i) => duration.append(inputField(text[unit], fields[i], `phase-${phase.id}-${unit}`, value => {
-                phase.fields = [...(phase.fields || fields)]; phase.fields[i] = value;
-            }, true)));
+            const number = element('span', String(index + 1), 'phase-number'); number.setAttribute('aria-hidden', 'true');
+            const title = inputField(text.phaseTitleLabel, phase.title, `phase-${phase.id}-title`, value => { phase.title = value; });
+            title.className = 'phase-title';
+            const duration = inputField(text.durationLabel, phase.minutes, `phase-${phase.id}-minutes`, value => { phase.minutes = value; }, true);
+            duration.className = 'phase-duration';
+            row.append(number, title);
             const controls = element('div', undefined, 'phase-actions');
             for (const [key, direction] of [['up', -1], ['down', 1]]) {
-                const control = button(text[key], () => { movePhase(draft, phase.id, direction); render(); document.getElementById(`phase-${phase.id}-title`).focus(); });
+                const control = phaseAction(`${text[key]}: ${phase.title || index + 1}`, direction === -1 ? 'm6 14 6-6 6 6' : 'm6 10 6 6 6-6', () => { movePhase(draft, phase.id, direction); render(); document.getElementById(`phase-${phase.id}-title`).focus(); });
                 control.dataset.direction = direction;
                 control.disabled = direction === -1 ? index === 0 : index === draft.phases.length - 1;
-                control.setAttribute('aria-label', `${text[key]}: ${phase.title || index + 1}`);
                 controls.append(control);
             }
-            controls.append(button(text.removePhase, () => {
+            controls.append(phaseAction(`${text.removePhase}: ${phase.title || index + 1}`, 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6m4-6v6', () => {
                 draft.phases = draft.phases.filter(p => p.id !== phase.id); render(); root.querySelector('.add-phase').focus();
             }));
             row.append(duration, controls); list.append(row);
         });
         form.append(list, button(text.add, () => {
-            const phase = { id: crypto.randomUUID(), title: '', durationSeconds: 600 };
+            const phase = { id: crypto.randomUUID(), title: '', minutes: '10' };
             draft.phases.push(phase); render(); document.getElementById(`phase-${phase.id}-title`).focus();
         }, 'add-phase'));
         const total = element('p'); total.id = 'planner-total'; total.setAttribute('aria-live', 'polite'); form.append(total);
@@ -248,9 +275,15 @@ export function createPlanner(root, onClose, initialLanguage) {
         open() { if (active) { focusHeading(); return; } active = true; load(); render(); focusHeading(); },
         setLanguage(next) {
             if (language === next) return;
-            const focusedId = root.contains(document.activeElement) ? document.activeElement.id : '';
+            const focused = root.contains(document.activeElement) ? document.activeElement : null;
+            const selection = focused?.tagName === 'INPUT' && focused.type === 'text' ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
             language = next;
-            if (active) { render(); if (focusedId) document.getElementById(focusedId)?.focus(); }
+            if (active) {
+                render();
+                const restored = focused?.id ? document.getElementById(focused.id) : null;
+                restored?.focus({ preventScroll: true });
+                if (selection && restored) restored.setSelectionRange(...selection);
+            }
         },
     };
 }
