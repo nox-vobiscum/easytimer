@@ -10,6 +10,8 @@ ST-001 adds a local Session Planner workspace for reusable workshop templates. I
 
 The latest deployed ST-001 increment is [516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4), released on 2026-10-23 with PWA shell v22. It includes compact phase rows, shared exact-position reordering, one empty 10-minute phase in new drafts, and the final compact popover with direction SVGs. Release verification passed all 27 unit tests, focused Planner browser checks and the complete browser regression. The FTP deployment succeeded and the served HTML/CSS/JavaScript/service worker matched the tested release. Native iOS Safari/PWA and screen-reader checks remain open; automated Chromium checks do not establish their completion.
 
+The owner has accepted and production-verified ST-001. Its closure baseline is `bb814c645fc855c191328776d6941a494cd55fdd` (the functional release plus documentation); local/remote main matched and the full existing tests passed again. No merge was needed. The [ST-002A scope](docs/ST-002A_SESSION_TIMER_PLAN.md) and its four decisions were subsequently approved for local implementation on `feature/st-002-session-timer`, starting at annotated checkpoint `checkpoint/st-002-before-session-timer`. The owner provisionally accepted ST-002A, UX-008, DEV-001 and the Session hierarchy refinements after the final review, then authorized one local release commit, integration into local `main` and annotated tag `release/st-002a-ux008`. Push and deployment remain unauthorized; this candidate is not the production release. Prior unverified native-device/screen-reader checks remain documented rather than being inferred from general release acceptance.
+
 UX-004: the browser tab title shows remaining time while running, adds a pause marker while paused, and shows signed overtime after expiry. READY uses `easyTimer`. Existing deadline-based updates correct the title when browser execution resumes; background updates can be throttled by the browser.
 
 - One timer with Start, Pause, Resume, New Run and Stop. UX-003 removes the dedicated Restart UI; Stop is hidden in READY.
@@ -55,6 +57,8 @@ Then open `http://localhost:8000`. No build, package installation or backend is 
 - `src/js/app.js`: browser events, rendering, DE/EN resources and preference persistence.
 - `src/js/planner.js`: localized template library/editor, isolated draft UI and shared repositioning popover.
 - `src/js/templates.mjs`: template validation, cloning, stable-ID reordering and protected local storage.
+- `src/js/session.mjs`: manual Session Run preparation, phase progression and derived workshop remaining; uses the existing engine and does not own a second clock.
+- `src/js/time-visuals.mjs`: pure shared endgame threshold/state derivation for the existing current-timebox clock.
 - `src/manifest.webmanifest`: install metadata and app icon declarations.
 - `src/service-worker.js`: versioned same-origin app-shell cache and offline navigation fallback.
 - `src/assets/branding/stopwatch-header-standard-96.png`: light header identity at 3x display resolution.
@@ -79,13 +83,20 @@ Node.js 22 or newer is suitable for the dependency-free checks:
 ```sh
 node --test tests/timer.test.mjs
 node --test tests/templates.test.mjs
+node --test tests/session.test.mjs
+node --test tests/time-visuals.test.mjs
+node --test tests/virtual-clock.test.mjs
 node --check src/js/app.js
 node --check src/js/timer.mjs
 node --check src/js/planner.js
 node --check src/js/templates.mjs
+node --check src/js/session.mjs
+node --check src/js/time-visuals.mjs
 node --check src/service-worker.js
 node --check tests/browser-check.mjs
 node --check tests/planner-browser.mjs
+node --check tests/session-browser.mjs
+node --check tests/time-visuals-browser.mjs
 ```
 
 The optional browser check uses an installed Chromium-based browser and Node's built-in WebSocket:
@@ -96,6 +107,8 @@ node tests/browser-check.mjs
 
 On Windows it defaults to Microsoft Edge. Set `EASYTIMER_BROWSER` to another Chromium executable if needed.
 It starts a temporary local server and isolated headless browser profile, then closes both.
+
+DEV-001 adds optional [virtual-time screenshot scenarios](docs/DEV-001_TIME_TRAVEL.md) to the same harness. For example, `node tests/browser-check.mjs --scenario quick-endgame --theme both` captures the actual timer UI without waiting for its countdown. Running without options still runs the full browser regression. No production timer files or PWA cache versions change for this test-only utility.
 
 Owner acceptance checks:
 
@@ -135,13 +148,37 @@ Loading rejects the complete library on malformed data, invalid templates or uns
 
 Opening the planner keeps the existing Quick Timer object, deadline, additions, overtime, refresh loop and dynamic tab title. Timer controls and the sticky dock are hidden only while editing. The workspace uses the standard header and scrollable layout in all orientations. Opening clears explicit expanded presentation and exits native fullscreen; returning never requests fullscreen or enables an expanded fallback automatically. Smartphone landscape returns to its normal automatic timer presentation. The timer engine and active-view dock geometry are unchanged.
 
-PWA shell v22 caches the planner modules and uses matching versioned HTML/CSS/app/planner/template URLs. Templates persist across reloads, but an active timer and unsaved draft do not.
+Production PWA shell v22 caches the planner modules and uses matching versioned HTML/CSS/app/planner/template URLs. Templates persist across reloads, but an active timer and unsaved draft do not. The local ST-002A/UX-008 branch uses v25 as described below.
 
 Field validation retains the failing input's identity and localized feedback association across language changes. Unsaved-change detection compares trimmed names/titles and parsed duration values, including stable IDs and phase order; temporary input fields do not make a reverted edit dirty. Invalid or incomplete duration edits still require discard confirmation. Normal typing and resizing retain input nodes; language changes restore the focused field and text selection. Browser regression coverage includes these cases, duplicate names, full-reload identities, genuine cross-tab storage conflicts, compact rows with twelve long titles, and 100/1000-hour totals. Repositioning coverage exercises a 20-phase draft, step/direct moves, restored order without a discard prompt, save/cancel, invalid-field associations, native keyboard selection, real emulated touch, dismissal and viewport fit in DE/EN and all themes. Unit coverage verifies exact final positions and object/data preservation in 30-phase drafts.
 
 Run both unit suites and `node tests/browser-check.mjs`; the latter includes `tests/planner-browser.mjs`. Manual acceptance: create two templates, edit/reorder/remove phases, cancel a changed draft, reload, delete with confirmation, test two-tab conflicting saves, and verify feedback for blocked storage. Check DE/EN and Light/Dark/System at desktop, tablet split view, phone portrait and landscape. Let Quick Timer run into overtime while editing and return; verify time, additions and title. Native iOS Safari/PWA keyboard, position picker, safe areas, fullscreen exit and screen-reader checks remain open for final release acceptance on actual hardware; Chromium emulation does not replace them.
 
-Potential portability increment: export the validated schema as JSON and import through the same validation, with explicit collision handling and confirmation before replacing any saved template. This is a candidate, not a scheduled or approved next task. Import/export UI, Drive, authentication and Session Run remain future work. See [the backlog](docs/BACKLOG.md) for discussed candidates and their status.
+Potential portability increment: export the validated schema as JSON and import through the same validation, with explicit collision handling and confirmation before replacing any saved template. This is a candidate, not a scheduled or approved next task. Import/export UI, Drive, authentication and automatic Session execution remain future work. See [the backlog](docs/backlog.md) for discussed candidates and their status.
+
+## ST-002A local implementation — manual Session Timer
+
+This branch adds Session Timer and Quick Timer navigation to the existing universal menu. Session Timer opens a template picker with explicit Prepare; only manual templates are executable. Automatic templates remain valid/editable but are disabled in the picker with a localized explanation. Empty, invalid or inaccessible storage cannot start a run and is never overwritten.
+
+Preparing makes an in-memory validated snapshot with a fresh run ID and stable phase IDs. Phase 1 is READY, with no automatic start or template write. Workshop name, prominent current phase and secondary phase index sit above the dominant clock. The bottom dock places workshop remaining on the left and a restrained, single semantic Up next button on the right (stacked on narrow phones). The button includes the upcoming title, an arrow and its full localized accessible name; long visible titles truncate. It uses the existing manual advance handler and prepares the next phase READY without starting it. On the last phase it explicitly says Complete workshop; after completion it is hidden and disabled. Workshop remaining is current remaining plus future planned durations; the existing strip shows current-phase progress with unchanged colors, height and docking. Quick presets/additions are hidden in Session.
+
+Start/Pause/Resume use one shared deadline-based clock. An expired manual phase stays at `00:00` with separate phase overtime; Pause/Resume also freezes/continues that overtime. Next discards unused time, settles phase overtime by ID and prepares the next full duration in READY. The last phase never completes automatically: Complete workshop may explicitly finish it early, then starts separate final overtime at zero. Final overtime supports Pause/Resume and terminal Stop overtime. Stop workshop confirms and resets the run snapshot to phase 1 READY with cleared overrun records.
+
+Switching away from active/paused/overtime or progressed Session state confirms discard. Cancel keeps the run and reconciles real elapsed time; acceptance discards progress and opens a READY destination/picker without automatic start. Quick's planned duration is retained, while its temporary extensions are not transferred. No hidden Quick or Session clock keeps running. Opening Session Planner is only a view change: the active clock continues, existing draft protection remains, and returning never unexpectedly re-enters native fullscreen/fallback.
+
+Session phases accept the existing 1–6,000-minute template limit, workshops up to 60,000 minutes; Quick remains capped at 99:59:59. The shared engine uses an explicit Session policy and dedicated overtime actions. DE/EN, all themes, dynamic titles, Standard/Presentation, phone orientation and existing safe areas remain shared. PWA shell v25 versions the engine, Session and shared visual helper as well as the other app resources, including offline use. A full reload returns to a fresh Quick Timer; active-run restoration is not implemented.
+
+Validation uses `node --test tests/timer.test.mjs tests/templates.test.mjs tests/session.test.mjs` and `node tests/browser-check.mjs`, including the focused Session browser module. Manual owner checks: run two phases; pause countdown and phase overtime; advance early; explicitly complete the last phase; pause and stop final overtime; cancel/confirm Stop and mode changes; edit a source template without changing the active snapshot; exercise phone portrait/landscape and fullscreen/fallback. Native iOS Safari/PWA picker, safe-area and screen-reader checks remain required. Automatic transitions, runtime editing, detailed statistics, cross-reload recovery, ad-hoc and dual-display control remain deferred.
+
+ST-002A validation before UX-008 on 2026-10-23 passed 38/38 Node tests, focused Session browser checks, the complete Quick/Planner/Session browser regression and JavaScript syntax checks. The browser suite covers stale unversioned-engine rejection, offline manual Session preparation, and reload returning to a fresh Quick Timer. Temporary screenshots were visually reviewed for 320 px portrait and short smartphone landscape with long titles. This is an implementation report, not owner acceptance or authorization to publish.
+
+## UX-008 local implementation — timebox endgame highlight
+
+Both modes share always-on endgame coloring: amber countdown digits remain amber at expiry, and the separate overtime number is red from `+00:00`, including paused/stopped overtime. Quick additions rederive the current effective-budget state; Session uses only the current phase. Timing, controls and the pink/green strip are unchanged. The [canonical UX-008 record](docs/EASYTIMER_UX_KONZEPT_v2.md#ux-008--shared-timebox-endgame-highlight-approved-implemented-locally) contains the five fixed duration buckets and Light/Dark/System palette/contrast details. A future simple ON/OFF preference is intentionally deferred; no configuration UI or motion is included.
+
+Run the Node test commands above plus `node tests/browser-check.mjs`; the complete suite includes focused visual checks across languages, themes/OS preferences, desktop/tablet native/expanded Presentation and phone portrait/landscape. UX-008 initially added the versioned visual helper in shell v24; the subsequent Session hierarchy refinement uses matching shell v25 references. This belongs to the provisionally accepted local ST-002A release candidate; no push or deployment is authorized.
+
+UX-008 verification on 2026-10-23 passed 46/46 Node tests (including eight new visual-state tests), focused visual browser checks, the complete Quick/Planner/Session/visual/PWA browser regression, JavaScript syntax and diff checks. Actual rendered colors, OS theme changes, reduced-motion settings, exact first overtime zero, paused/stopped final overtime and unchanged progress colors were checked. Temporary screenshots were reviewed for narrow portrait and smartphone landscape. No palette adjustments were needed. Native iOS Safari/PWA and screen-reader acceptance remains manual and unverified; these automated checks do not replace it.
 
 ## Scope and delivery
 

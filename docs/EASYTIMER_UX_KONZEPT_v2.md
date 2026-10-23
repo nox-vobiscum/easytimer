@@ -264,6 +264,28 @@ Smartphone classification is deliberately small: `(any-pointer: coarse)` plus a 
 
 ---
 
+### UX-008 — Shared timebox endgame highlight (approved, implemented locally)
+
+One pure helper derives NORMAL, ENDGAME or EXPIRED from the existing clock status, unrounded remaining milliseconds and effective current-timebox budget. READY is always NORMAL. Positive running/paused countdowns become ENDGAME at or below these fixed thresholds; no percentages, minute rounding, interpolation or additional duration cap apply.
+
+| Effective timebox duration | Endgame threshold |
+| --- | --- |
+| Up to and including 3 minutes | 10 seconds |
+| More than 3, up to and including 10 minutes | 30 seconds |
+| More than 10, up to and including 30 minutes | 60 seconds |
+| More than 30, up to and including 60 minutes | 180 seconds |
+| More than 60 minutes | 300 seconds |
+
+Quick uses the effective budget including pre-/post-start additions; each adjustment immediately derives the new bucket/state, including return from overtime to countdown. Session always uses the **current phase**, never workshop duration/remaining. New READY phases clear prior highlighting. Pause retains the applicable state. Explicit workshop completion is EXPIRED with separate final overtime.
+
+ENDGAME and EXPIRED keep the main digits amber, including zero throughout phase/final/Quick overtime. The separate overtime number is red immediately at `+00:00` and stays red while running, paused or terminally stopped. Existing labels, signs, values and textual statuses remain; no new live announcements, animation, flashing, audio or escalating levels are introduced. Progress-strip pink/green semantics remain unchanged.
+
+Semantic CSS tokens `--time-endgame` / `--time-overtime` use dark-theme `#F2BC76` / `#F3A1AB` and light-theme `#9A5700` / `#B42338`. System tracks the OS through the existing CSS media query. Against actual light/dark body backgrounds, measured contrast is 5.28:1 / 10.47:1 for amber and 6.10:1 / 8.99:1 for red; the approved colors need no adjustment. Standard, native/expanded Presentation and smartphone portrait/landscape share the same selectors.
+
+UX-008 is always enabled. A simple global ON/OFF preference is deferred, not implemented; percentage/threshold/duration/color configuration is not part of this feature. The implementation is local on the existing ST-002 branch, not a production release or authorization for Session UX redesign or other feature work.
+
+---
+
 ## 5. MVP delivery record
 
 MVP-01 and MVP-02 were delivered as bounded, separately reviewed changes. Later approved refinements added production branding assets, installable PWA support, iPhone safe-area/layout corrections, and a mobile-only preference menu.
@@ -300,7 +322,9 @@ MVP-01 and MVP-02 were delivered as bounded, separately reviewed changes. Later 
 
 ### ST-001 planning foundation
 
-**Delivery status:** The foundation and subsequent density/reordering, initial-phase and compact arrow-labeled popover refinements are deployed in [516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4) (2026-10-23, PWA shell v22). Functional/regression verification passed; native iOS Safari/PWA and screen-reader checks remain explicitly open. This delivered planning workspace is separate from the future Session Run described below. See [`BACKLOG.md`](BACKLOG.md) for unapproved future candidates.
+**Delivery status:** The foundation and subsequent density/reordering, initial-phase and compact arrow-labeled popover refinements are deployed in [516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4) (2026-10-23, PWA shell v22). Functional/regression verification passed; native iOS Safari/PWA and screen-reader checks remain explicitly open. This delivered planning workspace is separate from the future Session Run described below. See [`backlog.md`](backlog.md) for unapproved future candidates.
+
+The owner has accepted and production-verified ST-001. The [ST-002A manual execution slice](ST-002A_SESSION_TIMER_PLAN.md) and four scope decisions were subsequently approved for local implementation on baseline `bb814c6`. Following final review, the owner provisionally accepted ST-002A/UX-008/DEV-001 and the Session hierarchy, authorizing a local release commit, local `main` integration and annotated release checkpoint only; no push or deployment is authorized. This local slice uses isolated run snapshots, explicit manual advance/completion, pauseable phase/final overtime and guarded mode switches through one shared engine. Automatic-template execution is visibly unavailable until a later increment; no automatic preference is silently overridden. The current-phase strip remains distinct from derived workshop remaining. Existing manual-device/screen-reader limitations remain recorded separately from functional closure. The approved long-term ET-001 decisions below are unchanged.
 
 ST-001 introduces a functional Session Planner menu entry and a separate library/editor application view. It is a planning workspace, not a timer stage or Session Timer mode. Multiple reusable templates contain stable template/phase IDs, a workshop name, manual/automatic transition preference and ordered titled phases with integer-second planned durations. No session execution, transition events, active-phase state or workshop statistics are implemented.
 

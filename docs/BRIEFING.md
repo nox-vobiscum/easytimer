@@ -6,6 +6,8 @@
 
 **Latest deployed ST-001 increment:** [516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4), 2026-10-23, PWA shell v22. Compact phase rows, shared repositioning, new-template first-phase defaults and final popover polish are delivered. Release validation passed 27 unit tests, focused Planner checks and the complete browser regression; the FTP deployment succeeded and served app files matched the tested release. Native iOS Safari/PWA and screen-reader acceptance remains open.
 
+**ST-001 closure / ST-002A local work:** The owner accepts and has verified the production release. Local and remote `main` and the obsolete density/reordering branch matched `bb814c645fc855c191328776d6941a494cd55fdd`; 27 unit tests and the complete browser regression passed again. The integrated local branch was deleted without a redundant merge, preserving its remote ref and all checkpoints. Annotated tag `checkpoint/st-002-before-session-timer` and new local branch `feature/st-002-session-timer` start exactly at that baseline. The [ST-002A scope and four decisions](ST-002A_SESSION_TIMER_PLAN.md) were then approved and implemented locally. Following successful final review, the owner provisionally accepted ST-002A/UX-008/DEV-001 and authorized a local release commit, local `main` integration and annotated `release/st-002a-ux008` checkpoint only. Push/deployment remain unauthorized; production remains ST-001 with shell v22.
+
 ## 1. Current product
 
 easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The release includes subtle overtime, unified presets, continuous time-budget extensions, and a persistent budget line. Session timing, ad-hoc timing, alarms, and user-configurable presentation settings remain future scope.
@@ -79,11 +81,16 @@ Service-worker shell v22 includes both planner modules with versioned URLs. Run 
 - `src/index.html`: semantic single-timer interface, PWA metadata, header, controls, and progress strip.
 - `src/css/styles.css`: design tokens, themes, safe areas, responsive standard and presentation layouts, and universal menu.
 - `src/js/timer.mjs`: DOM-independent timer state and transitions.
+- `src/js/session.mjs`: validated manual run snapshots, phase selection, settled phase overrun records and derived workshop remaining; one clock remains owned by `app.js`.
+- `src/js/time-visuals.mjs`: pure UX-008 threshold/visual-state selector, called once in shared rendering with current-clock budget. No engine, Run or interval changes.
 - `src/js/app.js`: rendering, localization, browser events, fullscreen behavior, responsive presentation, preferences, and service-worker registration.
 - `src/manifest.webmanifest`: install metadata and app icon declarations.
 - `src/service-worker.js`: versioned offline app-shell cache.
 - `tests/timer.test.mjs`: deterministic timer transition and formatting tests.
 - `tests/templates.test.mjs`: template validation, isolated drafts, exact-position reordering and storage safeguards.
+- `tests/session.test.mjs`: Session snapshot/progression/overtime/reset/limit invariants and shared-engine policy isolation.
+- `tests/session-browser.mjs`: Session picker, confirmations, active Planner navigation, responsive views, final overtime and template isolation; invoked by the browser check.
+- `tests/time-visuals.test.mjs` and `tests/time-visuals-browser.mjs`: fixed-bucket boundaries, effective budgets/current phases, overtime states, actual palette/contrast and cross-view integration.
 - `tests/planner-browser.mjs`: Planner creation/edit/save/cancel, initial phase, localization, validation, storage conflicts, responsive layouts and repositioning interactions; invoked by the browser check.
 - `tests/browser-check.mjs`: Chromium regression test for UI, timing, accessibility-related geometry, fullscreen/fallback behavior, mobile layouts, PWA registration, and offline reload.
 
@@ -100,20 +107,31 @@ python -m http.server 8000 --directory src
 Run the dependency-free checks with Node.js 22 or newer:
 
 ```sh
-node --test tests/timer.test.mjs tests/templates.test.mjs
+node --test tests/timer.test.mjs tests/templates.test.mjs tests/session.test.mjs tests/time-visuals.test.mjs
+node --test tests/virtual-clock.test.mjs
 node --check src/js/app.js
 node --check src/js/timer.mjs
 node --check src/js/planner.js
 node --check src/js/templates.mjs
+node --check src/js/session.mjs
+node --check src/js/time-visuals.mjs
 node --check src/service-worker.js
 node --check tests/browser-check.mjs
 node --check tests/planner-browser.mjs
+node --check tests/session-browser.mjs
+node --check tests/time-visuals-browser.mjs
 node tests/browser-check.mjs
 ```
 
 The browser check uses an installed Chromium-based browser and an isolated temporary profile. On Windows it defaults to Microsoft Edge; `EASYTIMER_BROWSER` can select another Chromium executable.
 
+For fast deterministic visual inspection, DEV-001 extends this harness with [virtual-time scenarios and screenshot galleries](DEV-001_TIME_TRAVEL.md). The clock override exists only inside the isolated test browser; production code, stored user templates and PWA behavior are unchanged. The default browser command continues to run the complete regression suite.
+
 ## 7. Deployment
+
+The local ST-002A/UX-008 release candidate uses PWA shell v25 after the approved Session hierarchy refinement, including consistent versioned imports/cache entries. Session puts workshop/current-phase/index at the top and workshop remaining plus a restrained contextual Up next button in the bottom dock, stacking on narrow phones. The existing advance handler prepares the next phase READY; the last phase offers explicit Complete workshop, and completed runs hide/disable advance. Timer arithmetic, snapshots, storage and UX-008 colors remain unchanged. No cache version change is needed for documentation-only edits. The current production shell remains v22 until a separately authorized release.
+
+UX-008 adds one derived render attribute and semantic theme tokens shared by Quick/current Session phases; timing and progress remain unchanged. See the [canonical UX-008 record](EASYTIMER_UX_KONZEPT_v2.md#ux-008--shared-timebox-endgame-highlight-approved-implemented-locally) for its single threshold table, amber/red semantics and intentionally deferred ON/OFF preference. No timer-engine change, independent warning clock, sound or new live announcements is involved.
 
 `.github/workflows/deploy.yaml` deploys pushes to `main` through the existing FTP action. Deployment credentials remain in GitHub secrets. Do not modify the workflow, push, merge, or deploy without separate owner authorization.
 
@@ -131,7 +149,7 @@ The production workflow currently uploads the static repository contents. There 
 
 Future work may include subtraction controls, manual duration entry, session timing, ad-hoc timing, signals, restoration, and customization. Each next feature requires a bounded plan and explicit approval.
 
-[`BACKLOG.md`](BACKLOG.md) tracks discussed future candidates and their status; it does not select or authorize the next increment. The published ST-001 density/reordering and initial-phase improvements are complete, while insertion at a chosen position remains future scope.
+[`backlog.md`](backlog.md) tracks discussed future candidates and their status; it does not select or authorize the next increment. The published ST-001 density/reordering and initial-phase improvements are complete, while insertion at a chosen position remains future scope. The approved ST-002A local implementation executes manual snapshots only; see the [implementation overview](../README.md#st-002a-local-implementation--manual-session-timer) for its exact behavior. Automatic transitions, runtime editing, detailed statistics and recovery remain later increments.
 
 ## 10. Collaboration workflow
 

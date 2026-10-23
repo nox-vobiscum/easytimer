@@ -1,6 +1,6 @@
-export function createTimer(durationMs = 300000) {
-    if (!Number.isSafeInteger(durationMs) || durationMs <= 0 || durationMs > 359999000) throw new RangeError('Invalid duration');
-    return { status: 'READY', durationMs, adjustmentMs: 0, remainingMs: durationMs, deadlineMs: null, overtimeMs: 0 };
+export function createTimer(durationMs = 300000, policy = 'quick') {
+    if (!['quick', 'session'].includes(policy) || !Number.isSafeInteger(durationMs) || durationMs <= 0 || durationMs > (policy === 'session' ? 360000000 : 359999000)) throw new RangeError('Invalid duration');
+    return { status: 'READY', durationMs, adjustmentMs: 0, remainingMs: durationMs, deadlineMs: null, overtimeMs: 0, ...(policy === 'session' ? { policy } : {}) };
 }
 export function durationFromFields(...fields) {
     if (fields.length !== 3 || fields.some(v => !/^\d+$/.test(String(v)))) return null;
@@ -19,8 +19,9 @@ export function transition(state, action, now) {
     }
     switch (action.type) {
         case 'TICK': return current;
-        case 'CONFIGURE': return current.status === 'READY' ? createTimer(action.durationMs) : current;
+        case 'CONFIGURE': return current.status === 'READY' ? createTimer(action.durationMs, current.policy) : current;
         case 'ADJUST': {
+            if (current.policy === 'session') return current;
             if (!Number.isSafeInteger(action.amountMs) || action.amountMs <= 0 || current.durationMs + current.adjustmentMs + action.amountMs > 359999000) return current;
             if (current.status === 'READY') return createTimer(current.durationMs + action.amountMs);
             const adjustmentMs = current.adjustmentMs + action.amountMs;
@@ -31,11 +32,15 @@ export function transition(state, action, now) {
         }
         case 'START':
             if (!['READY', 'FINISHED'].includes(current.status)) return current;
-            return { ...createTimer(current.durationMs), status: 'RUNNING', deadlineMs: now + current.durationMs };
+            return { ...createTimer(current.durationMs, current.policy), status: 'RUNNING', deadlineMs: now + current.durationMs };
         case 'PAUSE': return current.status === 'RUNNING' ? { ...current, status: 'PAUSED', deadlineMs: null } : current;
         case 'RESUME': return current.status === 'PAUSED' ? { ...current, status: 'RUNNING', deadlineMs: now + current.remainingMs, overtimeMs: 0 } : current;
-        case 'RESTART': return { ...createTimer(current.durationMs), status: 'RUNNING', deadlineMs: now + current.durationMs };
-        case 'STOP': return createTimer(current.durationMs);
+        case 'RESTART': return { ...createTimer(current.durationMs, current.policy), status: 'RUNNING', deadlineMs: now + current.durationMs };
+        case 'STOP': return createTimer(current.durationMs, current.policy);
+        case 'BEGIN_OVERTIME': return current.policy === 'session' ? { ...current, status: 'FINISHED', remainingMs: 0, overtimeMs: 0, deadlineMs: now } : current;
+        case 'PAUSE_OVERTIME': return current.policy === 'session' && current.status === 'FINISHED' ? { ...current, status: 'OVERTIME_PAUSED', deadlineMs: null } : current;
+        case 'RESUME_OVERTIME': return current.policy === 'session' && current.status === 'OVERTIME_PAUSED' ? { ...current, status: 'FINISHED', deadlineMs: now - current.overtimeMs } : current;
+        case 'STOP_OVERTIME': return current.policy === 'session' && ['FINISHED', 'OVERTIME_PAUSED'].includes(current.status) ? { ...current, status: 'OVERTIME_STOPPED', deadlineMs: null } : current;
         default: throw new TypeError('Unknown action');
     }
 }

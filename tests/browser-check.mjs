@@ -6,6 +6,12 @@ import { join, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { checkPlanner } from './planner-browser.mjs';
+import { checkSession } from './session-browser.mjs';
+import { checkTimeVisuals } from './time-visuals-browser.mjs';
+import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
+
+const timeTravelOptions=parseTimeTravelOptions(process.argv.slice(2));
+if(timeTravelOptions.help||timeTravelOptions.list) {console.log(timeTravelHelp());process.exit(0);}
 
 const root = resolve('src');
 const server = createServer(async (req, res) => {
@@ -18,6 +24,7 @@ const server = createServer(async (req, res) => {
         // A previous service worker may still serve stale files at unversioned URLs.
         if (!new URL(req.url, 'http://localhost').searchParams.has('v')) {
             if (requestPath === '/js/app.js') return res.end('throw new Error("Stale unversioned app resource loaded");');
+            if (requestPath === '/js/timer.mjs') return res.end('throw new Error("Stale unversioned timer resource loaded");');
             if (requestPath === '/css/styles.css') return res.end('#preferences { display:none !important; }');
         }
         res.end(await readFile(path));
@@ -66,6 +73,15 @@ try {
     }
     const click = selector => evaluate(`(()=>{const target=document.querySelector(${JSON.stringify(selector)});const preference=target.closest('#preferences');const wasHidden=preference?.hidden;if(wasHidden)document.querySelector('#menu-toggle').click();target.click();if(wasHidden)document.querySelector('#menu-toggle').click();})()`);
     const text = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent`);
+    async function reloadReady() {
+        const origin = await evaluate('performance.timeOrigin');
+        await cdp('Page.reload');
+        for (let i = 0; i < 100; i++) {
+            if (await evaluate(`performance.timeOrigin !== ${origin} && document.body?.dataset.mode === 'quick' && Boolean(document.querySelector('#primary')?.title)`)) return;
+            await delay(50);
+        }
+        assert.fail('Reloaded application did not initialize in Quick READY');
+    }
     async function checkTitle(state) {
         const { title, time, overtime } = await evaluate(`({title:document.title,time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent})`);
         const expected = state === 'READY' ? 'easyTimer' : `${state === 'FINISHED' ? overtime : time}${state === 'PAUSED' ? ' ⏸' : ''} · easyTimer`;
@@ -102,7 +118,7 @@ try {
         await evaluate(`document.querySelector('#menu-toggle').focus()`);
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-planner')`),true,'Tab reaches planner navigation in the shared menu');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-session')`),true,'Tab reaches Session Timer navigation in the shared menu');
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
         assert.equal(await evaluate(`document.querySelector('#preferences').hidden&&document.activeElement===document.querySelector('#menu-toggle')`),true,'Escape closes menu and restores focus');
         assert.equal(await evaluate(`document.body.classList.contains('presentation')`),before.presentation,'Menu Escape preserves presentation');
@@ -121,10 +137,14 @@ try {
         if (await evaluate(`document.querySelector('#primary')?.title?.length > 0`)) break;
         await delay(50);
     }
+    if(timeTravelOptions.names.length) {
+        await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
+        assert.equal(errors.length,0,JSON.stringify(errors));
+    } else {
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=22'&&js==='js/app.js?v=22'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>source.includes("'./css/styles.css?v=22'")&&source.includes("'./js/app.js?v=22'")&&source.includes("'./js/planner.js?v=22'")&&source.includes("'./js/templates.mjs?v=22'"))`),true,'Worker precaches the same versioned resources as HTML and the imported planner modules');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=25'&&js==='js/app.js?v=25'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=25')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -151,7 +171,7 @@ try {
         await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<900,screenOrientation:{type:width>height?'landscapePrimary':'portraitPrimary',angle:width>height?90:0}});
         await cdp('Page.captureScreenshot',{format:'png'});
         assert.equal(await evaluate(`(()=>{const p=document.querySelector('#preferences').getBoundingClientRect();return !document.querySelector('#preferences').hidden&&p.left>=0&&p.top>=0&&p.right<=innerWidth&&p.bottom<=innerHeight})()`),true,'Open menu survives resize/rotation without clipping');
-        assert.equal(await evaluate(`Array.from(document.querySelectorAll('#preferences button')).every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44})`),true,'Preferences retain touch targets');
+        assert.equal(await evaluate(`Array.from(document.querySelectorAll('#preferences button:not([hidden])')).every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44})`),true,'Visible preferences retain touch targets');
         await checkTitle('READY');
     }
     await click('#menu-toggle');
@@ -774,21 +794,29 @@ try {
     await click('#stop');
     assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),true);
     await checkPlanner({ evaluate, click, text, cdp, configure });
+    await checkSession({ evaluate, click, text, cdp, configure });
+    await checkTimeVisuals({ evaluate, click, text, cdp, configure });
+    await evaluate(`(()=>{const data=JSON.parse(localStorage.getItem('easyTimerTemplates'));data.templates.push({id:'offline-session',name:'Offline workshop',transitionMode:'manual',phases:[{id:'offline-phase',title:'Offline phase',durationSeconds:60}]});localStorage.setItem('easyTimerTemplates',JSON.stringify(data));})()`);
     await cdp('Network.enable');
     await cdp('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
-    await cdp('Page.reload');
-    for (let i=0;i<100;i++) {
-        if (await evaluate(`document.querySelector('#primary')?.title?.length > 0`)) break;
-        await delay(50);
-    }
+    await reloadReady();
     assert.equal(await text('#time'), '05:00');
     assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
     await click('#menu-toggle'); await click('#open-planner');
     assert.match(await text('.template-library'), /Changed elsewhere/, 'Templates and planner modules survive an offline reload');
     await click('.planner-back');
+    await click('#menu-toggle'); await click('#open-session');
+    await evaluate(`(()=>{const select=document.querySelector('#session-template');select.value=Array.from(select.options).find(option=>option.value&&!option.disabled).value;select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await click('#prepare-session');
+    assert.equal(await text('#status'), 'Ready', 'A saved Session template prepares offline using cached engine/modules');
+    await click('#primary');
+    await reloadReady();
+    assert.equal(await evaluate('document.body.dataset.mode'), 'quick', 'Session runtime is not restored after reload');
+    assert.equal(await text('#time'), '05:00');
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');
+    }
     await cdp('Browser.close');
 } finally {
     socket?.close();

@@ -1,7 +1,7 @@
-:root { color-scheme: light; --bg:#f6f8fc; --surface:#fff; --text:#172337; --muted:#526078; --border:#c8d1e0; --accent:#1d4ed8; --on-accent:#fff; --selected:#e7efff; --error:#b42318; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
-:root[data-theme="dark"] { color-scheme:dark; --bg:#101722; --surface:#1a2433; --text:#f1f5fc; --muted:#b4c1d5; --border:#52627b; --accent:#a9c7ff; --on-accent:#101d35; --selected:#2b4164; --error:#ffb4ab; }
+:root { color-scheme: light; --bg:#f6f8fc; --surface:#fff; --text:#172337; --muted:#526078; --border:#c8d1e0; --accent:#1d4ed8; --on-accent:#fff; --selected:#e7efff; --error:#b42318; --time-endgame:#9a5700; --time-overtime:#b42338; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+:root[data-theme="dark"] { color-scheme:dark; --bg:#101722; --surface:#1a2433; --text:#f1f5fc; --muted:#b4c1d5; --border:#52627b; --accent:#a9c7ff; --on-accent:#101d35; --selected:#2b4164; --error:#ffb4ab; --time-endgame:#f2bc76; --time-overtime:#f3a1ab; }
 @media(prefers-color-scheme:dark) {
-  :root[data-theme="system"] { color-scheme:dark; --bg:#101722; --surface:#1a2433; --text:#f1f5fc; --muted:#b4c1d5; --border:#52627b; --accent:#a9c7ff; --on-accent:#101d35; --selected:#2b4164; --error:#ffb4ab; }
+  :root[data-theme="system"] { color-scheme:dark; --bg:#101722; --surface:#1a2433; --text:#f1f5fc; --muted:#b4c1d5; --border:#52627b; --accent:#a9c7ff; --on-accent:#101d35; --selected:#2b4164; --error:#ffb4ab; --time-endgame:#f2bc76; --time-overtime:#f3a1ab; }
 }
 * { box-sizing:border-box; }
 body { margin:0; min-height:100vh; min-height:100svh; display:flex; flex-direction:column; background:var(--bg); color:var(--text); }
@@ -121,7 +121,8 @@ h1 { font-size:.95rem; font-weight:500; color:var(--muted); margin:0 0 1rem; }
 .overtime { display:flex; align-items:baseline; justify-content:center; gap:.45rem; min-height:1.5em; color:var(--muted); font-size:clamp(.85rem,2vw,1.05rem); font-variant-numeric:tabular-nums; }
 .overtime[hidden] { display:none; }
 .overtime-label { font-size:.75em; text-transform:uppercase; letter-spacing:.08em; }
-#overtime-time { font-weight:650; letter-spacing:.02em; }
+#time[data-visual-state="ENDGAME"], #time[data-visual-state="EXPIRED"] { color:var(--time-endgame); }
+#overtime-time { color:var(--time-overtime); font-weight:650; letter-spacing:.02em; }
 #status { min-height:1.5em; color:var(--muted); margin:.5rem 0 0; }
 .actions { display:flex; justify-content:center; gap:.5rem; align-items:center; }
 .actions .primary { min-width:8rem; background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
@@ -327,3 +328,42 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
 .reposition-steps svg { width:14px; height:14px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .phase-reposition-popover label { display:flex; flex-direction:column; gap:.3rem; font-size:.85rem; }
 .phase-reposition-popover select { width:100%; min-width:0; min-height:44px; font:inherit; font-size:1rem; border:1px solid var(--border); border-radius:.4rem; padding:.4rem; background:var(--surface); color:var(--text); }
+/* Session uses the existing stage and dock, with one phase clock at a time. */
+.session-context[hidden], .next-phase[hidden], .session-picker[hidden], .duration-adjustments[hidden], #open-quick[hidden] { display:none; }
+.session-context { flex:none; margin:0 auto .5rem; width:min(100%,42rem); padding-inline:2rem; overflow-wrap:anywhere; }
+.session-context p { margin:0 0 .25rem; color:var(--muted); font-size:.8rem; }
+.session-context h2 { margin:0; font-size:clamp(1rem,2vw,1.35rem); font-weight:600; }
+[data-mode="session"] .timer > h1 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.dock-info { min-width:0; }
+[data-mode="session"] .dock-info { display:flex; align-items:center; justify-content:space-between; gap:.5rem 1rem; margin:0 max(clamp(16px,8vw,104px),env(safe-area-inset-right)) 6px max(clamp(16px,8vw,104px),env(safe-area-inset-left)); }
+[data-mode="session"] .time-budget { padding:0; text-align:left; }
+.next-phase { display:flex; align-items:center; justify-content:space-between; gap:.65rem; min-height:44px; min-width:44px; width:min(50%,24rem); padding:.4rem .65rem; border-color:var(--border); background:transparent; color:var(--muted); font-size:.8rem; text-align:left; font-weight:400; }
+.next-phase:hover:not(:disabled) { border-color:var(--border); background:var(--selected); color:var(--text); }
+.next-phase:active:not(:disabled) { background:var(--surface); }
+.next-phase-copy { display:flex; flex-direction:column; min-width:0; gap:.15rem; }
+#next-label { font-size:.75rem; }
+#next-phase { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+@media(max-width:480px) {
+  [data-mode="session"] .dock-info { flex-direction:column; align-items:stretch; gap:.35rem; }
+  [data-mode="session"] .time-budget { text-align:center; }
+  .next-phase { width:100%; }
+}
+.picker-open .timer, .picker-open .bottom-dock { display:none; }
+.picker-open main { display:block; }
+.session-picker { width:100%; max-width:42rem; margin:0 auto; overflow-wrap:anywhere; }
+.session-picker h1 { margin:0; font-size:1.5rem; color:var(--text); }
+.session-picker p { color:var(--muted); font-size:.85rem; }
+.session-picker label { display:block; margin:1rem 0 .5rem; }
+.session-picker select { width:100%; min-height:44px; min-width:0; padding:.6rem; font:inherit; border:1px solid var(--border); border-radius:.5rem; background:var(--surface); color:var(--text); }
+.session-picker .planner-actions { margin-top:1rem; }
+.session-picker .primary { background:var(--accent); color:var(--on-accent); }
+@media(max-height:440px) {
+  .session-context { margin-bottom:.25rem; }
+  .session-context h2 { font-size:1rem; }
+  [data-mode="session"].presentation .session-context { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.15rem .75rem; text-align:left; }
+  [data-mode="session"].presentation .session-context h2 { grid-column:1 / -1; grid-row:2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  [data-mode="session"].presentation .session-context p { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  [data-mode="session"] .timer-stage { min-height:4rem; }
+  [data-mode="session"].presentation .control-bar { margin-top:.25rem; }
+  [data-mode="session"].presentation main { padding-bottom:.25rem; }
+}

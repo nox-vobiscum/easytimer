@@ -1,4 +1,4 @@
-import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=22';
+import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=25';
 
 const copy = {
     en: {
@@ -191,6 +191,11 @@ export function createPlanner(root, onClose, initialLanguage) {
     }
     function focusHeading() { root.querySelector('h1')?.focus(); }
     function canDiscard() { return !dirty() || window.confirm(t().discard); }
+    function close() {
+        if (!canDiscard()) return false;
+        draft = null; active = false; feedback(''); closeReposition(); onClose();
+        return true;
+    }
     function load() {
         try { library = store.load(); feedback('', false); }
         catch (e) { feedback(e.message); }
@@ -265,7 +270,7 @@ export function createPlanner(root, onClose, initialLanguage) {
         root.replaceChildren();
         const top = element('div', undefined, 'planner-top');
         const heading = element('h1', text.planner); heading.tabIndex = -1;
-        const back = phaseAction(text.back, 'M19 12H5m6-6-6 6 6 6', () => { if (canDiscard()) { draft = null; active = false; feedback(''); onClose(); } });
+        const back = phaseAction(text.back, 'M19 12H5m6-6-6 6 6 6', close);
         back.className = 'planner-back';
         back.append(element('span', text.back));
         top.append(heading, back);
@@ -362,6 +367,7 @@ export function createPlanner(root, onClose, initialLanguage) {
     window.addEventListener('storage', event => { if (active && (event.key === STORAGE_KEY || event.key === null)) feedback('conflict'); });
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
     return {
+        close,
         open() { if (active) { focusHeading(); return; } active = true; load(); render(); focusHeading(); },
         setLanguage(next) {
             if (language === next) return;

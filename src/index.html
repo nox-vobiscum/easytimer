@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/branding/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="assets/branding/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="css/styles.css?v=22">
+  <link rel="stylesheet" href="css/styles.css?v=25">
 </head>
 <body data-duration-entry="presets-adjustments">
   <header>
@@ -31,6 +31,8 @@
       </svg>
     </button>
     <div id="preferences" class="preferences" hidden>
+      <button id="open-quick" type="button" data-copy="quick" hidden>Quick Timer</button>
+      <button id="open-session" type="button" data-copy="session">Session Timer</button>
       <button id="open-planner" type="button" data-copy="planner">Session Planner</button>
       <span class="preference-heading" data-copy="language">Language</span>
       <div class="switch" role="group" data-label="language">
@@ -75,6 +77,11 @@
           <path d="M8 3v5H3m13-5v5h5M8 21v-5H3m13 5v-5h5"/>
         </svg>
       </button>
+      <div id="session-context" class="session-context" hidden>
+        <p id="workshop-name"></p>
+        <h2 id="current-phase" aria-live="polite"></h2>
+        <p id="phase-number"></p>
+      </div>
       <div class="timer-stage">
       <div id="time" role="timer" aria-live="off">05:00</div>
       <div id="overtime" class="overtime" aria-label="Overtime: +00:00" hidden>
@@ -101,6 +108,7 @@
       <div class="actions">
         <button id="primary" class="primary" type="button"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path id="primary-icon" d="m8 4 12 8-12 8Z"/></svg><span id="primary-label" class="action-label">Start</span></button>
         <button id="stop" type="button" hidden><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5Z"/></svg><span class="action-label" data-copy="stop">Stop</span></button>
+        <button id="stop-overtime" type="button" hidden><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5Z"/></svg><span class="action-label" data-copy="stopOvertime">Stop overtime</span></button>
       </div>
       <section class="duration-adjustments" aria-labelledby="adjustment-heading">
         <h2 id="adjustment-heading">Add to duration</h2>
@@ -115,14 +123,35 @@
       </div>
       <p id="help" role="status"></p>
     </section>
+    <section id="session-picker" class="session-picker" aria-labelledby="session-picker-heading" hidden>
+      <div class="planner-top">
+        <h1 id="session-picker-heading" tabindex="-1" data-copy="chooseWorkshop">Choose a workshop</h1>
+        <button id="picker-back" type="button" data-copy="backQuick">Back to Quick Timer</button>
+      </div>
+      <p data-copy="manualOnly">Manual execution only. Automatic transitions follow in a later release.</p>
+      <p id="session-feedback" role="status"></p>
+      <label for="session-template" data-copy="workshopTemplate">Workshop template</label>
+      <select id="session-template" aria-describedby="session-picker-note"></select>
+      <p id="session-picker-note" data-copy="runNote">A new run uses a copy. Saved templates stay unchanged. Reloading loses the active run.</p>
+      <div class="planner-actions">
+        <button id="prepare-session" class="primary" type="button" data-copy="prepare" disabled>Prepare workshop</button>
+        <button id="reload-templates" type="button" data-copy="reloadTemplates">Reload templates</button>
+      </div>
+    </section>
     <section id="planner" class="planner" aria-label="Session Planner" hidden></section>
   </main>
   <div class="bottom-dock">
+    <div class="dock-info">
     <p id="time-budget" class="time-budget">Total 05:00</p>
+    <button id="next" class="next-phase" type="button" hidden>
+      <span class="next-phase-copy"><span id="next-label">Up next</span><span id="next-phase"></span></span>
+      <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path id="next-icon" d="M4 12h16m-6-6 6 6-6 6"/></svg>
+    </button>
+    </div>
     <div id="progress" class="progress-strip" aria-hidden="true"><span class="progress-marker"></span></div>
   </div>
   <footer><span data-copy="credit">Created by</span> <a href="https://rolandseper.at">Roland B. Seper</a> · © 2026</footer>
   <noscript>This timer requires JavaScript. / Dieser Timer benötigt JavaScript.</noscript>
-  <script type="module" src="js/app.js?v=22"></script>
+  <script type="module" src="js/app.js?v=25"></script>
 </body>
 </html>

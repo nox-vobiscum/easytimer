@@ -1,7 +1,7 @@
 # easyTimer — Future Backlog
 
 **Status:** Living idea backlog · **Prepared:** 2026-10-23  
-**Repository path:** `docs/BACKLOG.md`
+**Repository path:** `docs/backlog.md`
 
 **Repository:** https://github.com/nox-vobiscum/easytimer
 
@@ -28,7 +28,7 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | PLAN-002 | Friendlier planned-total formatting | Someday | Presentation-only refinement |
 | DATA-001 | Export/import workshop templates as JSON | Candidate | Existing template schema and validation |
 | SYNC-001 | Optional Google Drive template sync | Later / Spike | DATA-001; Google identity, OAuth, mobile PWA feasibility |
-| ST-002 | Executable Session Timer | Major next epic | ST-001 templates; ET-001 runtime decisions |
+| ST-002 | Executable Session Timer | A local release candidate | Manual ST-002A provisionally accepted; local integration authorized; no push/deployment; B deferred |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
 | ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
 | QT-002 | More flexible Quick Timer duration controls | Later | Preserve current one-timer simplicity |
@@ -82,7 +82,7 @@ The following packages are **already covered in more detail** by the ET-001 deci
 
 Implement a **Session Run** separate from reusable **Workshop Templates**. Use ordered named phases; manual/automatic phase transitions; large current countdown; subtle next-phase preview; calculated workshop time remaining; final completion and overtime. Define the relationship to the existing Quick Timer and mode switching deliberately. Preserve the single-clock/single-authoritative-state principle.
 
-**Status:** Main future product epic. Requires a separate detailed plan, architecture review, and explicit approval.
+**Status:** ST-001 is accepted and production-verified by the owner. The [ST-002A manual execution scope](ST-002A_SESSION_TIMER_PLAN.md), including its four decisions, was approved and implemented locally on the dedicated branch. After successful final review, ST-002A, UX-008, DEV-001 and the Session hierarchy were provisionally accepted, with local commit/integration and an annotated release checkpoint authorized. Push/deployment remain unauthorized; production is unchanged. ST-002B automatic execution/catch-up and subsequent runtime editing, detailed statistics and recovery remain separately scoped future work; the approved A increment is not authorization to start them.
 
 ### ST-003 — Editing and statistics during a session
 
@@ -144,6 +144,8 @@ Independent visual/audio preferences, with audio off by default, event-specific 
 Consider user-configurable colors, progress-bar treatment/visibility, information density, and perhaps limited layout options **after** the essential timer and session behavior stabilizes. Avoid a sprawling settings screen or aesthetic customization for its own sake. Keep Light/Dark/System and DE/EN behavior consistent.
 
 **Status:** Someday, low priority.
+
+UX-008 endgame highlighting is implemented locally and always enabled in both timer modes; it is not a pending customization item. A simple global ON/OFF preference remains an optional later refinement. Threshold percentages/tables, custom warning durations, endgame color pickers, flashing and additional warning levels are not planned as part of UX-008. See the [canonical UX-008 record](EASYTIMER_UX_KONZEPT_v2.md#ux-008--shared-timebox-endgame-highlight-approved-implemented-locally).
 
 ## Maintenance of this backlog
 
