@@ -1,5 +1,5 @@
 import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs';
-import { createPlanner } from './planner.js?v=19';
+import { createPlanner } from './planner.js?v=22';
 
 const copy = {
     en: {

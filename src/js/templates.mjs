@@ -40,9 +40,14 @@ export function createDraft(template = { id: crypto.randomUUID(), name: '', tran
 }
 export function movePhase(draft, id, direction) {
     const index = draft.phases.findIndex(p => p.id === id);
-    const target = index + direction;
-    if (![1, -1].includes(direction) || index < 0 || target < 0 || target >= draft.phases.length) return;
-    [draft.phases[index], draft.phases[target]] = [draft.phases[target], draft.phases[index]];
+    if (![1, -1].includes(direction) || index < 0) return;
+    repositionPhase(draft, id, index + direction + 1);
+}
+export function repositionPhase(draft, id, position) {
+    const index = draft.phases.findIndex(p => p.id === id);
+    if (index < 0 || !Number.isSafeInteger(position) || position < 1 || position > draft.phases.length || position === index + 1) return;
+    const [phase] = draft.phases.splice(index, 1);
+    draft.phases.splice(position - 1, 0, phase);
 }
 export function phaseDuration(minutes) {
     if (!/^\d+$/.test(String(minutes))) fail('duration');

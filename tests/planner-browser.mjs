@@ -27,15 +27,18 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await field('#template-name', 'Workshop <safe>');
     await click('#menu-toggle'); await click('#open-planner');
     assert.equal(await evaluate(`document.querySelector('#template-name').value`), 'Workshop <safe>', 'Reopening navigation retains an unsaved draft');
-    await action('Save'); assert.match(await text('.planner-feedback'), /at least one phase/);
-    await action('+ Add phase');
+    await action('Save'); assert.match(await text('.planner-feedback'), /phase needs a title/);
     await field('.phase-list input[type="text"]', 'Introduction');
     await field('.phase-list input[id$="-minutes"]', '60');
     assert.match(await text('#planner-total'), /01:00:00/);
+    await click('.phase-actions button:first-child');
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('.reposition-steps button')).every(button=>button.disabled)&&document.activeElement.id==='phase-position'`), true, 'A single phase has no step moves and focuses the native selector');
+    await click('#phase-reposition-popover > button:last-child');
     await action('+ Add phase');
     await field('.phase-list li:last-child input[type="text"]', 'Discussion');
     const ids = await evaluate(`Array.from(document.querySelectorAll('.phase-list li')).map(el=>el.dataset.phaseId)`);
-    await click('.phase-list li:last-child [data-direction="-1"]');
+    await click('.phase-list li:last-child .phase-actions button:first-child');
+    await click('.phase-reposition-popover [data-direction="-1"]');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.phase-list li')).map(el=>el.dataset.phaseId)`), [...ids].reverse());
     await action('Save');
     assert.match(await text('.template-library'), /Workshop <safe>/);
@@ -48,7 +51,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     assert.equal(await evaluate(`document.querySelector('#template-name').value`), 'Discard this');
     await evaluate('window.acceptConfirm=true'); await action('Cancel');
     assert.equal((await stored()).templates[0].name, 'Workshop <safe>');
-    await action('Create template'); await field('#template-name', 'Second workshop'); await action('+ Add phase');
+    await action('Create template'); await field('#template-name', 'Second workshop');
     await field('.phase-list input[type="text"]', 'Opening');
     await evaluate(`document.querySelector('#transition-manual').focus()`);
     await cdp('Input.dispatchKeyEvent', { type:'keyDown', key:'ArrowRight', code:'ArrowRight', windowsVirtualKeyCode:39 });
@@ -146,7 +149,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     const validRaw = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     await evaluate(`localStorage.setItem('easyTimerTemplates','{broken')`);
     await action('Reload saved templates'); assert.match(await text('.planner-feedback'), /invalid/);
-    await action('Create template'); await field('#template-name', 'Blocked'); await action('+ Add phase'); await field('.phase-list input[type="text"]', 'Phase'); await action('Save');
+    await action('Create template'); await field('#template-name', 'Blocked'); await field('.phase-list input[type="text"]', 'Phase'); await action('Save');
     assert.match(await text('.planner-feedback'), /before saving/);
     assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`), '{broken');
     await action('Cancel');
@@ -167,6 +170,8 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await evaluate(`window.confirm=window.originalConfirm;Date.now=window.plannerRealNow`);
     await checkPlannerCorrections({ evaluate, click, text, cdp });
     await checkCompactPlanner({ evaluate, click, text, cdp });
+    await checkRepositioning({ evaluate, click, text, cdp });
+    await checkInitialPhase({ evaluate, click, text });
     console.log('PASS: Session Planner creation/edit/reorder/save/cancel/delete, storage protection, responsive themes/localization/focus, fullscreen exit and uninterrupted Quick Timer.');
 }
 
@@ -211,7 +216,11 @@ async function checkCompactPlanner({ evaluate, click, text, cdp }) {
                     assert.equal(geometry.overflow, false, `No overflow at ${width}x${height} ${lang}/${theme}`);
                     assert.equal(geometry.presentation, false);
                     assert.equal(geometry.fit && geometry.icons && geometry.labels && geometry.noOverlap, true, JSON.stringify(geometry));
-                    if (geometry.width > 672) { assert.equal(geometry.aligned, true); assert.ok(geometry.rowHeight <= 72, 'Desktop phases use one compact row'); }
+                    if (geometry.width > 320) { assert.equal(geometry.aligned, true); assert.ok(geometry.rowHeight <= 72, 'Phases use one compact row where space permits'); }
+                    else {
+                        assert.equal(geometry.aligned, false, 'Exceptionally narrow rows wrap instead of shrinking controls');
+                        assert.equal(await evaluate(`(()=>{const label=document.querySelector('.phase-duration > span');const style=getComputedStyle(label);return style.position==='static'&&style.clipPath==='none'&&label.getBoundingClientRect().height>10;})()`), true, 'Wrapped duration has a visible localized label');
+                    }
                 }
                 assert.equal(await evaluate(`document.querySelector('.phase-duration input').labels[0].textContent`), lang === 'de' ? 'Dauer (min)' : 'Duration (min)');
                 assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.transition-choice span')).map(el=>el.textContent)`), lang === 'de' ? ['Manuell','Automatisch'] : ['Manual','Automatic']);
@@ -223,8 +232,7 @@ async function checkCompactPlanner({ evaluate, click, text, cdp }) {
                 assert.equal(polish.backText, lang === 'de' ? 'Zurück zum Timer' : 'Back to timer');
                 assert.equal(polish.decorative && polish.arrowFirst, true, 'Back arrow precedes the unchanged localized label');
             }
-            assert.equal(await evaluate(`document.querySelector('.phase-actions button[data-direction="-1"]').disabled`), true);
-            assert.equal(await evaluate(`document.querySelector('.phase-list li:last-child button[data-direction="1"]').disabled`), true);
+            assert.equal(await evaluate(`Array.from(document.querySelectorAll('.phase-actions')).every(el=>el.querySelectorAll('button').length===2)`), true, 'Each phase has one reposition trigger and one delete button');
             if (process.env.EASYTIMER_SCREENSHOT_DIR) {
                 await evaluate('scrollTo(0,0)');
                 const screenshot = await cdp('Page.captureScreenshot', { format:'png' });
@@ -260,6 +268,198 @@ async function checkCompactPlanner({ evaluate, click, text, cdp }) {
     console.log('PASS: compact phase rows, twelve long titles, minute limits, 100/1000-hour totals, cursor preservation and responsive themes/languages.');
 }
 
+async function checkRepositioning({ evaluate, click, text, cdp }) {
+    const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
+    const phases = Array.from({ length: 20 }, (_, i) => ({ id:`order-${i}`, title:(`Phase ${i + 1} ` + 'Long title '.repeat(10)).trim(), durationSeconds:(i + 1) * 60 }));
+    const library = { schemaVersion:1, templates:[{ id:'order-workshop', name:'Reordering', transitionMode:'automatic', phases }] };
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+    const trigger = id => `#reposition-${id}`;
+    const order = () => evaluate(`Array.from(document.querySelectorAll('.phase-list li')).map(el=>el.dataset.phaseId)`);
+    const hidden = () => evaluate(`document.querySelector('#phase-reposition-popover').hidden`);
+    const key = async (key, code, number) => {
+        await cdp('Input.dispatchKeyEvent', { type:'keyDown',key,code,windowsVirtualKeyCode:number,...(key==='Enter'?{text:'\r'}:{}) });
+        await cdp('Input.dispatchKeyEvent', { type:'keyUp',key,code,windowsVirtualKeyCode:number });
+    };
+    const choose = position => evaluate(`(()=>{const select=document.querySelector('#phase-position');select.value=${JSON.stringify(String(position))};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    const direct = async (id, position) => {
+        await evaluate(`document.querySelector(${JSON.stringify(trigger(id))}).scrollIntoView({block:'center'})`);
+        await delay(80);
+        await click(trigger(id)); await choose(position); await click('#move-to-position');
+        assert.equal(await evaluate('document.activeElement.id'), `reposition-${id}`, 'Reorder returns focus to the same phase identity');
+        assert.equal(await hidden(), true);
+    };
+    await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(library))});window.reorderConfirm=window.confirm;window.reorderConfirmations=0;window.confirm=()=>{window.reorderConfirmations++;return true;};`);
+    try {
+        await click('#menu-toggle'); await click('#open-planner'); await action('Edit');
+        await evaluate(`document.querySelector('#reposition-order-0').scrollIntoView({block:'center'});document.querySelector('#reposition-order-0').focus()`);
+        await delay(100);
+        await key('Enter','Enter',13);
+        assert.equal(await hidden(), false, 'Keyboard opens the shared popover');
+        assert.equal(await evaluate(`document.activeElement.dataset.direction`), '1', 'First enabled action receives focus');
+        assert.equal(await evaluate(`document.querySelector('.reposition-steps [data-direction="-1"]').disabled`), true);
+        assert.equal(await evaluate(`document.querySelector('#move-to-position').disabled`), true, 'Same position is a no-op');
+        await key('Escape','Escape',27);
+        assert.equal(await hidden(), true);
+        assert.equal(await evaluate('document.activeElement.id'), 'reposition-order-0');
+        await click(trigger('order-0')); await click('.reposition-steps [data-direction="1"]');
+        assert.deepEqual((await order()).slice(0,3), ['order-1','order-0','order-2']);
+        await click(trigger('order-0')); await click('.reposition-steps [data-direction="-1"]');
+        await evaluate(`document.querySelector('#reposition-order-0').scrollIntoView({block:'center'})`);
+        await delay(80);
+        await click(trigger('order-0'));
+        await key('Tab','Tab',9);
+        assert.equal(await evaluate('document.activeElement.id'), 'phase-position');
+        await key('ArrowDown','ArrowDown',40); await key('Tab','Tab',9);
+        assert.equal(await evaluate('document.activeElement.id'), 'move-to-position', 'Native selection enables the explicit keyboard Move action');
+        await key('Enter','Enter',13);
+        assert.deepEqual((await order()).slice(0,3), ['order-1','order-0','order-2']);
+        assert.equal(await evaluate('document.activeElement.id'), 'reposition-order-0');
+        await click(trigger('order-0')); await click('.reposition-steps [data-direction="-1"]');
+        await direct('order-0',20);
+        assert.equal((await order()).at(-1), 'order-0');
+        await click(trigger('order-0'));
+        assert.equal(await evaluate(`document.querySelector('.reposition-steps [data-direction="1"]').disabled`), true);
+        await key('Escape','Escape',27);
+        await direct('order-0',1); await direct('order-9',3); await direct('order-9',10);
+        assert.deepEqual(await order(), phases.map(p=>p.id));
+        assert.deepEqual(await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates'))`), library, 'Reordering never autosaves');
+        await action('Cancel');
+        assert.equal(await evaluate('window.reorderConfirmations'), 0, 'Undoing all moves leaves no dirty draft');
+        await action('Edit'); await direct('order-19',1); await action('Cancel');
+        assert.equal(await evaluate('window.reorderConfirmations'), 1);
+        assert.deepEqual(await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates'))`), library, 'Cancel retains the saved order');
+        await action('Edit'); await direct('order-19',1); await action('Save');
+        const expected = [phases.at(-1), ...phases.slice(0,-1)];
+        assert.deepEqual(await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates')).templates[0]`), {...library.templates[0],phases:expected}, 'Save changes only order, retaining IDs and all values');
+        await action('Edit');
+        assert.deepEqual(await order(), expected.map(p=>p.id), 'Reopening retains the saved order');
+        for (const [width,height] of [[1280,800],[390,844],[320,568],[844,390]]) {
+            await cdp('Emulation.setTouchEmulationEnabled', { enabled:width!==1280 });
+            await cdp('Emulation.setDeviceMetricsOverride', { width,height,screenWidth:width,screenHeight:height,mobile:width!==1280,deviceScaleFactor:1 });
+            for (const lang of ['de','en']) {
+                await click(`[data-language="${lang}"]`);
+                for (const theme of ['light','dark','system']) {
+                    await click(`[data-theme="${theme}"]`);
+                    await evaluate(`document.querySelector('#reposition-order-18').scrollIntoView({block:'center'})`);
+                    await delay(80);
+                    await click(trigger('order-18'));
+                    assert.equal(await hidden(), false);
+                    assert.equal(await evaluate(`document.querySelector('#phase-position').labels[0].textContent.startsWith(${JSON.stringify(lang==='de'?'Position':'Position')})`), true);
+                    assert.equal(await evaluate(`document.querySelector('#phase-reposition-popover').getAttribute('aria-label')`), lang==='de'?'Phase verschieben':'Reposition phase');
+                    const fit = await evaluate(`(()=>{const p=document.querySelector('#phase-reposition-popover');const r=p.getBoundingClientRect();return r.left>=7&&r.right<=innerWidth-7&&r.top>=7&&r.bottom<=innerHeight-7&&Array.from(p.querySelectorAll('button,select')).every(el=>{const b=el.getBoundingClientRect();return b.width>=44&&b.height>=44})&&document.querySelectorAll('.phase-reposition-popover').length===1;})()`);
+                    assert.equal(fit, true, `Shared popover fits ${width}x${height} ${lang}/${theme}`);
+                    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.reposition-steps button')).map(button=>{const icon=button.querySelector('svg');return {label:button.textContent,name:button.getAttribute('aria-label'),decorative:icon?.getAttribute('aria-hidden')==='true'&&icon.getAttribute('focusable')==='false',inline:icon?.getBoundingClientRect().right<=button.querySelector('span').getBoundingClientRect().left};})`), (lang==='de'?['Nach oben','Nach unten']:['Move up','Move down']).map(label=>({label,name:label,decorative:true,inline:true})), 'Direction icons precede unchanged localized names');
+                    if (process.env.EASYTIMER_SCREENSHOT_DIR && lang==='en' && theme==='dark') {
+                        const shot = await cdp('Page.captureScreenshot',{format:'png'});
+                        await writeFile(join(process.env.EASYTIMER_SCREENSHOT_DIR,`reposition-${width}-${height}.png`),Buffer.from(shot.data,'base64'));
+                    }
+                    await key('Escape','Escape',27);
+                    assert.equal(await evaluate('document.activeElement.id'), 'reposition-order-18');
+                }
+            }
+        }
+        // A real touch tap, rather than a synthetic click, opens the same control.
+        await evaluate(`document.querySelector('#reposition-order-18').scrollIntoView({block:'center'})`); await delay(80);
+        const point = await evaluate(`(()=>{const r=document.querySelector('#reposition-order-18').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+        await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+        await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+        await delay(100); assert.equal(await hidden(), false, 'Real touch opens the popover');
+        await evaluate(`document.body.dispatchEvent(new MouseEvent('click',{bubbles:true}))`);
+        assert.equal(await hidden(), true, 'Outside click dismisses');
+        await click(trigger('order-18')); await evaluate(`document.querySelector('#template-name').focus()`);
+        assert.equal(await hidden(), true, 'Moving keyboard focus outside dismisses');
+        assert.equal(await evaluate('document.activeElement.id'), 'template-name', 'Outside focus is not stolen');
+        await click(trigger('order-18')); await evaluate(`document.dispatchEvent(new Event('scroll'))`);
+        assert.equal(await hidden(), true, 'Scrolling dismisses without geometry polling');
+        await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+        await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:800,screenWidth:1280,screenHeight:800,mobile:false,deviceScaleFactor:1});
+        await delay(100);
+        await click(trigger('order-18')); await evaluate(`document.querySelector('#phase-reposition-popover > button:last-child').focus()`);
+        await key('Tab','Tab',9);
+        assert.equal(await hidden(), true, 'Tab leaves the nonmodal popover normally');
+        assert.equal(await evaluate(`document.querySelector('#phase-reposition-popover').contains(document.activeElement)`), false, 'Hidden controls never retain focus');
+        await evaluate(`(()=>{const input=document.querySelector('#phase-order-19-title');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+        await action('Save'); await direct('order-19',3);
+        assert.equal(await evaluate(`document.querySelector('#phase-order-19-title').value===''&&document.querySelector('#phase-order-19-title').getAttribute('aria-invalid')==='true'&&document.querySelector('#phase-order-19-title').getAttribute('aria-describedby')==='planner-feedback'`), true, 'Reordering retains invalid raw draft values and their validation association');
+        await action('Cancel'); await action('Back to timer');
+    } finally {
+        await evaluate(`window.confirm=window.reorderConfirm;localStorage.setItem('easyTimerTemplates',${JSON.stringify(baseline)})`);
+        await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+        await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:800,screenWidth:1280,screenHeight:800,mobile:false,deviceScaleFactor:1});
+    }
+    console.log('PASS: exact long-list repositioning, draft/save/cancel/undo, shared responsive popover, keyboard/touch/focus and dismissal.');
+}
+
+async function checkInitialPhase({ evaluate, click, text }) {
+    const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
+    const field = (selector, value) => evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+    const phaseId = () => evaluate(`document.querySelector('.phase-list li').dataset.phaseId`);
+    const raw = () => evaluate(`localStorage.getItem('easyTimerTemplates')`);
+    await evaluate(`window.initialPhaseConfirm=window.confirm;window.initialPhasePrompts=0;window.confirm=()=>{window.initialPhasePrompts++;return true;};`);
+    try {
+        await click('#menu-toggle'); await click('#open-planner');
+        await action('Create template');
+        assert.equal(await evaluate('document.activeElement.id'), 'template-name');
+        assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 1);
+        const firstId = await phaseId();
+        assert.match(firstId, /^[0-9a-f]{8}-[0-9a-f-]{27}$/i, 'Initial phase uses the existing UUID mechanism');
+        assert.equal(await evaluate(`document.querySelector('.phase-title input').value`), '');
+        assert.equal(await evaluate(`document.querySelector('.phase-duration input').value`), '10');
+        assert.equal(await evaluate(`document.querySelector('.phase-title input').placeholder`), 'Enter phase title');
+        await click('[data-language="de"]');
+        assert.equal(await phaseId(), firstId);
+        assert.equal(await evaluate(`document.querySelector('.phase-title input').placeholder`), 'Phasentitel eingeben');
+        await click('[data-language="en"]');
+        assert.equal(await raw(), baseline, 'Initializing and translating a draft never writes storage');
+        await action('Cancel');
+        assert.equal(await evaluate('window.initialPhasePrompts'), 0, 'The untouched initial phase belongs to the clean baseline');
+        await action('Create template');
+        const savedPhaseId = await phaseId();
+        assert.notEqual(savedPhaseId, firstId, 'Each new draft gets a fresh phase identity');
+        await action('Save'); assert.match(await text('.planner-feedback'), /workshop name/);
+        assert.equal(await raw(), baseline);
+        // A validation attempt alone must not dirty the untouched draft.
+        await action('Cancel'); assert.equal(await evaluate('window.initialPhasePrompts'), 0);
+        await action('Create template');
+        await field('#template-name', 'Initial phase workshop');
+        await action('Save'); assert.match(await text('.planner-feedback'), /phase needs a title/);
+        assert.equal(await raw(), baseline);
+        await field('#template-name', '');
+        await field('.phase-title input', 'Temporary title'); await field('.phase-title input', '');
+        await field('.phase-duration input', '15'); await field('.phase-duration input', '010');
+        await action('Cancel');
+        assert.equal(await evaluate('window.initialPhasePrompts'), 0, 'Restoring normalized initial values removes dirty state');
+        await action('Create template'); await field('.phase-title input', 'Changed'); await action('Cancel');
+        assert.equal(await evaluate('window.initialPhasePrompts'), 1, 'Editing the initial phase requires discard confirmation');
+        assert.equal(await raw(), baseline);
+        await action('Create template');
+        await click('.phase-actions button:last-child');
+        assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 0);
+        await click('[data-language="de"]'); await click('[data-language="en"]');
+        assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 0, 'Rendering never recreates a deleted initial phase');
+        await action('Cancel'); assert.equal(await evaluate('window.initialPhasePrompts'), 2, 'Deleting only the initial phase makes the draft dirty');
+        await action('Create template'); await click('.phase-actions button:last-child');
+        await field('#template-name', 'No phases'); await action('Save');
+        assert.match(await text('.planner-feedback'), /at least one phase/);
+        assert.equal(await raw(), baseline);
+        await action('Cancel'); assert.equal(await evaluate('window.initialPhasePrompts'), 3);
+        await action('Create template'); const persistedId = await phaseId();
+        await field('#template-name', 'Initial phase workshop'); await field('.phase-title input', 'Opening'); await action('Save');
+        const saved = await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates')).templates.at(-1)`);
+        assert.deepEqual(saved.phases, [{id:persistedId,title:'Opening',durationSeconds:600}]);
+        assert.deepEqual(await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates')).templates.slice(0,-1)`), JSON.parse(baseline).templates, 'Saving a new draft preserves all existing templates');
+        await click('.template-library li:last-child button:first-child');
+        assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 1, 'Editing does not add another phase');
+        assert.equal(await phaseId(), persistedId);
+        await action('Cancel'); assert.equal(await evaluate('window.initialPhasePrompts'), 3, 'An existing template also opens clean');
+        await action('Back to timer');
+    } finally {
+        await evaluate(`window.confirm=window.initialPhaseConfirm;localStorage.setItem('easyTimerTemplates',${JSON.stringify(baseline)})`);
+    }
+    console.log('PASS: initial empty phase, localized placeholder, UUID/focus/default duration, validation/save, clean/reverted/changed cancellation and permanent deletion.');
+}
+
 async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
     const stored = () => evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates'))`);
     const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
@@ -283,7 +483,7 @@ async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
         await open();
         for (const title of ['First phase', 'Second phase']) {
             await action('Create template'); await field('#template-name', 'Duplicate workshop');
-            await action('+ Add phase'); await field('.phase-list input[type="text"]', title); await action('Save');
+            await field('.phase-list input[type="text"]', title); await action('Save');
         }
         let library = await stored();
         const first = library.templates[offset]; const second = library.templates[offset + 1];

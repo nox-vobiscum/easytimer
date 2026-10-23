@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDraft, createTemplateStore, MAX_PHASE_SECONDS, MAX_TOTAL_SECONDS, movePhase, phaseDuration, STORAGE_KEY, totalDuration, validateLibrary, validateTemplate } from '../src/js/templates.mjs';
+import { createDraft, createTemplateStore, MAX_PHASE_SECONDS, MAX_TOTAL_SECONDS, movePhase, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateLibrary, validateTemplate } from '../src/js/templates.mjs';
 import { createTimer } from '../src/js/timer.mjs';
 
 const template = () => ({ id: 'workshop-1', name: ' Workshop ', transitionMode: 'manual', phases: [
@@ -76,6 +76,28 @@ test('reordering uses stable phase identity and leaves invalid moves unchanged',
     movePhase(draft, 'phase-1', -1); movePhase(draft, 'missing', 1); movePhase(draft, 'phase-1', 9);
     assert.deepEqual(draft, before);
 });
+test('exact positions are final 1-based positions and preserve phase objects in long drafts', () => {
+    const saved = { ...template(), phases: Array.from({ length: 30 }, (_, i) => ({ id: `phase-${i}`, title: `Title ${i}`, durationSeconds: (i + 1) * 60 })) };
+    const baseline = structuredClone(saved);
+    for (const from of [0, 14, 29]) {
+        for (const position of [1, 8, 15, 22, 30]) {
+            const draft = createDraft(saved);
+            const phase = draft.phases[from];
+            const expected = [...draft.phases]; expected.splice(from, 1); expected.splice(position - 1, 0, phase);
+            repositionPhase(draft, phase.id, position);
+            assert.deepEqual(draft.phases, expected);
+            assert.equal(draft.phases[position - 1], phase);
+            assert.deepEqual(saved, baseline, 'Only the isolated draft is reordered');
+            repositionPhase(draft, phase.id, from + 1);
+            assert.deepEqual(draft, baseline, 'Restoring the original position restores meaningful values');
+        }
+    }
+    const draft = createDraft(saved);
+    for (const position of [0, -1, 31, 1.5, '2', NaN, Infinity]) repositionPhase(draft, 'phase-0', position);
+    repositionPhase(draft, 'missing', 2); repositionPhase(draft, 'phase-0', 1);
+    assert.deepEqual(draft, baseline);
+});
+
 test('multiple templates persist; failed validation and cancelled drafts preserve storage', () => {
     const storage = memory(); const store = createTemplateStore(() => storage);
     const data = store.load(); data.templates.push(template(), { ...template(), id: 'workshop-2', name: 'Other' });
