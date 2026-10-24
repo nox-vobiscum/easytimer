@@ -1,5 +1,11 @@
 # easyTimer — Product, UX and MVP Concept v2
 
+### Menu hierarchy and Session Editor (accepted, publication approved)
+
+The menu distinguishes two equally prominent timer modes, Quick Timer and Session Timer, from the separate **Session Editor** tool (DE: **Session-Editor**). The Editor action uses the subtitle “Create & manage sessions” / “Sessions erstellen & verwalten”; its workspace heading and accessible labels use the same tool name. Internal Planner interfaces, template models/storage, navigation confirmations and timing are unchanged. Language and theme share one compact row, stacking only below 301px to retain 44px targets. Short menus scroll and retain visible keyboard focus. Mode tiles reflect the current timer mode even when returning from Editor.
+
+The selected Session Timer icon is **Variant B — Stopwatch + Echo**, based on the owner's reference: one dominant stopwatch with two smaller, subdued rear echoes, theme-aware opacity and 24/28/32px visual checks. This supersedes the prior calendar placeholder and the earlier test-only A/B/C proposals. No icon setting is introduced. Matching shell/import/cache references use v31. The owner approved publication of this bounded UI release; infrastructure changes and further features remain outside scope. Real iOS/PWA and VoiceOver checks remain manual.
+
 ### ST-002B — Automatic Session execution (approved, implemented locally)
 
 Automatic templates can be prepared READY and explicitly started. The Run snapshots `transitionMode`; one shared clock remains owned by `app.js`. The coordinator reconciles every elapsed phase before interpreting actions, chaining deadlines from scheduled boundaries and completing automatically into final workshop overtime. Delayed callbacks are not phase overrun. Manual execution, Quick Timer, UX-008 thresholds, unified positive overtime and Clock-only remain unchanged. Automatic upcoming-phase information has no arrow, button styling or focus action; the final phase says the workshop ends automatically. No early automatic Skip/Complete is allowed.

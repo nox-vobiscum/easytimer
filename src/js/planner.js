@@ -1,8 +1,8 @@
-import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=28';
+import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=31';
 
 const copy = {
     en: {
-        planner: 'Session Planner', back: 'Back to timer', create: 'Create template', empty: 'No workshop templates saved yet.',
+        planner: 'Session Editor', back: 'Back to timer', create: 'Create template', empty: 'No workshop templates saved yet.',
         edit: 'Edit', remove: 'Delete', templateName: 'Workshop name', transition: 'Phase transitions', manual: 'Manual', automatic: 'Automatic',
         planningOnly: 'Planning only. Session execution is not available yet.', phases: 'Phases', phaseTitleLabel: 'Phase title', phaseTitlePlaceholder: 'Enter phase title',
         durationLabel: 'Duration (min)', actions: 'Actions', up: 'Move up', down: 'Move down', removePhase: 'Remove phase', add: '+ Add phase',
@@ -19,7 +19,7 @@ const copy = {
         conflict: 'Saved templates changed in another tab. Saving is blocked to protect them. Your draft is retained. Reload only when you are ready to discard it.',
     },
     de: {
-        planner: 'Session-Planer', back: 'Zurück zum Timer', create: 'Vorlage erstellen', empty: 'Noch keine Workshop-Vorlagen gespeichert.',
+        planner: 'Session-Editor', back: 'Zurück zum Timer', create: 'Vorlage erstellen', empty: 'Noch keine Workshop-Vorlagen gespeichert.',
         edit: 'Bearbeiten', remove: 'Löschen', templateName: 'Workshopname', transition: 'Phasenübergänge', manual: 'Manuell', automatic: 'Automatisch',
         planningOnly: 'Nur Planung. Sessions können noch nicht ausgeführt werden.', phases: 'Phasen', phaseTitleLabel: 'Phasentitel', phaseTitlePlaceholder: 'Phasentitel eingeben',
         durationLabel: 'Dauer (min)', actions: 'Aktionen', up: 'Nach oben', down: 'Nach unten', removePhase: 'Phase entfernen', add: '+ Phase hinzufügen',

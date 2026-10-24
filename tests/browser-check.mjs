@@ -10,6 +10,7 @@ import { checkSession } from './session-browser.mjs';
 import { checkTimeVisuals } from './time-visuals-browser.mjs';
 import { checkClockView } from './clock-view-browser.mjs';
 import { checkAutomaticSession } from './automatic-session-browser.mjs';
+import { checkMenuPolish } from './menu-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
 const timeTravelOptions=parseTimeTravelOptions(process.argv.slice(2));
@@ -112,6 +113,7 @@ try {
         }
         const geometry=await evaluate(`(()=>{const trigger=document.querySelector('#menu-toggle').getBoundingClientRect();const panel=document.querySelector('#preferences').getBoundingClientRect();const fullscreen=document.querySelector('#fullscreen').getBoundingClientRect();return {expanded:document.querySelector('#menu-toggle').getAttribute('aria-expanded'),visible:!document.querySelector('#preferences').hidden,triggerFits:trigger.width>=44&&trigger.height>=44&&trigger.left>=0&&trigger.top>=0&&trigger.right<=innerWidth&&trigger.bottom<=innerHeight,panelFits:panel.left>=0&&panel.right<=innerWidth&&panel.top>=trigger.bottom&&panel.bottom<=innerHeight,noCollision:trigger.right<=fullscreen.left||fullscreen.right<=trigger.left||trigger.bottom<=fullscreen.top||fullscreen.bottom<=trigger.top}})()`);
         assert.ok(geometry.expanded==='true'&&geometry.visible&&geometry.triggerFits&&geometry.panelFits&&geometry.noCollision,JSON.stringify(geometry));
+        assert.equal(await evaluate(`(()=>{const quick=document.querySelector('#open-quick'),session=document.querySelector('#open-session'),group=quick.parentElement;return !quick.hidden&&!session.hidden&&group===session.parentElement&&group.getAttribute('role')==='group'&&group.getAttribute('aria-labelledby')==='mode-heading'&&quick.getAttribute('aria-pressed')===String(document.body.dataset.mode==='quick')&&session.getAttribute('aria-pressed')===String(document.body.dataset.mode==='session')&&!group.contains(document.querySelector('#open-planner'))&&[quick,session].every(b=>b.querySelector('svg[aria-hidden="true"]')&&b.textContent.trim());})()`),true,'Two visible modes expose one active selection; Planner remains a separate tool');
         if(process.env.EASYTIMER_SCREENSHOT_DIR&&state==='PAUSED') {
             const view=await evaluate(`innerWidth+'-'+(document.body.classList.contains('presentation')?'presentation':'standard')`);
             const screenshot=await cdp('Page.captureScreenshot',{format:'png'});
@@ -120,7 +122,13 @@ try {
         await evaluate(`document.querySelector('#menu-toggle').focus()`);
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-session')`),true,'Tab reaches Session Timer navigation in the shared menu');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-quick')`),true,'Tab reaches Quick Timer mode choice first');
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-session')`),true,'Tab reaches Session Timer mode choice next');
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-planner')&&getComputedStyle(document.activeElement).outlineStyle!=='none'`),true,'Planner follows modes with visible keyboard focus');
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
         assert.equal(await evaluate(`document.querySelector('#preferences').hidden&&document.activeElement===document.querySelector('#menu-toggle')`),true,'Escape closes menu and restores focus');
         assert.equal(await evaluate(`document.body.classList.contains('presentation')`),before.presentation,'Menu Escape preserves presentation');
@@ -145,12 +153,19 @@ try {
     } else {
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=28'&&js==='js/app.js?v=28'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=28')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=31'&&js==='js/app.js?v=31'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=31')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
     await checkMenu('READY');
+    await click('#menu-toggle'); await click('#open-session');
+    assert.equal(await evaluate(`document.querySelector('#open-session').getAttribute('aria-pressed')==='true'&&document.querySelector('#open-quick').getAttribute('aria-pressed')==='false'`),true,'Session picker marks Session active');
+    await click('#menu-toggle'); await click('#open-planner');
+    assert.equal(await evaluate(`!document.querySelector('#planner').hidden&&document.querySelector('#open-session').getAttribute('aria-pressed')==='true'&&!document.querySelector('#open-planner').hasAttribute('aria-pressed')`),true,'Planner does not become a third mode');
+    await click('.planner-back'); await click('#menu-toggle'); await click('#open-quick');
+    assert.equal(await text('#time'),'05:00'); await checkTitle('READY');
+    await checkMenuPolish({evaluate,click,text,cdp});
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
     assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
     assert.equal(await evaluate(`document.querySelector('link[rel="manifest"]').getAttribute('href')`), 'manifest.webmanifest');
@@ -174,6 +189,16 @@ try {
         await cdp('Page.captureScreenshot',{format:'png'});
         assert.equal(await evaluate(`(()=>{const p=document.querySelector('#preferences').getBoundingClientRect();return !document.querySelector('#preferences').hidden&&p.left>=0&&p.top>=0&&p.right<=innerWidth&&p.bottom<=innerHeight})()`),true,'Open menu survives resize/rotation without clipping');
         assert.equal(await evaluate(`Array.from(document.querySelectorAll('#preferences button:not([hidden])')).every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44})`),true,'Visible preferences retain touch targets');
+        for(const language of ['de','en'])for(const theme of ['light','dark','system']) {
+            await click(`[data-language="${language}"]`);await click(`[data-theme="${theme}"]`);
+            assert.equal(await text('#mode-heading'),language==='de'?'Modus':'Mode');
+            assert.equal(await evaluate(`(()=>{const q=document.querySelector('#open-quick').getBoundingClientRect(),s=document.querySelector('#open-session').getBoundingClientRect(),p=document.querySelector('#open-planner').getBoundingClientRect(),g=document.querySelector('#preferences');return Math.abs(q.top-s.top)<1&&Math.abs(q.width-s.width)<1&&q.right<=s.left&&q.height>p.height&&s.bottom<p.top&&g.scrollWidth<=g.clientWidth;})()`),true,'Equal mode tiles stay side by side above the separate Planner without horizontal overflow');
+            if(process.env.EASYTIMER_SCREENSHOT_DIR&&['light','dark'].includes(theme)&&[1280,320,667].includes(width)) {
+                await evaluate(`document.querySelector('#preferences').scrollTop=0`);
+                const shot=await cdp('Page.captureScreenshot',{format:'png'});
+                await writeFile(join(process.env.EASYTIMER_SCREENSHOT_DIR,`menu-hierarchy-${width}-${language}-${theme}.png`),Buffer.from(shot.data,'base64'));
+            }
+        }
         await checkTitle('READY');
     }
     await click('#menu-toggle');

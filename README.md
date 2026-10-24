@@ -8,9 +8,9 @@ ST-001 adds a local Session Planner workspace for reusable workshop templates. I
 
 ## Release baseline and approved update
 
-The current production baseline is [7f6f9c0](https://github.com/nox-vobiscum/easytimer/commit/7f6f9c057dc1350a53bf6845a91069dbee60794a), PWA v27: ST-002A, UX-008/009/010 and the centered Clock-only hotfix. Production files matched the release and focused production browser checks passed. Real iOS Safari/PWA and VoiceOver acceptance remains manual.
+The last verified production baseline is ST-002B at `ead2ad1dd4939d88f0950711f9538ce1f1bd6045`, PWA v28. FTP deployment, byte-for-byte checks of all 17 production files and the complete production browser regression passed. Native iOS/PWA and VoiceOver acceptance remains manual.
 
-The accepted [ST-002B automatic Session increment](docs/ST-002B_AUTOMATIC_SESSION_TIMER.md) uses PWA shell v28. Implementation commit `f6a55e8be126ed620d40470b83ec65243f4810e7` is integrated into local `main` and protected by annotated `release/st-002b`; rollback remains `checkpoint/before-st-002b` at the v27 baseline. The owner has authorized the documentation follow-up and production publication through the unchanged FTP workflow. Deployment outcome must be verified separately; approval alone does not establish a successful release.
+The [ST-002B automatic Session increment](docs/ST-002B_AUTOMATIC_SESSION_TIMER.md), implementation `f6a55e8`, is deployed with annotated `release/st-002b`; rollback `checkpoint/before-st-002b` is preserved. The menu/Session Editor release below is separately accepted for production publication with PWA v31.
 
 UX-004: the browser tab title shows remaining time while running, adds a pause marker while paused, and shows signed overtime after expiry. READY uses `easyTimer`. Existing deadline-based updates correct the title when browser execution resumes; background updates can be throttled by the browser.
 
@@ -36,13 +36,19 @@ The common CSS-sized timer stage allocates space after accounting for actual pre
 
 The strip shows remaining time in pink on the left and elapsed time in green on the right. Its marker moves right to left; pause freezes it, Stop restores it, and expiry leaves it fully green. It is decorative and never announces timer ticks to screen readers.
 
-Manual Session execution is deployed; automatic execution is implemented locally in ST-002B. Ad-hoc, subtraction, Quick Timer manual duration entry and presentation settings remain outside scope.
+Manual Session execution is deployed; automatic execution is deployed in ST-002B. Ad-hoc, subtraction, Quick Timer manual duration entry and presentation settings remain outside scope.
 
 ## UX-009 / UX-010 local implementation
 
 The [canonical display and Clock-only contract](docs/EASYTIMER_UX_KONZEPT_v2.md#ux-009--unified-readout-and-ux-010--mobile-clock-only-approved-local-implementation) describes the single positive overtime readout and transient phone-landscape view. Tap the large clock to hide controls; tap anywhere or press Escape to restore them without a timer action. A separate localized button supports Enter/Space and focus while the numeric readout retains timer semantics. Portrait rotation and reload reset the view. Desktop/tablet and Planner do not expose it. Keyboard focus outlines remain visible.
 
 The existing container sizing now accounts for every character, including a plus sign and long hours. Shared timing, Session snapshots, templates and progress meaning are unchanged. The deployed UX-009/UX-010 centering baseline uses shell v27; local ST-002B uses v28 with matching imports/cache references. Run `node tests/browser-check.mjs` for the complete regression, including `tests/clock-view-browser.mjs`, which prints a temporary normal/Clock-only screenshot gallery. Native iPhone Safari/PWA safe areas, browser chrome, touch restoration, rotation and VoiceOver remain manual acceptance checks. The owner authorized commit, integration and deployment of this bounded release; later work requires separate approval.
+
+## Menu hierarchy and Session Editor release
+
+The universal menu groups Quick Timer and Session Timer as equal, always-visible mode tiles with decorative inline SVGs and `aria-pressed` selection. Session Editor (DE: Session-Editor) is a separate tool below them, with subtitle “Create & manage sessions” / “Sessions erstellen & verwalten”. Language and appearance share one row, with stacking only below 301px to retain 44px targets. Opening Editor does not select a third mode. Internal Planner names, navigation confirmations, timing, storage and presentation behavior are unchanged. The menu is up to 288px wide with 96px tiles (previously 320px / 112px); it scrolls on short screens. This owner-accepted UI release uses matching PWA v31 references; commit, integration and production publication are approved through the unchanged FTP workflow. Deployment success must be verified independently. The owner-selected Session Timer icon is Variant B, Stopwatch + Echo: one dominant stopwatch with two subdued rear echoes. `tests/menu-browser.mjs` generates a temporary browsable screenshot gallery with 32 open-menu combinations, keyboard focus and the selected icon at 24/28/32px. Set `EASYTIMER_MENU_BEFORE` to a previous menu screenshot directory to include before images. Native iOS/PWA and VoiceOver checks remain manual.
+
+Verification passed all 63 unit tests and the complete Quick/Planner/manual/automatic Session/visual/Clock-only/PWA browser regression. Menu captures include desktop, 320 px portrait and short landscape in DE/EN and Light/Dark; generated files remain outside the repository.
 
 ## Run locally
 

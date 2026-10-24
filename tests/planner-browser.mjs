@@ -103,7 +103,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
             assert.equal(await evaluate(`document.documentElement.dataset.theme`), theme);
         }
         await click('[data-language="de"]');
-        assert.equal(await text('#planner h1'), 'Session-Planer');
+        assert.equal(await text('#planner h1'), 'Session-Editor');
         assert.equal(await evaluate(`document.querySelector('#template-name').value`), 'Renamed workshop');
         await click('[data-language="en"]');
         if (process.env.EASYTIMER_SCREENSHOT_DIR) {
@@ -172,7 +172,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await checkCompactPlanner({ evaluate, click, text, cdp });
     await checkRepositioning({ evaluate, click, text, cdp });
     await checkInitialPhase({ evaluate, click, text });
-    console.log('PASS: Session Planner creation/edit/reorder/save/cancel/delete, storage protection, responsive themes/localization/focus, fullscreen exit and uninterrupted Quick Timer.');
+    console.log('PASS: Session Editor creation/edit/reorder/save/cancel/delete, storage protection, responsive themes/localization/focus, fullscreen exit and uninterrupted Quick Timer.');
 }
 
 async function checkCompactPlanner({ evaluate, click, text, cdp }) {

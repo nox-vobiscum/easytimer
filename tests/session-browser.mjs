@@ -21,6 +21,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
     const choose = async id => {
         await evaluate(`(()=>{const select=document.querySelector('#session-template');select.value=${JSON.stringify(id)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         await click('#prepare-session');
+        assert.equal(await evaluate(`document.querySelector('#open-session').getAttribute('aria-pressed')==='true'&&document.querySelector('#open-quick').getAttribute('aria-pressed')==='false'`),true,'Prepared Session retains its active menu tile');
     };
     const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent===${JSON.stringify(label)}).click()`);
     const key = async (key,code,number) => {

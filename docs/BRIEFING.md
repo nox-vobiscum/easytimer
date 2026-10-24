@@ -4,13 +4,15 @@
 **Repository:** https://github.com/nox-vobiscum/easytimer  
 **Production:** https://et.rbsnet.at/
 
-**Production baseline:** `7f6f9c057dc1350a53bf6845a91069dbee60794a`, PWA v27, including ST-002A, UX-009/UX-010 and centered Clock-only. Native iOS/PWA/VoiceOver acceptance remains manual.
+**Last verified production baseline:** `ead2ad1dd4939d88f0950711f9538ce1f1bd6045`, PWA v28, including ST-002B automatic Sessions, ST-002A and UX-008/009/010. The FTP workflow succeeded, all 17 served files matched Git and the full isolated production browser regression passed. Native iOS/PWA/VoiceOver acceptance remains manual.
 
-**Accepted release:** [ST-002B automatic Session execution](ST-002B_AUTOMATIC_SESSION_TIMER.md), implementation `f6a55e8be126ed620d40470b83ec65243f4810e7`, annotated `release/st-002b`, PWA v28. Local fast-forward integration is complete; branch `feature/st-002b-automatic-session-timer` and rollback `checkpoint/before-st-002b` are preserved. The owner separately authorized documentation follow-up and production publication. Deployment completion and served assets require verification; the production baseline above remains the last verified release until then.
+**Accepted menu release:** Compact mode tiles, Session Editor terminology and Stopwatch + Echo icon on `feature/menu-mode-hierarchy`, PWA v31. Owner approval covers documentation, commit, local integration and production publication through the existing FTP workflow. Verify the workflow, served files and production behavior before declaring this release deployed. Existing checkpoints and feature branches are preserved.
 
 ## 1. Current product
 
-easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The release includes subtle overtime, unified presets, continuous time-budget extensions, and a persistent budget line. Manual Session timing is delivered; automatic transitions are implemented locally in ST-002B. Ad-hoc timing, alarms and presentation settings remain future scope.
+**Accepted menu refinement:** `feature/menu-mode-hierarchy` adds compact equal Quick/Session mode tiles with `aria-pressed`, a separate **Session Editor** action (DE: **Session-Editor**) with localized subtitle, then one language/theme row. The visible workspace heading and accessible region name use Session Editor; internal Planner names and data remain unchanged. The owner-selected Session Timer icon is Variant B, Stopwatch + Echo, with theme-specific rear-echo opacity. Matching local PWA references use v31. The owner has authorized commit, integration and production publication of this UI increment. Short panels scroll; two mode columns, visible focus and 44px targets remain available. `tests/menu-browser.mjs` adds a temporary review gallery and navigation/layout/terminology checks to the full browser suite. No clock, coordinator or persistence behavior changes are included.
+
+easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The release includes subtle overtime, unified presets, continuous time-budget extensions, and a persistent budget line. Manual Session timing is delivered; automatic transitions are deployed in ST-002B. Ad-hoc timing, alarms and presentation settings remain future scope.
 
 The countdown is the dominant element. UX-007 uses two layout families sharing one timer state: Standard (desktop/tablet and smartphone portrait) and Presentation (explicit desktop/tablet fullscreen/fallback and automatic smartphone landscape).
 
@@ -76,7 +78,7 @@ CSS Grid aligns phase number, flexible title, minutes and two 44 px SVG actions 
 
 Invalid or unsupported stored data blocks writes without deleting records. Read/write errors retain drafts and existing storage. A raw-snapshot optimistic check blocks detected cross-tab conflicts on save/delete; simultaneous writes in the comparison/write window remain a documented localStorage limitation. Reload is explicit and confirms draft loss. Optional JSON export/import can later reuse schema validation with explicit ID-collision decisions; cloud storage and authentication are not included.
 
-Production shell v27 and local shell v28 include both planner modules with versioned URLs. Run `node --test tests/timer.test.mjs tests/templates.test.mjs` and the existing browser regression, including `tests/planner-browser.mjs`. The latter covers localized field-error associations, normalized unsaved-change detection, duplicate template names, stable IDs after full reload, genuine cross-tab storage conflicts, compact responsive layouts and minute/large-total boundaries. Repositioning tests include exact long-list destinations, save/cancel/undo, retained invalid fields, native keyboard selection, emulated touch, focus/dismissal and popover fit across languages/themes. Native iOS Safari/PWA keyboard, position picker, safe-area, fullscreen and screen-reader checks remain explicitly open for final release acceptance on real hardware.
+The verified production shell v28 and accepted menu shell v31 include both planner modules with versioned URLs. Run `node --test tests/timer.test.mjs tests/templates.test.mjs` and the existing browser regression, including `tests/planner-browser.mjs`. The latter covers localized field-error associations, normalized unsaved-change detection, duplicate template names, stable IDs after full reload, genuine cross-tab storage conflicts, compact responsive layouts and minute/large-total boundaries. Repositioning tests include exact long-list destinations, save/cancel/undo, retained invalid fields, native keyboard selection, emulated touch, focus/dismissal and popover fit across languages/themes. Native iOS Safari/PWA keyboard, position picker, safe-area, fullscreen and screen-reader checks remain explicitly open for final release acceptance on real hardware.
 
 - `src/index.html`: semantic single-timer interface, PWA metadata, header, controls, and progress strip.
 - `src/css/styles.css`: design tokens, themes, safe areas, responsive standard and presentation layouts, and universal menu.
@@ -129,7 +131,7 @@ For fast deterministic visual inspection, DEV-001 extends this harness with [vir
 
 ## 7. Deployment
 
-Production remains PWA v27. Local ST-002B uses v28 across HTML, imported modules and service-worker entries. Automatic reconciliation stays in the Session Coordinator; the shared timer engine and template storage are unchanged. The existing FTP workflow, hosting and DNS remain unchanged.
+The verified production baseline is PWA v28; the accepted menu release uses v31 across HTML, imported modules and service-worker entries. Automatic reconciliation stays in the Session Coordinator; the shared timer engine and template storage are unchanged. The existing FTP workflow, hosting and DNS remain unchanged.
 
 UX-008 adds one derived render attribute and semantic theme tokens shared by Quick/current Session phases; timing and progress remain unchanged. See the [canonical UX-008 record](EASYTIMER_UX_KONZEPT_v2.md#ux-008--shared-timebox-endgame-highlight-approved-implemented-locally) for its single threshold table, amber/red semantics and intentionally deferred ON/OFF preference. No timer-engine change, independent warning clock, sound or new live announcements is involved.
 
@@ -149,7 +151,7 @@ The production workflow currently uploads the static repository contents. There 
 
 Future work may include subtraction controls, manual duration entry, session timing, ad-hoc timing, signals, restoration, and customization. Each next feature requires a bounded plan and explicit approval.
 
-[`backlog.md`](backlog.md) tracks discussed future candidates and their status; it does not select or authorize the next increment. The published ST-001 density/reordering and initial-phase improvements are complete, while insertion at a chosen position remains future scope. The deployed ST-002A implementation executes manual snapshots; see the [implementation overview](../README.md#st-002a-local-implementation--manual-session-timer) for its exact behavior. ST-002B implements automatic transitions locally; runtime editing, detailed statistics and recovery remain later increments.
+[`backlog.md`](backlog.md) tracks discussed future candidates and their status; it does not select or authorize the next increment. The published ST-001 density/reordering and initial-phase improvements are complete, while insertion at a chosen position remains future scope. The deployed ST-002A implementation executes manual snapshots; see the [implementation overview](../README.md#st-002a-local-implementation--manual-session-timer) for its exact behavior. ST-002B delivers automatic transitions; runtime editing, detailed statistics and recovery remain later increments.
 
 ## 10. Collaboration workflow
 

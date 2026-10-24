@@ -1,6 +1,6 @@
 # ST-002B: Automatic Session Timer
 
-**Status:** Release candidate accepted, locally integrated and tagged. The owner has separately authorized documentation follow-up, push and production deployment through the unchanged FTP workflow. Deployment outcome requires verification.
+**Status:** Deployed and verified at `ead2ad1`, PWA v28; see the production outcome below. The annotated release tag and rollback checkpoint remain unchanged.
 **Baseline:** Production `7f6f9c057dc1350a53bf6845a91069dbee60794a` (ST-002A, UX-009/UX-010 and centering hotfix), PWA v27.
 **Rollback:** Annotated `checkpoint/before-st-002b`, unchanged at the baseline.
 **Branch:** `feature/st-002b-automatic-session-timer`.
@@ -59,10 +59,12 @@ The owner accepted the release candidate and authorized one local release commit
 
 ## Production publication approval
 
+**Verified production outcome:** ST-002B was published at `ead2ad1dd4939d88f0950711f9538ce1f1bd6045` (implementation plus documentation follow-up), PWA v28. [FTP workflow 40111855085](https://github.com/nox-vobiscum/easytimer/actions/runs/40111855085) succeeded. All 17 production files matched Git byte-for-byte and the full browser regression passed against production in an isolated temporary profile. Annotated `release/st-002b` was published unchanged at implementation `f6a55e8`. The historical preparation notes below are retained; native-device limitations remain open. Subsequent menu/UI releases do not change this Session timing contract.
+
 Local release preparation produced implementation commit `f6a55e8be126ed620d40470b83ec65243f4810e7`, fast-forwarded into `main`, with annotated `release/st-002b` pointing to that commit. The feature branch and original rollback checkpoint are preserved. All 63 unit tests, the full browser regression and all 62 virtual-time Light/Dark captures passed in the final preparation. A subsequent owner instruction authorizes documentation consolidation and immediate production publication. The documentation-only follow-up is a separate commit above the unchanged implementation tag; it changes no application assets and requires no further cache bump. No temporary files are present in the repository; generated screenshot galleries remain outside it as review evidence. Verify the pushed `main` SHA, successful FTP workflow and served v28 files before declaring production success. Do not modify DNS/hosting, rewrite tags or begin another feature.
 
 ## Device and recovery limits
 
 Sleep/wake catch-up requires the original page context to survive. A full reload, browser restart or OS eviction still starts a fresh Quick Timer. Cross-reload recovery, four-hour recovery notifications/dialogs, rewind, active-session Manual/Automatic switching, live editing, statistics UI, signals and additional restart controls remain deferred. Existing `Date.now()` sensitivity to manual system-clock changes is unchanged. No missed signals are replayed.
 
-Native iOS Safari/PWA sleep/wake, process eviction, browser chrome/safe areas, orientation and VoiceOver acceptance remain manual checks; Chromium emulation does not establish them. The last verified production baseline is v27 until the approved v28 publication is verified. Keep all previous checkpoints and the feature branch; publication approval does not authorize hosting/DNS changes or another increment.
+Native iOS Safari/PWA sleep/wake, process eviction, browser chrome/safe areas, orientation and VoiceOver acceptance remain manual checks; Chromium emulation does not establish them. ST-002B production v28 is verified. Keep all previous checkpoints and the feature branch; publication approval does not authorize hosting/DNS changes or another increment.

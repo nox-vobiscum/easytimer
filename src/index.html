@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/branding/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="assets/branding/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="css/styles.css?v=28">
+  <link rel="stylesheet" href="css/styles.css?v=31">
 </head>
 <body data-duration-entry="presets-adjustments">
   <header>
@@ -31,15 +31,33 @@
       </svg>
     </button>
     <div id="preferences" class="preferences" hidden>
-      <button id="open-quick" type="button" data-copy="quick" hidden>Quick Timer</button>
-      <button id="open-session" type="button" data-copy="session">Session Timer</button>
-      <button id="open-planner" type="button" data-copy="planner">Session Planner</button>
-      <span class="preference-heading" data-copy="language">Language</span>
+      <span id="mode-heading" class="preference-heading" data-copy="mode">Mode</span>
+      <div class="mode-choices" role="group" aria-labelledby="mode-heading">
+        <button id="open-quick" class="mode-choice" type="button" aria-pressed="true">
+          <svg class="navigation-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="14" r="8"/><path d="M12 6V3m-3-1h6m3 5 2-2m-8 5v4"/></svg>
+          <span data-copy="quick">Quick Timer</span>
+        </button>
+        <button id="open-session" class="mode-choice" type="button" aria-pressed="false">
+          <svg class="navigation-icon session-stopwatch" viewBox="0 0 32 26" aria-hidden="true" focusable="false">
+            <g class="stopwatch-echo stopwatch-echo-far"><circle cx="24" cy="16" r="6.5"/><path d="M24 9.5V7m-2-1h4m3 5 1.5-1.5"/></g>
+            <g class="stopwatch-echo stopwatch-echo-near"><circle cx="17" cy="16" r="7.25"/><path d="M17 8.75V6m-2-1h4m3 5 1.5-1.5"/></g>
+            <circle class="stopwatch-face" cx="9" cy="16" r="8"/><path d="M9 8V4m-2-1h4m4 6 1.5-1.5M9 12v4"/>
+          </svg>
+          <span data-copy="session">Session Timer</span>
+        </button>
+      </div>
+      <div class="planner-navigation">
+        <button id="open-planner" type="button">
+          <svg class="navigation-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 4h10M4 8h5M4 12v8h16v-5m-12 1 1-4L19 2l3 3-10 10-4 1Zm9-12 3 3"/></svg>
+          <span class="editor-copy"><span data-copy="planner">Session Editor</span><span class="editor-subtitle" data-copy="editorSubtitle">Create &amp; manage sessions</span></span>
+          <svg class="planner-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6"/></svg>
+        </button>
+      </div>
+      <div class="menu-settings">
       <div class="switch" role="group" data-label="language">
         <button type="button" data-language="de">DE</button>
         <button type="button" data-language="en">EN</button>
       </div>
-      <span class="preference-heading" data-copy="theme">Appearance</span>
       <div class="switch" role="group" data-label="theme">
         <button type="button" data-theme="light" aria-label="Light" title="Light">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -56,6 +74,7 @@
             <rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>
           </svg>
         </button>
+      </div>
       </div>
     </div>
   </div>
@@ -137,7 +156,7 @@
         <button id="reload-templates" type="button" data-copy="reloadTemplates">Reload templates</button>
       </div>
     </section>
-    <section id="planner" class="planner" aria-label="Session Planner" hidden></section>
+    <section id="planner" class="planner" aria-label="Session Editor" hidden></section>
   </main>
   <div class="bottom-dock">
     <div class="dock-info">
@@ -155,6 +174,6 @@
   </div>
   <footer><span data-copy="credit">Created by</span> <a href="https://rolandseper.at">Roland B. Seper</a> · © 2026</footer>
   <noscript>This timer requires JavaScript. / Dieser Timer benötigt JavaScript.</noscript>
-  <script type="module" src="js/app.js?v=28"></script>
+  <script type="module" src="js/app.js?v=31"></script>
 </body>
 </html>

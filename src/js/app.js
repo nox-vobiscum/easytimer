@@ -1,19 +1,19 @@
-import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=28';
-import { createPlanner } from './planner.js?v=28';
-import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=28';
-import { createTemplateStore } from './templates.mjs?v=28';
-import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=28';
+import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=31';
+import { createPlanner } from './planner.js?v=31';
+import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=31';
+import { createTemplateStore } from './templates.mjs?v=31';
+import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=31';
 
 const copy = {
     en: {
-        planner: 'Session Planner',
+        planner: 'Session Editor', mode: 'Mode', editorSubtitle: 'Create & manage sessions',
         clockOnly: 'Show clock-only view', clockControls: 'Show timer controls',
         quick: 'Quick Timer', session: 'Session Timer', chooseWorkshop: 'Choose a workshop', backQuick: 'Back to Quick Timer',
         executionHint: 'Phases follow the template’s Manual or Automatic transition mode.', workshopTemplate: 'Workshop template',
         manual: 'Manual', automatic: 'Automatic', endsAutomatically: 'Workshop ends automatically',
         runNote: 'A new run uses a copy. Saved templates stay unchanged. Reloading loses the active run.',
         prepare: 'Prepare workshop', reloadTemplates: 'Reload templates', chooseTemplate: 'Choose a template',
-        emptyTemplates: 'No workshop templates saved. Create one in Session Planner.', loadTemplatesError: 'Templates could not be loaded. Saved data has not been changed. Try reloading templates.',
+        emptyTemplates: 'No workshop templates saved. Create one in Session Editor.', loadTemplatesError: 'Templates could not be loaded. Saved data has not been changed. Try reloading templates.',
         next: 'Next phase', complete: 'Complete workshop',
         stopWorkshop: 'Stop workshop', stopOvertime: 'Stop overtime', workshopComplete: 'Workshop complete', overtimeStopped: 'Overtime stopped',
         OVERTIME_PAUSED: 'Overtime paused', phaseExpired: 'Phase time elapsed', phaseOvertime: 'Phase overtime', finalOvertime: 'Workshop overtime',
@@ -32,14 +32,14 @@ const copy = {
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
     de: {
-        planner: 'Session-Planer',
+        planner: 'Session-Editor', mode: 'Modus', editorSubtitle: 'Sessions erstellen & verwalten',
         clockOnly: 'Nur die Uhr anzeigen', clockControls: 'Timer-Bedienung anzeigen',
         quick: 'Quick-Timer', session: 'Session-Timer', chooseWorkshop: 'Workshop auswählen', backQuick: 'Zurück zum Quick-Timer',
         executionHint: 'Phasen folgen dem manuellen oder automatischen Übergang der Vorlage.', workshopTemplate: 'Workshop-Vorlage',
         manual: 'Manuell', automatic: 'Automatisch', endsAutomatically: 'Workshop endet automatisch',
         runNote: 'Ein neuer Durchlauf verwendet eine Kopie. Gespeicherte Vorlagen bleiben unverändert. Beim Neuladen geht der aktive Durchlauf verloren.',
         prepare: 'Workshop vorbereiten', reloadTemplates: 'Vorlagen neu laden', chooseTemplate: 'Vorlage auswählen',
-        emptyTemplates: 'Keine Workshop-Vorlagen gespeichert. Bitte im Session-Planer eine erstellen.', loadTemplatesError: 'Vorlagen konnten nicht geladen werden. Gespeicherte Daten bleiben unverändert. Bitte erneut laden.',
+        emptyTemplates: 'Keine Workshop-Vorlagen gespeichert. Bitte im Session-Editor eine erstellen.', loadTemplatesError: 'Vorlagen konnten nicht geladen werden. Gespeicherte Daten bleiben unverändert. Bitte erneut laden.',
         next: 'Nächste Phase', complete: 'Workshop abschließen',
         stopWorkshop: 'Workshop stoppen', stopOvertime: 'Überzeit stoppen', workshopComplete: 'Workshop abgeschlossen', overtimeStopped: 'Überzeit gestoppt',
         OVERTIME_PAUSED: 'Überzeit pausiert', phaseExpired: 'Phasenzeit abgelaufen', phaseOvertime: 'Phasenüberzeit', finalOvertime: 'Workshop-Überzeit',
@@ -241,7 +241,8 @@ function render() {
     document.body.dataset.mode = mode;
     document.body.classList.toggle('picker-open', pickerOpen);
     $('session-picker').hidden = !pickerOpen || plannerOpen;
-    $('open-quick').hidden = mode === 'quick';
+    $('open-quick').setAttribute('aria-pressed', String(mode === 'quick'));
+    $('open-session').setAttribute('aria-pressed', String(mode === 'session'));
     $('session-context').hidden = !session;
     planner.setLanguage(language);
     $('planner').setAttribute('aria-label', t.planner);

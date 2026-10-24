@@ -20,6 +20,8 @@ Capture deferred product ideas and small quality-of-life improvements without lo
 
 ## Ideas at a glance
 
+**Accepted menu release (publication approved):** The preparation tool is now called **Session Editor** (DE: **Session-Editor**), with subtitle “Create & manage sessions” / “Sessions erstellen & verwalten”. Internal Planner modules, IDs, storage and workshop-template terminology remain unchanged. Mode tiles remain above the separate Editor action; language/theme share a compact row. The owner selected **Variant B - Stopwatch + Echo** from the supplied reference: a dominant stopwatch with two subdued rear stopwatch echoes. This supersedes the earlier review-only A/B/C proposals. The selected inline SVG uses theme-aware color/opacity; there is no icon selection UI. The owner has authorized documentation follow-up and production publication of this bounded menu release (PWA v31). Verify deployment outcome separately.
+
 The ST-001 density/reordering, initial-phase default and final repositioning-popover polish shipped in [commit 516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4) on 2026-10-23 (PWA shell v22). They are delivered functionality, not pending backlog items. Native iOS Safari/PWA and screen-reader acceptance checks remain open as documented in the [README](../README.md#st-001-session-planner).
 
 | ID | Idea | Priority | Main dependency / note |
@@ -30,7 +32,7 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | PLAN-002 | Friendlier planned-total formatting | Someday | Presentation-only refinement |
 | DATA-001 | Export/import workshop templates as JSON | Candidate | Existing template schema and validation |
 | SYNC-001 | Optional Google Drive template sync | Later / Spike | DATA-001; Google identity, OAuth, mobile PWA feasibility |
-| ST-002 | Executable Session Timer | A deployed; B release accepted | B v28 integrated/tagged; production publication approved, outcome pending verification; see ST-002B record |
+| ST-002 | Executable Session Timer | A and B deployed | B v28 production verified at ead2ad1; see ST-002B record |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
 | ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
 | QT-002 | More flexible Quick Timer duration controls | Later | Preserve current one-timer simplicity |
@@ -84,7 +86,7 @@ The following packages are **already covered in more detail** by the ET-001 deci
 
 Implement a **Session Run** separate from reusable **Workshop Templates**. Use ordered named phases; manual/automatic phase transitions; large current countdown; subtle next-phase preview; calculated workshop time remaining; final completion and overtime. Define the relationship to the existing Quick Timer and mode switching deliberately. Preserve the single-clock/single-authoritative-state principle.
 
-**Status:** ST-002A is deployed; the last verified production baseline is `7f6f9c0` with UX-009/UX-010 and centering (v27). [ST-002B](ST-002B_AUTOMATIC_SESSION_TIMER.md) implements automatic templates, deadline-based multi-phase catch-up and automatic final overtime (v28). Implementation `f6a55e8` is locally integrated with annotated `release/st-002b`; the owner has authorized publication plus documentation follow-up. Deployment outcome remains subject to verification. Live editing, statistics, reload recovery and active-run transition-mode switching remain future scope.
+**Status:** ST-002A and [ST-002B](ST-002B_AUTOMATIC_SESSION_TIMER.md) are deployed and verified at `ead2ad1` (v28), with UX-009/UX-010 and centering. ST-002B provides automatic templates, deadline-based multi-phase catch-up and automatic final overtime. Annotated `release/st-002b` remains at implementation `f6a55e8`; rollback is preserved. Live editing, statistics, reload recovery and active-run transition-mode switching remain future scope.
 
 ### ST-003 — Editing and statistics during a session
 
