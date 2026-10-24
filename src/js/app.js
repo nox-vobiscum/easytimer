@@ -1,12 +1,13 @@
-import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=25';
-import { createPlanner } from './planner.js?v=25';
-import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=25';
-import { createTemplateStore } from './templates.mjs?v=25';
-import { timeVisualState } from './time-visuals.mjs?v=25';
+import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=26';
+import { createPlanner } from './planner.js?v=26';
+import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=26';
+import { createTemplateStore } from './templates.mjs?v=26';
+import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=26';
 
 const copy = {
     en: {
         planner: 'Session Planner',
+        clockOnly: 'Show clock-only view', clockControls: 'Show timer controls',
         quick: 'Quick Timer', session: 'Session Timer', chooseWorkshop: 'Choose a workshop', backQuick: 'Back to Quick Timer',
         manualOnly: 'Manual execution only. Automatic transitions follow in a later release.', workshopTemplate: 'Workshop template',
         runNote: 'A new run uses a copy. Saved templates stay unchanged. Reloading loses the active run.',
@@ -31,6 +32,7 @@ const copy = {
     },
     de: {
         planner: 'Session-Planer',
+        clockOnly: 'Nur die Uhr anzeigen', clockControls: 'Timer-Bedienung anzeigen',
         quick: 'Quick-Timer', session: 'Session-Timer', chooseWorkshop: 'Workshop auswählen', backQuick: 'Zurück zum Quick-Timer',
         manualOnly: 'Nur manuelle Ausführung. Automatische Übergänge folgen in einer späteren Version.', workshopTemplate: 'Workshop-Vorlage',
         runNote: 'Ein neuer Durchlauf verwendet eine Kopie. Gespeicherte Vorlagen bleiben unverändert. Beim Neuladen geht der aktive Durchlauf verloren.',
@@ -78,6 +80,7 @@ let fullscreenRequested = false;
 let fullscreenRequestId = 0;
 let menuOpen = false;
 let plannerOpen = false;
+let clockOnly = false;
 const planner = createPlanner($('planner'), () => {
     plannerOpen = false;
     document.body.classList.remove('planner-open');
@@ -91,6 +94,26 @@ function isSmartphone() {
     // Screen dimensions distinguish phones from tablet split views; viewport size alone cannot.
     const shortSide = Math.min(screen.width, screen.height);
     return coarsePointer.matches && shortSide > 0 && shortSide < 600;
+}
+
+function updateClockView() {
+    const available = isSmartphone() && landscape.matches && !plannerOpen && !pickerOpen;
+    if (!available) clockOnly = false;
+    document.body.classList.toggle('clock-only', clockOnly);
+    const button = $('clock-view-toggle');
+    button.hidden = !available;
+    button.setAttribute('aria-label', copy[language][clockOnly ? 'clockControls' : 'clockOnly']);
+    button.setAttribute('aria-pressed', String(clockOnly));
+    if (!available && document.activeElement === button) {
+        (!plannerOpen && !pickerOpen && !$('primary').hidden ? $('primary') : $('menu-toggle')).focus({ preventScroll: true });
+    }
+}
+
+function setClockOnly(active) {
+    clockOnly = active;
+    if (active) setMenuOpen(false);
+    updateClockView();
+    if (!$('clock-view-toggle').hidden) $('clock-view-toggle').focus({ preventScroll: true });
 }
 
 function setMenuOpen(open, restoreFocus = false) {
@@ -260,6 +283,7 @@ function render() {
     });
     if (pickerOpen) renderPicker();
     if (!timer) {
+        updateClockView();
         if (document.title !== 'easyTimer') document.title = 'easyTimer';
         return;
     }
@@ -272,20 +296,16 @@ function render() {
         $('phase-number').textContent = run.stage === 'COMPLETED' ? t.workshopComplete : t.phaseCount(run.currentIndex + 1, run.phases.length);
         $('phase-number').hidden = run.stage === 'COMPLETED';
     }
-    const time = formatTime(timer.remainingMs);
+    const time = formatTimerReadout(timer);
     if ($('time').textContent !== time) $('time').textContent = time;
-    $('time').dataset.hours = String(time.length > 5);
-    $('time').setAttribute('aria-label', `${session ? t.session : t.countdown}: ${time}`);
+    $('time').style.setProperty('--clock-width', `${Math.min(28, 140 / time.length)}cqw`);
     const overtime = formatOvertime(timer.overtimeMs);
     const isOvertime = ['FINISHED', 'OVERTIME_PAUSED', 'OVERTIME_STOPPED'].includes(timer.status);
     const paused = ['PAUSED', 'OVERTIME_PAUSED'].includes(timer.status);
     const title = timer.status === 'READY' ? 'easyTimer' : `${isOvertime ? overtime : time}${paused ? ' ⏸' : ''} · easyTimer`;
     if (document.title !== title) document.title = title;
-    $('overtime').hidden = !isOvertime;
-    $('overtime-time').textContent = overtime;
     const overtimeLabel = session ? t[run.stage === 'COMPLETED' ? 'finalOvertime' : 'phaseOvertime'] : t.overtime;
-    document.querySelector('.overtime-label').textContent = overtimeLabel;
-    $('overtime').setAttribute('aria-label', `${overtimeLabel}: ${overtime}`);
+    $('time').setAttribute('aria-label', `${isOvertime ? overtimeLabel : session ? t.session : t.countdown}: ${time}`);
     const status = session && run.stage === 'COMPLETED'
         ? `${t.workshopComplete}${paused ? ` · ${t.PAUSED}` : timer.status === 'OVERTIME_STOPPED' ? ` · ${t.overtimeStopped}` : ''}`
         : session && timer.status === 'FINISHED' ? t.phaseExpired : t[timer.status];
@@ -320,6 +340,7 @@ function render() {
     const help = limitExceeded ? t.limit : '';
     if ($('help').textContent !== help) $('help').textContent = help;
     $('help').dataset.error = String(limitExceeded);
+    updateClockView();
 }
 
 $('primary').addEventListener('click', () => {
@@ -402,6 +423,16 @@ $('open-planner').addEventListener('click', async () => {
     planner.open();
 });
 document.addEventListener('click', event => {
+    // Consume the restoring click before hidden controls can become interactive again.
+    if (clockOnly) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        setClockOnly(false);
+    } else if (event.target.closest('#clock-view-toggle')) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        setClockOnly(true);
+    }
+}, true);
+document.addEventListener('click', event => {
     if (menuOpen && !$('preferences-menu').contains(event.target)) setMenuOpen(false);
 });
 // Callbacks only refresh the display; the deadline remains authoritative.
@@ -421,6 +452,11 @@ landscape.addEventListener('change', updatePresentation);
 coarsePointer.addEventListener('change', updatePresentation);
 window.addEventListener('resize', updatePresentation);
 document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && clockOnly) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        setClockOnly(false);
+        return;
+    }
     if (event.key === 'Escape' && menuOpen) {
         event.preventDefault();
         event.stopPropagation();

@@ -24,11 +24,13 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 
 | ID | Idea | Priority | Main dependency / note |
 | --- | --- | --- | --- |
+| UX-009 | Unified positive overtime readout | Implemented; release approved | Replaces UX-008 dual readout; thresholds unchanged; v26 |
+| UX-010 | Smartphone landscape Clock-only | Implemented; release approved | Temporary tap/keyboard view; no preference or timer-state change; v26 |
 | PLAN-001 | Insert a new phase directly at a chosen position | Candidate | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Someday | Presentation-only refinement |
 | DATA-001 | Export/import workshop templates as JSON | Candidate | Existing template schema and validation |
 | SYNC-001 | Optional Google Drive template sync | Later / Spike | DATA-001; Google identity, OAuth, mobile PWA feasibility |
-| ST-002 | Executable Session Timer | A local release candidate | Manual ST-002A provisionally accepted; local integration authorized; no push/deployment; B deferred |
+| ST-002 | Executable Session Timer | A deployed | Release 9d8a898, v25; B automatic execution remains deferred |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
 | ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
 | QT-002 | More flexible Quick Timer duration controls | Later | Preserve current one-timer simplicity |
@@ -82,7 +84,7 @@ The following packages are **already covered in more detail** by the ET-001 deci
 
 Implement a **Session Run** separate from reusable **Workshop Templates**. Use ordered named phases; manual/automatic phase transitions; large current countdown; subtle next-phase preview; calculated workshop time remaining; final completion and overtime. Define the relationship to the existing Quick Timer and mode switching deliberately. Preserve the single-clock/single-authoritative-state principle.
 
-**Status:** ST-001 is accepted and production-verified by the owner. The [ST-002A manual execution scope](ST-002A_SESSION_TIMER_PLAN.md), including its four decisions, was approved and implemented locally on the dedicated branch. After successful final review, ST-002A, UX-008, DEV-001 and the Session hierarchy were provisionally accepted, with local commit/integration and an annotated release checkpoint authorized. Push/deployment remain unauthorized; production is unchanged. ST-002B automatic execution/catch-up and subsequent runtime editing, detailed statistics and recovery remain separately scoped future work; the approved A increment is not authorization to start them.
+**Status:** ST-002A manual execution, UX-008, DEV-001 and the Session hierarchy shipped in `9d8a898` (2026-10-24, PWA v25). ST-002B automatic execution/catch-up, runtime editing, detailed statistics and recovery remain separately scoped future work; they are not authorized.
 
 ### ST-003 — Editing and statistics during a session
 

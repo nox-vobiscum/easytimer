@@ -17,7 +17,7 @@ node tests/browser-check.mjs --scenario all --theme both
 node tests/browser-check.mjs --list-scenarios
 ```
 
-Each run prints the output directory and gallery URL. Open its `index.html` to compare screenshots and click a thumbnail for the full PNG. `summary.json` records actual displayed values, colors, virtual timestamps and timings. Output defaults to a unique temporary directory, outside tracked production assets. `--output DIRECTORY` selects another base directory outside the repository and creates a unique child directory; repository destinations are rejected.
+Each run prints the output directory and gallery URL. Open its `index.html` to compare screenshots and click a thumbnail for the full PNG. `summary.json` records actual unified displayed values, colors, virtual timestamps and timings. Output defaults to a unique temporary directory, outside tracked production assets. `--output DIRECTORY` selects another base directory outside the repository and creates a unique child directory; repository destinations are rejected.
 
 Options:
 
@@ -41,7 +41,7 @@ node tests/browser-check.mjs --scenario quick-paused-endgame,session-paused-endg
 | `quick-normal`, `session-normal` | 04:00 remaining; normal color |
 | `quick-before-endgame`, `session-before-endgame` | 30.001 seconds remaining; still normal |
 | `quick-endgame`, `session-endgame` | Exactly 00:30; amber |
-| `quick-expiration`, `session-expiration` | Exactly 00:00 and +00:00; amber main time, red overtime |
+| `quick-expiration`, `session-expiration` | Exactly +00:00 in the single red readout (UX-009) |
 | `quick-overtime`, `session-phase-overtime` | +00:10 |
 | `quick-overtime-2m`, `session-phase-overtime-2m` | +02:00 |
 | `quick-paused-endgame`, `session-paused-endgame` | Paused at 00:30; amber |

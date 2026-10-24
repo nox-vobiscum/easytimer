@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { checkPlanner } from './planner-browser.mjs';
 import { checkSession } from './session-browser.mjs';
 import { checkTimeVisuals } from './time-visuals-browser.mjs';
+import { checkClockView } from './clock-view-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
 const timeTravelOptions=parseTimeTravelOptions(process.argv.slice(2));
@@ -83,7 +84,7 @@ try {
         assert.fail('Reloaded application did not initialize in Quick READY');
     }
     async function checkTitle(state) {
-        const { title, time, overtime } = await evaluate(`({title:document.title,time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent})`);
+        const { title, time, overtime } = await evaluate(`({title:document.title,time:document.querySelector('#time').textContent,overtime:document.querySelector('#time').textContent})`);
         const expected = state === 'READY' ? 'easyTimer' : `${state === 'FINISHED' ? overtime : time}${state === 'PAUSED' ? ' ⏸' : ''} · easyTimer`;
         assert.equal(title,expected,`Title matches ${state}`);
     }
@@ -143,8 +144,8 @@ try {
     } else {
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=25'&&js==='js/app.js?v=25'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=25')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=26'&&js==='js/app.js?v=26'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=26')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -287,7 +288,7 @@ try {
     await click('[data-adjustment="30000"]');
     for(const overtime of [false,true]) {
         if(overtime) await evaluate(`window.stageNow+=333000;document.dispatchEvent(new Event('visibilitychange'))`);
-        const preserved=await evaluate(`({time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent,title:document.title,budget:document.querySelector('#time-budget').textContent,status:document.querySelector('#status').textContent})`);
+        const preserved=await evaluate(`({time:document.querySelector('#time').textContent,overtime:document.querySelector('#time').textContent,title:document.title,budget:document.querySelector('#time-budget').textContent,status:document.querySelector('#status').textContent})`);
         for(const profile of [
             {width:390,height:844,screenWidth:390,screenHeight:844},
             {width:844,height:390,screenWidth:844,screenHeight:390},
@@ -302,10 +303,10 @@ try {
                 await click('#fullscreen');
                 await evaluate('delete document.documentElement.requestFullscreen');
             }
-            assert.deepEqual(await evaluate(`({time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent,title:document.title,budget:document.querySelector('#time-budget').textContent,status:document.querySelector('#status').textContent})`),preserved,'Rotation, tablet split view and presentation preserve the exact active clock and additions');
+            assert.deepEqual(await evaluate(`({time:document.querySelector('#time').textContent,overtime:document.querySelector('#time').textContent,title:document.title,budget:document.querySelector('#time-budget').textContent,status:document.querySelector('#status').textContent})`),preserved,'Rotation, tablet split view and presentation preserve the exact active clock and additions');
         }
     }
-    assert.equal(await text('#overtime-time'),'+00:03');
+    assert.equal(await text('#time'),'+00:03');
     await click('#stop');
     await evaluate('Date.now=window.stageRealNow;delete window.stageRealNow;delete window.stageNow');
     await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
@@ -403,7 +404,7 @@ try {
     for (const amount of [3600000,300000,60000,30000]) {
         await click(`[data-adjustment="${amount}"]`);
         await checkTitle('FINISHED');
-        assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+        assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),false);
     }
     await click('#primary');
     await checkTitle('RUNNING');
@@ -504,23 +505,23 @@ try {
     await configure(0,0,1);
     await click('#primary');
     await delay(1200);
-    assert.equal(await text('#time'), '00:00');
+    assert.match(await text('#time'), /^\+/);
     assert.equal(await text('#status'), 'Zeit abgelaufen');
     await checkTitle('FINISHED');
-    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), false);
-    assert.match(await text('#overtime-time'), /^\+00:0[01]$/);
+    assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`), false);
+    assert.match(await text('#time'), /^\+00:0[01]$/);
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).every(b=>b.disabled)`),true);
-    const overtimeBeforePreferences = await text('#overtime-time');
+    const overtimeBeforePreferences = await text('#time');
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Time’s up');
-    assert.equal(await text('.overtime-label'), 'Overtime');
+    assert.match(await evaluate(`document.querySelector('#time').getAttribute('aria-label')`), /^Overtime:/);
     await click('[data-theme="light"]');
     await checkTitle('FINISHED');
-    assert.ok(await text('#overtime-time') >= overtimeBeforePreferences);
+    assert.ok(await text('#time') >= overtimeBeforePreferences);
     assert.equal(await text('#primary'), 'Start again');
     await click('#primary');
     assert.equal(await text('#time'), '00:01');
-    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), true);
+    assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`), true);
     await click('#stop');
     // Emulate a tab whose callbacks cannot execute, then resume past its deadline.
     await configure(0,0,2);
@@ -530,10 +531,10 @@ try {
     await cdp('Page.setWebLifecycleState', { state: 'active' });
     await cdp('Page.bringToFront');
     await delay(1200);
-    assert.equal(await text('#time'), '00:00');
+    assert.match(await text('#time'), /^\+/);
     assert.equal(await text('#status'), 'Time’s up');
-    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), false);
-    assert.ok(Number((await text('#overtime-time')).slice(-2)) >= 1);
+    assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`), false);
+    assert.ok(Number((await text('#time')).slice(-2)) >= 1);
     await checkTitle('FINISHED');
     await click('[data-adjustment="30000"]');
     assert.equal(await text('#status'),'Running');
@@ -542,7 +543,7 @@ try {
     assert.ok(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining')) > 0`));
     await click('#stop');
     await click('#primary');
-    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`), true);
+    assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`), true);
     await click('#stop');
     await click('[data-theme="system"]');
     await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
@@ -720,7 +721,7 @@ try {
     await configure(0,0,1);
     await click('#primary');
     for (let i=0;i<40;i++) {
-        if (await text('#time') === '00:00') break;
+        if ((await text('#time')).startsWith('+')) break;
         await delay(100);
     }
     assert.equal(await evaluate(`document.querySelector('#progress').style.getPropertyValue('--remaining')`), '0%');
@@ -769,33 +770,34 @@ try {
     await configure(0,0,1);
     await click('#primary');
     await delay(2100);
-    const overtimeBeforePresentation = await text('#overtime-time');
+    const overtimeBeforePresentation = await text('#time');
     await click('#fullscreen');
     await delay(100);
     assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
-    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+    assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),false);
     await checkMenu('FINISHED');
     assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Overtime presets hidden in presentation');
-    assert.ok(await text('#overtime-time') >= overtimeBeforePresentation);
-    assert.equal(await evaluate(`(()=>{const r=document.querySelector('#overtime').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.top>=t.bottom&&r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits presentation view');
+    assert.ok(await text('#time') >= overtimeBeforePresentation);
+    assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits presentation view');
     await cdp('Emulation.setDeviceMetricsOverride', {width:568,height:320,deviceScaleFactor:1,mobile:true,screenOrientation:{type:'landscapePrimary',angle:90}});
-    assert.equal(await evaluate(`(()=>{const r=document.querySelector('#overtime').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.top>=t.bottom&&r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits mobile landscape presentation');
+    assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.bottom<=a.top&&r.left>=0&&r.right<=innerWidth})()`),true,'Overtime fits mobile landscape presentation');
     if (process.env.EASYTIMER_SCREENSHOT_DIR) {
         const screenshot = await cdp('Page.captureScreenshot', {format:'png'});
         await writeFile(join(process.env.EASYTIMER_SCREENSHOT_DIR,'easytimer-overtime-landscape.png'),Buffer.from(screenshot.data,'base64'));
     }
     await click('[data-language="de"]');
-    assert.equal(await text('.overtime-label'),'Überzeit');
-    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),false);
+    assert.match(await evaluate(`document.querySelector('#time').getAttribute('aria-label')`), /^Überzeit:/);
+    assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),false);
     await click('[data-adjustment="300000"]');
     assert.equal(await text('#status'),'Läuft');
     assert.equal(await text('#time-budget'),'Gesamt 05:01 · Geplant 00:01 + 05:00');
     assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const a=document.querySelector('.duration-adjustments').getBoundingClientRect();const p=document.querySelector('#progress').getBoundingClientRect();return b.top>=a.bottom&&b.bottom<=p.top+1&&p.bottom<=innerHeight})()`),true,'Extended budget fits short landscape');
     await click('#stop');
-    assert.equal(await evaluate(`document.querySelector('#overtime').hidden`),true);
+    assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),true);
     await checkPlanner({ evaluate, click, text, cdp, configure });
     await checkSession({ evaluate, click, text, cdp, configure });
     await checkTimeVisuals({ evaluate, click, text, cdp, configure });
+    await checkClockView({ evaluate, click, text, cdp, configure });
     await evaluate(`(()=>{const data=JSON.parse(localStorage.getItem('easyTimerTemplates'));data.templates.push({id:'offline-session',name:'Offline workshop',transitionMode:'manual',phases:[{id:'offline-phase',title:'Offline phase',durationSeconds:60}]});localStorage.setItem('easyTimerTemplates',JSON.stringify(data));})()`);
     await cdp('Network.enable');
     await cdp('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });

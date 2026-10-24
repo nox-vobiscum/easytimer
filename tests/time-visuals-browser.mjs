@@ -24,9 +24,9 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
     const menu=async selector=>{await click('#menu-toggle');await click(selector);};
     let variant='light';
     async function check(expected) {
-        const result=await evaluate(`(()=>{const time=document.querySelector('#time');const overtime=document.querySelector('#overtime-time');const root=getComputedStyle(document.documentElement);return {state:time.dataset.visualState,main:getComputedStyle(time).color,counter:getComputedStyle(overtime).color,normal:getComputedStyle(document.body).color,background:getComputedStyle(document.body).backgroundColor,shown:!document.querySelector('#overtime').hidden,mainAnimation:getComputedStyle(time).animationName,counterAnimation:getComputedStyle(overtime).animationName,transition:getComputedStyle(time).transitionDuration,live:time.getAttribute('aria-live'),statusRole:document.querySelector('#status').getAttribute('role'),green:root.getPropertyValue('--progress-elapsed-color').trim()||getComputedStyle(document.querySelector('#progress')).getPropertyValue('--progress-elapsed-color').trim(),pink:getComputedStyle(document.querySelector('#progress')).getPropertyValue('--progress-remaining-color').trim(),height:document.querySelector('#progress').getBoundingClientRect().height};})()`);
+        const result=await evaluate(`(()=>{const time=document.querySelector('#time');const overtime=document.querySelector('#time');const root=getComputedStyle(document.documentElement);return {state:time.dataset.visualState,main:getComputedStyle(time).color,counter:getComputedStyle(overtime).color,normal:getComputedStyle(document.body).color,background:getComputedStyle(document.body).backgroundColor,shown:!(document.querySelector('#time').dataset.visualState !== 'EXPIRED'),mainAnimation:getComputedStyle(time).animationName,counterAnimation:getComputedStyle(overtime).animationName,transition:getComputedStyle(time).transitionDuration,live:time.getAttribute('aria-live'),statusRole:document.querySelector('#status').getAttribute('role'),green:root.getPropertyValue('--progress-elapsed-color').trim()||getComputedStyle(document.querySelector('#progress')).getPropertyValue('--progress-elapsed-color').trim(),pink:getComputedStyle(document.querySelector('#progress')).getPropertyValue('--progress-remaining-color').trim(),height:document.querySelector('#progress').getBoundingClientRect().height};})()`);
         assert.equal(result.state,expected);
-        assert.equal(result.main,expected==='NORMAL'?result.normal:palettes[variant].amber);
+        assert.equal(result.main,expected==='NORMAL'?result.normal:expected==='EXPIRED'?palettes[variant].red:palettes[variant].amber);
         if(expected==='EXPIRED') {assert.equal(result.shown,true);assert.equal(result.counter,palettes[variant].red);}
         assert.equal(result.mainAnimation,'none');assert.equal(result.counterAnimation,'none');assert.equal(result.transition,'0s');
         assert.equal(result.live,'off');assert.equal(result.statusRole,'status');
@@ -39,7 +39,7 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
         await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:800,screenWidth:1280,screenHeight:800,mobile:false,deviceScaleFactor:1});
     }
     async function checkViews(expected) {
-        const frozen=await evaluate(`({time:document.querySelector('#time').textContent,overtime:document.querySelector('#overtime-time').textContent,budget:document.querySelector('#time-budget').textContent})`);
+        const frozen=await evaluate(`({time:document.querySelector('#time').textContent,overtime:document.querySelector('#time').textContent,budget:document.querySelector('#time-budget').textContent})`);
         for(const [width,height,screenWidth,screenHeight,touch] of [[1280,800,1280,800,false],[768,1024,768,1024,true],[320,568,320,568,true],[844,390,390,844,true]]) {
             await cdp('Emulation.setTouchEmulationEnabled',{enabled:touch});
             await cdp('Emulation.setDeviceMetricsOverride',{width,height,screenWidth,screenHeight,mobile:touch,deviceScaleFactor:1});
@@ -50,7 +50,7 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
                     await click(`[data-theme="${theme}"]`);variant=theme==='system'?os:theme;
                     await check(expected);
                     assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth`),true,`No visual-state overflow ${width}/${lang}/${theme}/${os}`);
-                    assert.equal(await text('#time'),frozen.time);assert.equal(await text('#overtime-time'),frozen.overtime);
+                    assert.equal(await text('#time'),frozen.time);assert.equal(await text('#time'),frozen.overtime);
                 }
             }
             if(process.env.EASYTIMER_SCREENSHOT_DIR) {
@@ -78,17 +78,17 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
             await tick(duration-threshold-1);await check('NORMAL');await tick(1);await check('ENDGAME');
             await click('#primary');await tick(1000);await check('ENDGAME');await click('#primary');
             await tick(1);await check('ENDGAME');await tick(threshold-1);await check('EXPIRED');
-            assert.equal(await text('#overtime-time'),'+00:00','Overtime is red from its first zero display');
+            assert.equal(await text('#time'),'+00:00','Overtime is red from its first zero display');
             await click('#primary');await check('NORMAL');await click('#stop');await check('NORMAL');
         }
         await configure(0,3,0);await click('[data-adjustment="30000"]');await check('NORMAL');
         await click('#primary');await tick(185000);await check('ENDGAME');
         await click('[data-adjustment="30000"]');await check('NORMAL');
-        await tick(60000);await check('EXPIRED');assert.equal(await text('#overtime-time'),'+00:05');
+        await tick(60000);await check('EXPIRED');assert.equal(await text('#time'),'+00:05');
         await click('[data-adjustment="30000"]');await check('ENDGAME');assert.equal(await text('#time'),'00:25');
         await click('[data-adjustment="30000"]');await check('NORMAL');assert.equal(await text('#time'),'00:55');
-        await tick(85000);await check('EXPIRED');assert.equal(await text('#overtime-time'),'+00:30');
-        await click('[data-adjustment="30000"]');await check('EXPIRED');assert.equal(await text('#overtime-time'),'+00:00');
+        await tick(85000);await check('EXPIRED');assert.equal(await text('#time'),'+00:30');
+        await click('[data-adjustment="30000"]');await check('EXPIRED');assert.equal(await text('#time'),'+00:00');
         await click('#stop');await configure(0,3,0);await click('#primary');await tick(170000);
         await checkViews('ENDGAME');await tick(10000);await checkViews('EXPIRED');
         await click('#stop');
@@ -99,16 +99,16 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
         assert.equal(await text('#time'),'00:15','Workshop duration must not determine the phase threshold');
         await tick(5000);await check('ENDGAME');await click('#primary');await tick(100000);await check('ENDGAME');
         await click('#primary');await tick(10000);await check('EXPIRED');
-        assert.equal(await text('.overtime-label'),'Phase overtime');
+        assert.match(await evaluate(`document.querySelector('#time').getAttribute('aria-label')`), /^Phase overtime:/);
         await checkViews('EXPIRED');
         await click('#next');await check('NORMAL');assert.equal(await text('#time'),'15:00');
         await click('#primary');await tick(839999);await check('NORMAL');await tick(1);await check('ENDGAME');
         await click('#primary');await click('#next');await check('EXPIRED');
-        assert.equal(await text('.overtime-label'),'Workshop overtime');assert.equal(await text('#overtime-time'),'+00:00');
+        assert.match(await evaluate(`document.querySelector('#time').getAttribute('aria-label')`), /^Workshop overtime:/);assert.equal(await text('#time'),'+00:00');
         await tick(6000);await click('#primary');await check('EXPIRED');await tick(120000);await check('EXPIRED');
-        assert.equal(await text('#overtime-time'),'+00:06');
+        assert.equal(await text('#time'),'+00:06');
         await click('#primary');await tick(1000);await click('#stop-overtime');await check('EXPIRED');
-        await tick(999999);await check('EXPIRED');assert.equal(await text('#overtime-time'),'+00:07');
+        await tick(999999);await check('EXPIRED');assert.equal(await text('#time'),'+00:07');
         await checkViews('EXPIRED');await click('#stop');await check('NORMAL');
         await menu('#open-quick');await configure(0,5,0);await check('NORMAL');
     } finally {

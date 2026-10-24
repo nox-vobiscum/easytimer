@@ -1,12 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { endgameThreshold, timeVisualState } from '../src/js/time-visuals.mjs';
+import { endgameThreshold, timeVisualState, formatTimerReadout } from '../src/js/time-visuals.mjs';
 import { createTimer, transition, timeBudget, formatTime } from '../src/js/timer.mjs';
 import { prepareSession, transitionSession } from '../src/js/session.mjs';
 
 const visual = clock => timeVisualState(clock, timeBudget(clock).totalMs);
 const act = (clock,type,now,extra={}) => transition(clock,{type,...extra},now);
 const sessionAct = (state,type,now) => transitionSession(state.run,state.clock,{type},now);
+
+test('unified readout selects countdown or positive overtime from authoritative status', () => {
+    for (const status of ['READY','RUNNING','PAUSED']) {
+        assert.equal(formatTimerReadout({status,remainingMs:10001,overtimeMs:999999}),'00:11');
+    }
+    for (const status of ['FINISHED','OVERTIME_PAUSED','OVERTIME_STOPPED']) {
+        assert.equal(formatTimerReadout({status,remainingMs:0,overtimeMs:0}),'+00:00');
+        assert.equal(formatTimerReadout({status,remainingMs:12345,overtimeMs:12500}),'+00:12');
+    }
+});
+
+test('unified readout retains long hours and never changes the shared clock', () => {
+    const clock={status:'OVERTIME_STOPPED',remainingMs:0,overtimeMs:3600000000};
+    const before=structuredClone(clock);
+    assert.equal(formatTimerReadout(clock),'+1000:00:00');
+    assert.equal(formatTimerReadout({...clock,status:'READY',remainingMs:360000000}),'100:00:00');
+    assert.deepEqual(clock,before);
+});
+
+test('Quick extension replaces positive overtime with countdown without changing its history', () => {
+    const expired=act(act(createTimer(180000),'START',0),'TICK',185000);
+    assert.equal(formatTimerReadout(expired),'+00:05');
+    const extended=act(expired,'ADJUST',185000,{amountMs:60000});
+    assert.equal(formatTimerReadout(extended),'00:55');
+    assert.equal(visual(extended),'NORMAL');
+    assert.equal(timeBudget(extended).elapsedMs,185000);
+});
 
 test('five exact fixed buckets include duration boundaries without rounding or caps', () => {
     for (const [durationMs,thresholdMs] of [

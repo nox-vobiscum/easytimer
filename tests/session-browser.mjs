@@ -95,11 +95,11 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         await click('#primary'); await tick(120000); assert.equal(await text('#time'),'00:50');
         await capture('paused');
         await click('#primary'); await tick(55000);
-        assert.equal(await text('#time'),'00:00'); assert.equal(await text('#overtime-time'),'+00:05');
+        assert.match(await text('#time'), /^\+/); assert.equal(await text('#time'),'+00:05');
         assert.equal(await text('#phase-number'),'Phase 1 of 2');
-        await click('#primary'); await tick(60000); assert.equal(await text('#overtime-time'),'+00:05');
+        await click('#primary'); await tick(60000); assert.equal(await text('#time'),'+00:05');
         assert.match(await evaluate('document.title'),/\+00:05 ⏸/);
-        await click('#primary'); await tick(2000); assert.equal(await text('#overtime-time'),'+00:07');
+        await click('#primary'); await tick(2000); assert.equal(await text('#time'),'+00:07');
         await capture('phase-overtime');
         await evaluate(`document.querySelector('#next').focus()`);
         await key('Tab','Tab',9);
@@ -116,18 +116,18 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await text('#phase-number'),'Phase 2 of 2','READY between phases protects progress');
         await click('#menu-toggle'); await evaluate('window.sessionAccept=true');
         await click('#primary'); await tick(315000);
-        assert.equal(await text('#phase-number'),'Phase 2 of 2'); assert.equal(await text('#overtime-time'),'+00:15');
+        assert.equal(await text('#phase-number'),'Phase 2 of 2'); assert.equal(await text('#time'),'+00:15');
         assert.equal(await text('#status'),'Phase time elapsed','Last phase expiry does not complete the workshop');
         await click('#next'); assert.equal(await text('#status'),'Workshop complete');
         assert.equal(await evaluate(`document.querySelector('#next').hidden&&document.querySelector('#next').disabled`),true,'No phase advance after completion');
         await capture('final-overtime');
-        assert.equal(await text('#overtime-time'),'+00:00'); assert.match(await text('#time-budget'),/00:00/);
+        assert.equal(await text('#time'),'+00:00'); assert.match(await text('#time-budget'),/00:00/);
         await tick(9000); await click('#primary'); await tick(50000);
-        assert.equal(await text('#overtime-time'),'+00:09');
+        assert.equal(await text('#time'),'+00:09');
         await click('#primary'); await tick(5000); await click('#stop-overtime');
-        assert.equal(await text('#overtime-time'),'+00:14'); assert.match(await text('#status'),/Overtime stopped/);
+        assert.equal(await text('#time'),'+00:14'); assert.match(await text('#status'),/Overtime stopped/);
         await capture('final-overtime-stopped');
-        await tick(999999); assert.equal(await text('#overtime-time'),'+00:14');
+        await tick(999999); assert.equal(await text('#time'),'+00:14');
         assert.equal(await evaluate(`document.querySelector('#primary').hidden&&document.querySelector('#stop-overtime').hidden&&document.activeElement.id==='stop'`),true);
         await evaluate('window.sessionAccept=false'); await click('#stop');
         assert.match(await text('#status'),/Overtime stopped/);
@@ -167,8 +167,8 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
                 await writeFile(join(process.env.EASYTIMER_SCREENSHOT_DIR,`session-${width}-${height}.png`),Buffer.from(shot.data,'base64'));
             }
             await tick(125000);
-            assert.equal(await text('#overtime-time'),'+00:05');
-            assert.equal(await evaluate(`(()=>{const time=document.querySelector('#time').getBoundingClientRect();const overtime=document.querySelector('#overtime').getBoundingClientRect();const status=document.querySelector('#status').getBoundingClientRect();const next=document.querySelector('#next').getBoundingClientRect();const controls=document.querySelector('.control-bar').getBoundingClientRect();return time.bottom<=overtime.top+1&&overtime.bottom<=status.top+1&&status.bottom<=controls.top+1&&controls.bottom<=next.top+1&&time.left>=0&&time.right<=innerWidth;})()`),true, `Overtime does not overlap at ${width}x${height}`);
+            assert.equal(await text('#time'),'+00:05');
+            assert.equal(await evaluate(`(()=>{const time=document.querySelector('#time').getBoundingClientRect();const overtime=document.querySelector('#time').getBoundingClientRect();const status=document.querySelector('#status').getBoundingClientRect();const next=document.querySelector('#next').getBoundingClientRect();const controls=document.querySelector('.control-bar').getBoundingClientRect();return time.bottom<=status.top+1&&status.bottom<=controls.top+1&&controls.bottom<=next.top+1&&time.left>=0&&time.right<=innerWidth;})()`),true, `Overtime does not overlap at ${width}x${height}`);
             await click('#stop'); await click('#primary');
         }
         await setDesktop();
@@ -176,14 +176,14 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         await click('#fullscreen'); assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
         await capture('presentation');
         const before = await text('#time'); await tick(130000);
-        assert.equal(await text('#overtime-time'),'+00:10','Background gap updates the active Session only');
+        assert.equal(await text('#time'),'+00:10','Background gap updates the active Session only');
         await menu('#open-planner'); await action('Back to timer');
         assert.equal(await evaluate('Boolean(document.fullscreenElement)||document.body.classList.contains("presentation")'),false);
         assert.notEqual(await text('#time'),before);
         await evaluate(`delete document.fullscreenElement;delete document.fullscreenEnabled;delete document.exitFullscreen;delete document.documentElement.requestFullscreen;`);
         await evaluate(`Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false})`);
         await click('#fullscreen'); assert.equal(await evaluate(`document.body.classList.contains('presentation')`),true,'Session supports expanded fallback');
-        assert.equal(await text('#overtime-time'),'+00:10');
+        assert.equal(await text('#time'),'+00:10');
         await click('#fullscreen'); assert.equal(await evaluate(`document.body.classList.contains('presentation')`),false);
         await evaluate(`delete document.fullscreenEnabled`);
         await menu('#open-session'); await choose('manual-run'); await click('#primary'); await tick(1000);

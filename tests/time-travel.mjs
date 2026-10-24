@@ -86,7 +86,7 @@ export async function runTimeTravel({evaluate,click,text,cdp,configure},options)
         throw new Error('Application did not initialize after scenario reload');
     }
     async function snapshot() {
-        return evaluate(`(()=>{const main=document.querySelector('#time');return {mode:document.body.dataset.mode,visualState:main.dataset.visualState,time:main.textContent,overtime:document.querySelector('#overtime-time').textContent,overtimeShown:!document.querySelector('#overtime').hidden,status:document.querySelector('#status').textContent,phase:document.querySelector('#phase-number').textContent,phaseTitle:document.querySelector('#current-phase').textContent,budget:document.querySelector('#time-budget').textContent,mainColor:getComputedStyle(main).color,overtimeColor:getComputedStyle(document.querySelector('#overtime-time')).color,virtualNow:Date.now()};})()`);
+        return evaluate(`(()=>{const main=document.querySelector('#time');return {mode:document.body.dataset.mode,visualState:main.dataset.visualState,time:main.textContent,overtime:main.textContent,overtimeShown:main.dataset.visualState==='EXPIRED',status:document.querySelector('#status').textContent,phase:document.querySelector('#phase-number').textContent,phaseTitle:document.querySelector('#current-phase').textContent,budget:document.querySelector('#time-budget').textContent,mainColor:getComputedStyle(main).color,overtimeColor:getComputedStyle(main).color,virtualNow:Date.now()};})()`);
     }
     function verify(actual,scenario,extra,theme) {
         const elapsed=scenario.elapsed+(scenario.pause||scenario.stop?0:extra);
@@ -96,13 +96,13 @@ export async function runTimeTravel({evaluate,click,text,cdp,configure},options)
         const expired=scenario.complete||remaining===0;
         const status=expired?'FINISHED':scenario.pause?'PAUSED':'RUNNING';
         assert.equal(actual.mode,scenario.session?'session':'quick');
-        assert.equal(actual.time,formatTime(remaining));
+        assert.equal(actual.time,expired?formatOvertime(overdue):formatTime(remaining));
         assert.equal(actual.overtimeShown,expired);
         if(expired)assert.equal(actual.overtime,formatOvertime(overdue));
         assert.equal(actual.visualState,timeVisualState({status,remainingMs:remaining},total));
         const normal=theme==='dark'?'rgb(241, 245, 252)':'rgb(23, 35, 55)';
         const amber=theme==='dark'?'rgb(242, 188, 118)':'rgb(154, 87, 0)';
-        assert.equal(actual.mainColor,actual.visualState==='NORMAL'?normal:amber);
+        assert.equal(actual.mainColor,actual.visualState==='NORMAL'?normal:expired?(theme==='dark'?'rgb(243, 161, 171)':'rgb(180, 35, 56)'):amber);
         if(expired)assert.equal(actual.overtimeColor,theme==='dark'?'rgb(243, 161, 171)':'rgb(180, 35, 56)');
     }
     try {
@@ -143,11 +143,11 @@ export async function runTimeTravel({evaluate,click,text,cdp,configure},options)
             const shot=await cdp('Page.captureScreenshot',{format:'png'});
             await writeFile(join(output,file),Buffer.from(shot.data,'base64'));
             results.push({scenario:name,theme,file,...state,virtualElapsedMs:state.virtualNow-epoch});
-            console.log(`PASS: ${name}/${theme} → ${state.time}${state.overtimeShown?' '+state.overtime:''} (${state.visualState})`);
+            console.log(`PASS: ${name}/${theme} → ${state.time} (${state.visualState})`);
         }
         const summary={realTimeCheckMs,scenarioGenerationMs:Math.round(performance.now()-scenarioStarted),totalElapsedMs:Math.round(performance.now()-started),additionalAdvanceMs:options.advance,viewport:{width:options.width,height:options.height},language:options.language,results};
         await writeFile(join(output,'summary.json'),JSON.stringify(summary,null,2)+'\n');
-        const cards=results.map(result=>`<article><h2>${escapeHtml(result.scenario)} · ${result.theme}</h2><p>${escapeHtml(result.time)} ${result.overtimeShown?escapeHtml(result.overtime):''} · ${result.visualState}</p><a href="${result.file}"><img src="${result.file}" alt="${escapeHtml(result.scenario+' '+result.theme)}"></a></article>`).join('\n');
+        const cards=results.map(result=>`<article><h2>${escapeHtml(result.scenario)} · ${result.theme}</h2><p>${escapeHtml(result.time)} · ${result.visualState}</p><a href="${result.file}"><img src="${result.file}" alt="${escapeHtml(result.scenario+' '+result.theme)}"></a></article>`).join('\n');
         await writeFile(join(output,'index.html'),`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>easyTimer virtual-time screenshots</title><style>body{font:16px system-ui;margin:2rem;background:#f6f8fc;color:#172337}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:1rem}article{min-width:0}h2{font-size:1rem}img{width:100%;border:1px solid #c8d1e0}</style><h1>easyTimer test screenshots</h1><p>${results.length} captures in ${summary.scenarioGenerationMs} ms; separate real-time control ${realTimeCheckMs} ms. No production debug controls.</p><main>${cards}</main></html>`);
         console.log(`Screenshots: ${output}`);
         console.log(`Gallery: ${pathToFileURL(join(output,'index.html')).href}`);

@@ -142,7 +142,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await configure(0,0,1); await click('#primary'); await open();
     await evaluate(`window.plannerNow+=5000;document.dispatchEvent(new Event('visibilitychange'))`);
     await action('Back to timer');
-    assert.equal(await text('#status'), 'Time’s up'); assert.equal(await text('#overtime-time'), '+00:04');
+    assert.equal(await text('#status'), 'Time’s up'); assert.equal(await text('#time'), '+00:04');
     await click('#stop'); await open();
     await evaluate('window.acceptConfirm=false'); await action('Delete'); assert.equal((await stored()).templates.length, 2);
     await evaluate('window.acceptConfirm=true'); await action('Delete'); assert.equal((await stored()).templates.length, 1);

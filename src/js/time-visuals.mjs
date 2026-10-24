@@ -1,3 +1,10 @@
+import { formatTime, formatOvertime } from './timer.mjs?v=26';
+
+export function formatTimerReadout(clock) {
+    return ['FINISHED', 'OVERTIME_PAUSED', 'OVERTIME_STOPPED'].includes(clock.status)
+        ? formatOvertime(clock.overtimeMs) : formatTime(clock.remainingMs);
+}
+
 // Fixed buckets use the current timebox budget, never display rounding or percentages.
 export function endgameThreshold(durationMs) {
     if (durationMs <= 180000) return 10000;

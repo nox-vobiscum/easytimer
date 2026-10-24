@@ -1,16 +1,16 @@
 # easyTimer — Project Briefing
 
-**Last reviewed:** 2026-10-23
+**Last reviewed:** 2026-10-24
 **Repository:** https://github.com/nox-vobiscum/easytimer  
 **Production:** https://et.rbsnet.at/
 
-**Latest deployed ST-001 increment:** [516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4), 2026-10-23, PWA shell v22. Compact phase rows, shared repositioning, new-template first-phase defaults and final popover polish are delivered. Release validation passed 27 unit tests, focused Planner checks and the complete browser regression; the FTP deployment succeeded and served app files matched the tested release. Native iOS Safari/PWA and screen-reader acceptance remains open.
+**Production baseline:** ST-002A + UX-008 + DEV-001, commit `9d8a898a89d8770afb0b6e30236497f5a4f54064`, tag `release/st-002a-ux008`, PWA v25, deployed on 2026-10-24. FTP deployment and production Quick/Planner/Session/visual/offline checks succeeded; all 17 served files matched the Git release. Native iOS/PWA and VoiceOver checks remain manual.
 
-**ST-001 closure / ST-002A local work:** The owner accepts and has verified the production release. Local and remote `main` and the obsolete density/reordering branch matched `bb814c645fc855c191328776d6941a494cd55fdd`; 27 unit tests and the complete browser regression passed again. The integrated local branch was deleted without a redundant merge, preserving its remote ref and all checkpoints. Annotated tag `checkpoint/st-002-before-session-timer` and new local branch `feature/st-002-session-timer` start exactly at that baseline. The [ST-002A scope and four decisions](ST-002A_SESSION_TIMER_PLAN.md) were then approved and implemented locally. Following successful final review, the owner provisionally accepted ST-002A/UX-008/DEV-001 and authorized a local release commit, local `main` integration and annotated `release/st-002a-ux008` checkpoint only. Push/deployment remain unauthorized; production remains ST-001 with shell v22.
+**Approved release increment:** UX-009 + UX-010 on `feature/ux009-ux010-timer-display`, checkpoint `checkpoint/before-ux009-ux010` at the production baseline. One red signed overtime readout supersedes the prior dual readout; transient phone-landscape Clock-only hides controls without changing timer semantics. After implementation review, the owner authorized commit, local integration and production deployment of this bounded increment.
 
 ## 1. Current product
 
-easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The release includes subtle overtime, unified presets, continuous time-budget extensions, and a persistent budget line. Session timing, ad-hoc timing, alarms, and user-configurable presentation settings remain future scope.
+easyTimer is a lightweight, dependency-free countdown timer for meetings, workshops, facilitation, and personal timeboxing. The release includes subtle overtime, unified presets, continuous time-budget extensions, and a persistent budget line. Manual Session timing is delivered; automatic transitions, ad-hoc timing, alarms and presentation settings remain future scope.
 
 The countdown is the dominant element. UX-007 uses two layout families sharing one timer state: Standard (desktop/tablet and smartphone portrait) and Presentation (explicit desktop/tablet fullscreen/fallback and automatic smartphone landscape).
 
@@ -22,7 +22,7 @@ The countdown is the dominant element. UX-007 uses two layout families sharing o
 - `Pause` freezes the exact remaining duration; `Resume` continues from it.
 - UX-003 removes the dedicated Restart UI and hides Stop in READY; the shared engine retains RESTART for future use. Stop followed by Start starts the planned duration again.
 - `Stop` restores the original configured duration and remains ready.
-- Expiry keeps the main display at `00:00`, retains the localized finished status, and shows a smaller overtime counter derived from the original deadline.
+- UX-009 replaces expiry with one large red `+00:00` readout, increasing from the authoritative deadline; localized finished status remains.
 - Overtime continues until Stop or New Run. Stop restores the planned duration and remains ready; New Run immediately starts it and clears extensions.
 - Zero, blank, fractional, negative, and out-of-range durations are rejected.
 - UX-002 configuration presets are hidden while running, paused, or expired, remain hidden after New Run, and return after Stop in standard, native fullscreen, and expanded views. READY presets also appear in automatic mobile landscape. Manual duration entry remains outside scope.
@@ -64,9 +64,9 @@ Offline reload starts a fresh ready timer because cross-reload timer persistence
 
 ## 5. Architecture
 
-ST-001 adds the Session Planner as a separate application workspace, reachable from the universal menu without reloading. It manages reusable planning data only; Session Timer execution is not implemented. The Quick Timer instance and deadline-based updates continue while the workspace is open. Explicit fullscreen/expanded presentation is cleared on entry and never restored automatically; smartphone landscape presentation resumes normally when returning to the timer.
+ST-001 adds the Session Planner as a separate application workspace, reachable from the universal menu without reloading. It manages reusable planning data independently of the delivered manual Session Timer. The Quick Timer instance and deadline-based updates continue while the workspace is open. Explicit fullscreen/expanded presentation is cleared on entry and never restored automatically; smartphone landscape presentation resumes normally when returning to the timer.
 
-`src/js/templates.mjs` provides schema validation, isolated draft cloning, stable-ID reordering and local load/save persistence. `src/js/planner.js` renders the library/editor with German and English labels. Schema version 1 under `easyTimerTemplates` contains templates with `id`, `name`, `transitionMode` and ordered `phases` (`id`, `title`, `durationSeconds`). A future Session Run owns separate execution state, statistics, deadlines and overtime. No runtime data is persisted inside templates.
+`src/js/templates.mjs` provides schema validation, isolated draft cloning, stable-ID reordering and local load/save persistence. `src/js/planner.js` renders the library/editor with German and English labels. Schema version 1 under `easyTimerTemplates` contains templates with `id`, `name`, `transitionMode` and ordered `phases` (`id`, `title`, `durationSeconds`). The Session Run owns separate execution state and phase-overrun records; one shared clock owns deadlines/overtime. No runtime data is persisted inside templates.
 
 Names/titles allow 1–120 trimmed characters; at least one phase is required. The compact editor has one minute input per phase, accepting positive integers 1–6,000, and a derived workshop maximum of 60,000 minutes. Storage keeps whole-minute `durationSeconds` values with no legacy migration, fallback or rounding. Totals display full hour counts, including `100:00:00` and `1000:00:00`. Quick Timer limits and timing are unchanged. Save validates before persistence; Cancel/close confirms changed drafts. Deletion is confirmed.
 
@@ -76,7 +76,7 @@ CSS Grid aligns phase number, flexible title, minutes and two 44 px SVG actions 
 
 Invalid or unsupported stored data blocks writes without deleting records. Read/write errors retain drafts and existing storage. A raw-snapshot optimistic check blocks detected cross-tab conflicts on save/delete; simultaneous writes in the comparison/write window remain a documented localStorage limitation. Reload is explicit and confirms draft loss. Optional JSON export/import can later reuse schema validation with explicit ID-collision decisions; cloud storage and authentication are not included.
 
-Service-worker shell v22 includes both planner modules with versioned URLs. Run `node --test tests/timer.test.mjs tests/templates.test.mjs` and the existing browser regression, including `tests/planner-browser.mjs`. The latter covers localized field-error associations, normalized unsaved-change detection, duplicate template names, stable IDs after full reload, genuine cross-tab storage conflicts, compact responsive layouts and minute/large-total boundaries. Repositioning tests include exact long-list destinations, save/cancel/undo, retained invalid fields, native keyboard selection, emulated touch, focus/dismissal and popover fit across languages/themes. Native iOS Safari/PWA keyboard, position picker, safe-area, fullscreen and screen-reader checks remain explicitly open for final release acceptance on real hardware.
+Production shell v25 and local shell v26 include both planner modules with versioned URLs. Run `node --test tests/timer.test.mjs tests/templates.test.mjs` and the existing browser regression, including `tests/planner-browser.mjs`. The latter covers localized field-error associations, normalized unsaved-change detection, duplicate template names, stable IDs after full reload, genuine cross-tab storage conflicts, compact responsive layouts and minute/large-total boundaries. Repositioning tests include exact long-list destinations, save/cancel/undo, retained invalid fields, native keyboard selection, emulated touch, focus/dismissal and popover fit across languages/themes. Native iOS Safari/PWA keyboard, position picker, safe-area, fullscreen and screen-reader checks remain explicitly open for final release acceptance on real hardware.
 
 - `src/index.html`: semantic single-timer interface, PWA metadata, header, controls, and progress strip.
 - `src/css/styles.css`: design tokens, themes, safe areas, responsive standard and presentation layouts, and universal menu.
@@ -129,7 +129,7 @@ For fast deterministic visual inspection, DEV-001 extends this harness with [vir
 
 ## 7. Deployment
 
-The local ST-002A/UX-008 release candidate uses PWA shell v25 after the approved Session hierarchy refinement, including consistent versioned imports/cache entries. Session puts workshop/current-phase/index at the top and workshop remaining plus a restrained contextual Up next button in the bottom dock, stacking on narrow phones. The existing advance handler prepares the next phase READY; the last phase offers explicit Complete workshop, and completed runs hide/disable advance. Timer arithmetic, snapshots, storage and UX-008 colors remain unchanged. No cache version change is needed for documentation-only edits. The current production shell remains v22 until a separately authorized release.
+The preceding production baseline is PWA shell v25; the approved UX-009/UX-010 release uses matching v26 HTML/import/cache references, adding no new production module or dependency. The Session hierarchy and existing advance handler remain unchanged. See the [canonical display/view contract](EASYTIMER_UX_KONZEPT_v2.md#ux-009--unified-readout-and-ux-010--mobile-clock-only-approved-local-implementation). No workflow, hosting or DNS change is included.
 
 UX-008 adds one derived render attribute and semantic theme tokens shared by Quick/current Session phases; timing and progress remain unchanged. See the [canonical UX-008 record](EASYTIMER_UX_KONZEPT_v2.md#ux-008--shared-timebox-endgame-highlight-approved-implemented-locally) for its single threshold table, amber/red semantics and intentionally deferred ON/OFF preference. No timer-engine change, independent warning clock, sound or new live announcements is involved.
 
