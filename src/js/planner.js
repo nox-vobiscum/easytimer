@@ -1,13 +1,14 @@
-import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=34';
+import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=35';
+import { parseRundowns, independentCopies, rundownCollisions, downloadRundowns, exportFilename, MAX_IMPORT_BYTES } from './portability.mjs?v=35';
 
 const copy = {
     en: {
-        planner: 'Session Editor', back: 'Back to timer', create: 'Create template', empty: 'No workshop templates saved yet.',
+        planner: 'Session Editor', back: 'Back to timer', create: 'Create Rundown', empty: 'No Rundowns saved yet.',
         edit: 'Edit', remove: 'Delete', templateName: 'Workshop name', transition: 'Phase transitions', manual: 'Manual', automatic: 'Automatic',
-        planningOnly: 'Planning only. Session execution is not available yet.', phases: 'Phases', phaseTitleLabel: 'Phase title', phaseTitlePlaceholder: 'Enter phase title',
+        planningOnly: 'Reusable phase sequences. Load a copy in Session Timer to run it.', phases: 'Phases', phaseTitleLabel: 'Phase title', phaseTitlePlaceholder: 'Enter phase title',
         durationLabel: 'Duration (min)', actions: 'Actions', up: 'Move up', down: 'Move down', removePhase: 'Remove phase', add: '+ Add phase',
         reposition: 'Reposition phase', position: 'Position', move: 'Move', close: 'Close',
-        save: 'Save', cancel: 'Cancel', total: 'Total planned duration', phaseCount: count => `${count} phases`,
+        save: 'Save', cancel: 'Cancel', total: 'Total planned duration', phaseCount: count => `${count} ${count === 1 ? 'phase' : 'phases'}`,
         deleteConfirm: name => `Delete “${name}”?`, discard: 'Discard unsaved changes?', reload: 'Reload saved templates', saved: 'Template saved.', deleted: 'Template deleted.',
         name: 'Enter a workshop name containing 1–120 characters.', phaseTitle: 'Each phase needs a title containing 1–120 characters.',
         duration: 'Enter a whole number from 1 to 6,000 minutes.',
@@ -19,12 +20,12 @@ const copy = {
         conflict: 'Saved templates changed in another tab. Saving is blocked to protect them. Your draft is retained. Reload only when you are ready to discard it.',
     },
     de: {
-        planner: 'Session-Editor', back: 'Zurück zum Timer', create: 'Vorlage erstellen', empty: 'Noch keine Workshop-Vorlagen gespeichert.',
+        planner: 'Session-Editor', back: 'Zurück zum Timer', create: 'Rundown erstellen', empty: 'Noch keine Rundowns gespeichert.',
         edit: 'Bearbeiten', remove: 'Löschen', templateName: 'Workshopname', transition: 'Phasenübergänge', manual: 'Manuell', automatic: 'Automatisch',
-        planningOnly: 'Nur Planung. Sessions können noch nicht ausgeführt werden.', phases: 'Phasen', phaseTitleLabel: 'Phasentitel', phaseTitlePlaceholder: 'Phasentitel eingeben',
+        planningOnly: 'Wiederverwendbare Phasenabläufe. Lade eine Kopie im Session-Timer.', phases: 'Phasen', phaseTitleLabel: 'Phasentitel', phaseTitlePlaceholder: 'Phasentitel eingeben',
         durationLabel: 'Dauer (min)', actions: 'Aktionen', up: 'Nach oben', down: 'Nach unten', removePhase: 'Phase entfernen', add: '+ Phase hinzufügen',
         reposition: 'Phase verschieben', position: 'Position', move: 'Verschieben', close: 'Schließen',
-        save: 'Speichern', cancel: 'Abbrechen', total: 'Geplante Gesamtdauer', phaseCount: count => `${count} Phasen`,
+        save: 'Speichern', cancel: 'Abbrechen', total: 'Geplante Gesamtdauer', phaseCount: count => `${count} ${count === 1 ? 'Phase' : 'Phasen'}`,
         deleteConfirm: name => `„${name}“ löschen?`, discard: 'Ungespeicherte Änderungen verwerfen?', reload: 'Gespeicherte Vorlagen neu laden', saved: 'Vorlage gespeichert.', deleted: 'Vorlage gelöscht.',
         name: 'Einen Workshopnamen mit 1–120 Zeichen eingeben.', phaseTitle: 'Jede Phase benötigt einen Titel mit 1–120 Zeichen.',
         duration: 'Eine ganze Zahl von 1 bis 6.000 Minuten eingeben.',
@@ -36,6 +37,42 @@ const copy = {
         conflict: 'Vorlagen wurden in einem anderen Tab geändert. Speichern ist zu ihrem Schutz blockiert. Der Entwurf bleibt erhalten. Neu laden verwirft ihn erst nach Bestätigung.',
     },
 };
+Object.assign(copy.en, {
+    importConflict: 'Import blocked: Rundowns changed in another tab. Existing Rundowns remain unchanged; the import preview is retained.',
+    importStorageWrite: 'Import failed: the data could not be saved. Existing Rundowns remain unchanged; the import preview is retained.',
+    refreshLibrary: 'Refresh list',
+    dataBackup: 'Data & Backup', importJSON: 'Import JSON', exportAll: 'Export all as JSON', exportOne: name => `Export Rundown: ${name}`,
+    localWarning: 'Locally stored rundowns may be lost when browser data is cleared. Back them up regularly using JSON export.',
+    importReview: 'Review import', file: 'File', importCount: count => `${count} valid Rundown${count === 1 ? '' : 's'}`,
+    importCopies: 'Imports create additional independent copies with new IDs. Existing Rundowns stay unchanged.',
+    idCollision: 'Matching ID already exists', nameCollision: 'Possible duplicate name', openImport: 'Open as unsaved draft',
+    confirmImport: 'Import all as new copies', refreshImport: 'Refresh local list', imported: 'All Rundowns imported as new copies.',
+    importEmpty: 'This file contains no Rundowns.', importSize: 'The file is too large. Choose a JSON file up to 10 MiB.',
+    importJSONError: 'This file is not valid JSON.', importVersion: 'This file uses an unsupported version.',
+    importInvalid: 'This file contains invalid Rundowns or unsupported fields. Nothing was imported.',
+    importDuration: 'Phase durations must be whole minutes from 1 to 6,000 minutes.',
+    importLimit: 'A Rundown cannot exceed 60,000 minutes.', importRead: 'The file could not be read. Try selecting it again.',
+    exportFailed: 'The download could not be prepared. Check saved data and try again.', exportMissing: 'This Rundown is no longer saved. Refresh the list.',
+    exportStarted: 'Download requested. Keep the JSON file as your backup.',
+});
+Object.assign(copy.de, {
+    importConflict: 'Import blockiert: Rundowns wurden in einem anderen Tab geändert. Bestehende Rundowns bleiben unverändert; die Importvorschau bleibt erhalten.',
+    importStorageWrite: 'Import fehlgeschlagen: Die Daten konnten nicht gespeichert werden. Bestehende Rundowns bleiben unverändert; die Importvorschau bleibt erhalten.',
+    refreshLibrary: 'Liste aktualisieren',
+    dataBackup: 'Daten & Sicherung', importJSON: 'JSON importieren', exportAll: 'Alle als JSON exportieren', exportOne: name => `Rundown exportieren: ${name}`,
+    localWarning: 'Lokal gespeicherte Rundowns können beim Löschen von Browserdaten verloren gehen. Sichere sie regelmäßig per JSON-Export.',
+    importReview: 'Import prüfen', file: 'Datei', importCount: count => `${count} gültige${count === 1 ? 'r Rundown' : ' Rundowns'}`,
+    importCopies: 'Importe erstellen zusätzliche, unabhängige Kopien mit neuen IDs. Bestehende Rundowns bleiben unverändert.',
+    idCollision: 'ID bereits vorhanden', nameCollision: 'Möglicherweise gleicher Name', openImport: 'Als ungespeicherten Entwurf öffnen',
+    confirmImport: 'Alle als neue Kopien importieren', refreshImport: 'Lokale Liste aktualisieren', imported: 'Alle Rundowns als neue Kopien importiert.',
+    importEmpty: 'Diese Datei enthält keine Rundowns.', importSize: 'Die Datei ist zu groß. Bitte eine JSON-Datei bis 10 MiB wählen.',
+    importJSONError: 'Diese Datei enthält kein gültiges JSON.', importVersion: 'Diese Dateiversion wird nicht unterstützt.',
+    importInvalid: 'Die Datei enthält ungültige Rundowns oder unbekannte Felder. Es wurde nichts importiert.',
+    importDuration: 'Phasendauern müssen ganze Minuten zwischen 1 und 6.000 sein.',
+    importLimit: 'Ein Rundown darf 60.000 Minuten nicht überschreiten.', importRead: 'Die Datei konnte nicht gelesen werden. Bitte erneut auswählen.',
+    exportFailed: 'Der Download konnte nicht vorbereitet werden. Bitte gespeicherte Daten prüfen und erneut versuchen.', exportMissing: 'Dieser Rundown ist nicht mehr gespeichert. Bitte die Liste aktualisieren.',
+    exportStarted: 'Download angefordert. Bewahre die JSON-Datei als Sicherung auf.',
+});
 const clock = seconds => {
     const parts = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
     return (parts[0] ? parts : parts.slice(1)).map(v => String(v).padStart(2, '0')).join(':');
@@ -57,6 +94,8 @@ export function createPlanner(root, onClose, initialLanguage) {
     let error = false;
     let invalidFieldId = null;
     let active = false;
+    let review = null;
+    let fileReadId = 0;
     let repositionId = null;
     const popover = element('div', undefined, 'phase-reposition-popover');
     popover.id = 'phase-reposition-popover';
@@ -178,6 +217,10 @@ export function createPlanner(root, onClose, initialLanguage) {
             input.removeAttribute('aria-describedby');
         }
     }
+    function feedbackText(code) {
+        const key = review ? ({ conflict: 'importConflict', storageWrite: 'importStorageWrite' }[code] || code) : code;
+        return t()[key] || '';
+    }
     function feedback(code, isError = true, fieldId = null) {
         message = code;
         error = isError;
@@ -185,26 +228,32 @@ export function createPlanner(root, onClose, initialLanguage) {
         root.querySelectorAll('input').forEach(applyFieldValidation);
         const node = root.querySelector('.planner-feedback');
         if (node) {
-            node.textContent = t()[code] || '';
+            node.textContent = feedbackText(code);
             node.dataset.error = String(error);
         }
+        const refresh = root.querySelector('#refresh-import');
+        if (refresh) refresh.hidden = !['conflict', 'storageRead', 'storageBlocked', 'invalidData'].includes(code);
     }
     function focusHeading() { root.querySelector('h1')?.focus(); }
     function canDiscard() { return !dirty() || window.confirm(t().discard); }
     function close() {
         if (!canDiscard()) return false;
+        fileReadId += 1; review = null;
         draft = null; active = false; feedback(''); closeReposition(); onClose();
         return true;
     }
     function load() {
+        fileReadId += 1;
         try { library = store.load(); feedback('', false); }
         catch (e) { feedback(e.message); }
     }
-    function begin(template) {
+    function begin(template, imported = false) {
+        fileReadId += 1; review = null;
         draft = createDraft(template);
         if (!template) draft.phases.push({ id: crypto.randomUUID(), title: '', durationSeconds: 600 });
         draft.phases.forEach(phase => { phase.minutes = String(phase.durationSeconds / 60); });
-        original = JSON.stringify(materialize());
+        // Populated imported drafts are unsaved even before the first edit.
+        original = imported ? '' : JSON.stringify(materialize());
         feedback('');
         render();
         root.querySelector('#template-name').focus();
@@ -264,6 +313,80 @@ export function createPlanner(root, onClose, initialLanguage) {
             target?.focus();
         }
     }
+    function exportSaved(id) {
+        try {
+            // Export the current saved data without resetting this editor's optimistic snapshot.
+            const data = createTemplateStore(() => localStorage).load();
+            if (id) data.templates = data.templates.filter(item => item.id === id);
+            if (id && !data.templates.length) throw new Error('exportMissing');
+            downloadRundowns(data, id ? exportFilename(data.templates[0].name) : undefined);
+            feedback('exportStarted', false);
+        } catch (e) { feedback(e.message === 'exportMissing' ? e.message : 'exportFailed'); }
+    }
+    async function readImport(file) {
+        if (!file || draft || review) return;
+        const reading = ++fileReadId;
+        feedback('', false);
+        try {
+            if (file.size > MAX_IMPORT_BYTES) throw new Error('importSize');
+            let content;
+            try { content = await file.text(); } catch { throw new Error('importRead'); }
+            if (!active || reading !== fileReadId || draft) return;
+            const data = parseRundowns(content);
+            review = { name: file.name, data };
+            feedback('', false); render(); root.querySelector('#import-heading').focus();
+        } catch (e) {
+            if (!active || reading !== fileReadId || draft) return;
+            feedback(e.message === 'importJSON' ? 'importJSONError' : e.message);
+            root.querySelector('#planner-feedback').focus();
+        }
+    }
+    function confirmImport() {
+        if (!review) return;
+        try {
+            const copies = independentCopies(review.data, library);
+            if (copies.templates.length === 1) { begin(copies.templates[0], true); return; }
+            library = store.save({ schemaVersion: 1, templates: [...library.templates, ...copies.templates] });
+            review = null; feedback('imported', false); render(); focusHeading();
+        } catch (e) { feedback(e.message); root.querySelector('#planner-feedback').focus(); }
+    }
+    function renderReview() {
+        const text = t(), section = element('section', undefined, 'import-review');
+        section.setAttribute('aria-labelledby', 'import-heading');
+        const heading = element('h2', text.importReview); heading.id = 'import-heading'; heading.tabIndex = -1;
+        section.append(heading, element('p', `${text.file}: ${review.name}`), element('p', text.importCount(review.data.templates.length)), element('p', text.importCopies));
+        const list = element('ol', undefined, 'import-list'); list.tabIndex = 0; list.setAttribute('aria-label', text.importReview);
+        const collisions = rundownCollisions(review.data, library);
+        review.data.templates.forEach((item, i) => {
+            const row = element('li');
+            row.append(element('h3', item.name), element('p', `${text.phaseCount(item.phases.length)} · ${clock(totalDuration(item.phases))} · ${text[item.transitionMode]}`));
+            const warnings = [collisions[i].id ? text.idCollision : '', collisions[i].name ? text.nameCollision : ''].filter(Boolean);
+            if (warnings.length) row.append(element('p', warnings.join(' · '), 'import-collision'));
+            list.append(row);
+        });
+        const actions = element('div', undefined, 'planner-actions');
+        const confirm = button(review.data.templates.length === 1 ? text.openImport : text.confirmImport, confirmImport, 'primary'); confirm.id = 'confirm-import';
+        const cancel = button(text.cancel, () => { fileReadId += 1; review = null; feedback('', false); render(); root.querySelector('#rundown-import-file').focus(); }); cancel.id = 'cancel-import';
+        const refresh = button(text.refreshImport, () => {
+            try { library = store.load(); feedback('', false); render(); root.querySelector('#confirm-import').focus(); }
+            catch (e) { feedback(e.message); root.querySelector('#planner-feedback').focus(); }
+        });
+        refresh.id = 'refresh-import'; refresh.hidden = !['conflict', 'storageRead', 'storageBlocked', 'invalidData'].includes(message);
+        actions.append(confirm, cancel, refresh); section.append(list, actions); root.append(section);
+    }
+    function renderBackup() {
+        const text = t(), section = element('section', undefined, 'data-backup');
+        section.setAttribute('aria-labelledby', 'backup-heading');
+        const heading = element('h2', text.dataBackup); heading.id = 'backup-heading';
+        const actions = element('div', undefined, 'backup-actions');
+        const label = element('label', text.importJSON);
+        const file = element('input'); file.type = 'file'; file.id = 'rundown-import-file'; file.accept = '.json,application/json';
+        file.setAttribute('aria-label', text.importJSON);
+        file.addEventListener('change', () => { const selected = file.files[0]; file.value = ''; readImport(selected); });
+        label.append(file);
+        const all = button(text.exportAll, () => exportSaved()); all.id = 'export-all'; all.disabled = library.templates.length === 0;
+        actions.append(label, all); section.append(heading, actions, element('p', text.localWarning)); root.append(section);
+    }
     function render() {
         closeReposition();
         const text = t();
@@ -275,13 +398,14 @@ export function createPlanner(root, onClose, initialLanguage) {
         back.append(element('span', text.back));
         top.append(heading, back);
         root.append(top, element('p', text.planningOnly, 'planner-hint'));
-        const notice = element('p', text[message] || '', 'planner-feedback');
+        const notice = element('p', feedbackText(message), 'planner-feedback');
         notice.id = 'planner-feedback';
         notice.setAttribute('role', 'status'); notice.tabIndex = -1; notice.dataset.error = String(error);
         root.append(notice);
+        if (review) { renderReview(); return; }
         if (!draft) {
             const actions = element('div', undefined, 'planner-actions');
-            actions.append(button(text.create, () => begin(), 'primary'), button(text.reload, () => { load(); render(); focusHeading(); }));
+            actions.append(button(text.create, () => begin(), 'primary'), button(text.refreshLibrary, () => { load(); render(); focusHeading(); }));
             root.append(actions);
             const list = element('ul', undefined, 'template-library');
             if (!library.templates.length) root.append(element('p', text.empty));
@@ -299,9 +423,11 @@ export function createPlanner(root, onClose, initialLanguage) {
                     } catch (e) { feedback(e.message); }
                 });
                 remove.setAttribute('aria-label', `${text.remove}: ${item.name}`);
-                actions.append(edit, remove); row.append(info, actions); list.append(row);
+                const exportButton = phaseAction(text.exportOne(item.name), 'M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5', () => exportSaved(item.id));
+                exportButton.className = 'rundown-export';
+                actions.append(edit, exportButton, remove); row.append(info, actions); list.append(row);
             }
-            root.append(list);
+            root.append(list); renderBackup();
             return;
         }
         const form = element('form'); form.noValidate = true;

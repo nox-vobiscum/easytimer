@@ -19,10 +19,10 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await evaluate(`window.plannerRealNow=Date.now;window.plannerNow=Date.now();Date.now=()=>window.plannerNow`);
     await configure(0, 1, 0); await click('#primary'); await click('[data-adjustment="30000"]');
     await open();
-    assert.match(await text('#planner'), /No workshop templates/);
+    assert.match(await text('#planner'), /No Rundowns/);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.timer')).display`), 'none');
     const before = await evaluate(`({time:document.querySelector('#time').textContent,budget:document.querySelector('#time-budget').textContent})`);
-    await action('Create template');
+    await action('Create Rundown');
     assert.equal(await evaluate('document.activeElement.id'), 'template-name');
     await field('#template-name', 'Workshop <safe>');
     await click('#menu-toggle'); await click('#open-planner');
@@ -51,7 +51,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     assert.equal(await evaluate(`document.querySelector('#template-name').value`), 'Discard this');
     await evaluate('window.acceptConfirm=true'); await action('Cancel');
     assert.equal((await stored()).templates[0].name, 'Workshop <safe>');
-    await action('Create template'); await field('#template-name', 'Second workshop');
+    await action('Create Rundown'); await field('#template-name', 'Second workshop');
     await field('.phase-list input[type="text"]', 'Opening');
     await evaluate(`document.querySelector('#transition-manual').focus()`);
     await cdp('Input.dispatchKeyEvent', { type:'keyDown', key:'ArrowRight', code:'ArrowRight', windowsVirtualKeyCode:39 });
@@ -148,13 +148,13 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await evaluate('window.acceptConfirm=true'); await action('Delete'); assert.equal((await stored()).templates.length, 1);
     const validRaw = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     await evaluate(`localStorage.setItem('easyTimerTemplates','{broken')`);
-    await action('Reload saved templates'); assert.match(await text('.planner-feedback'), /invalid/);
-    await action('Create template'); await field('#template-name', 'Blocked'); await field('.phase-list input[type="text"]', 'Phase'); await action('Save');
+    await action('Refresh list'); assert.match(await text('.planner-feedback'), /invalid/);
+    await action('Create Rundown'); await field('#template-name', 'Blocked'); await field('.phase-list input[type="text"]', 'Phase'); await action('Save');
     assert.match(await text('.planner-feedback'), /before saving/);
     assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`), '{broken');
     await action('Cancel');
     await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(validRaw)})`);
-    await action('Reload saved templates'); await action('Back to timer');
+    await action('Refresh list'); await action('Back to timer');
     // Exercise keyboard activation through the real browser event path.
     await click('#menu-toggle');
     await evaluate(`document.querySelector('#open-planner').focus()`);
@@ -399,7 +399,7 @@ async function checkInitialPhase({ evaluate, click, text }) {
     await evaluate(`window.initialPhaseConfirm=window.confirm;window.initialPhasePrompts=0;window.confirm=()=>{window.initialPhasePrompts++;return true;};`);
     try {
         await click('#menu-toggle'); await click('#open-planner');
-        await action('Create template');
+        await action('Create Rundown');
         assert.equal(await evaluate('document.activeElement.id'), 'template-name');
         assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 1);
         const firstId = await phaseId();
@@ -414,14 +414,14 @@ async function checkInitialPhase({ evaluate, click, text }) {
         assert.equal(await raw(), baseline, 'Initializing and translating a draft never writes storage');
         await action('Cancel');
         assert.equal(await evaluate('window.initialPhasePrompts'), 0, 'The untouched initial phase belongs to the clean baseline');
-        await action('Create template');
+        await action('Create Rundown');
         const savedPhaseId = await phaseId();
         assert.notEqual(savedPhaseId, firstId, 'Each new draft gets a fresh phase identity');
         await action('Save'); assert.match(await text('.planner-feedback'), /workshop name/);
         assert.equal(await raw(), baseline);
         // A validation attempt alone must not dirty the untouched draft.
         await action('Cancel'); assert.equal(await evaluate('window.initialPhasePrompts'), 0);
-        await action('Create template');
+        await action('Create Rundown');
         await field('#template-name', 'Initial phase workshop');
         await action('Save'); assert.match(await text('.planner-feedback'), /phase needs a title/);
         assert.equal(await raw(), baseline);
@@ -430,21 +430,21 @@ async function checkInitialPhase({ evaluate, click, text }) {
         await field('.phase-duration input', '15'); await field('.phase-duration input', '010');
         await action('Cancel');
         assert.equal(await evaluate('window.initialPhasePrompts'), 0, 'Restoring normalized initial values removes dirty state');
-        await action('Create template'); await field('.phase-title input', 'Changed'); await action('Cancel');
+        await action('Create Rundown'); await field('.phase-title input', 'Changed'); await action('Cancel');
         assert.equal(await evaluate('window.initialPhasePrompts'), 1, 'Editing the initial phase requires discard confirmation');
         assert.equal(await raw(), baseline);
-        await action('Create template');
+        await action('Create Rundown');
         await click('.phase-actions button:last-child');
         assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 0);
         await click('[data-language="de"]'); await click('[data-language="en"]');
         assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 0, 'Rendering never recreates a deleted initial phase');
         await action('Cancel'); assert.equal(await evaluate('window.initialPhasePrompts'), 2, 'Deleting only the initial phase makes the draft dirty');
-        await action('Create template'); await click('.phase-actions button:last-child');
+        await action('Create Rundown'); await click('.phase-actions button:last-child');
         await field('#template-name', 'No phases'); await action('Save');
         assert.match(await text('.planner-feedback'), /at least one phase/);
         assert.equal(await raw(), baseline);
         await action('Cancel'); assert.equal(await evaluate('window.initialPhasePrompts'), 3);
-        await action('Create template'); const persistedId = await phaseId();
+        await action('Create Rundown'); const persistedId = await phaseId();
         await field('#template-name', 'Initial phase workshop'); await field('.phase-title input', 'Opening'); await action('Save');
         const saved = await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates')).templates.at(-1)`);
         assert.deepEqual(saved.phases, [{id:persistedId,title:'Opening',durationSeconds:600}]);
@@ -482,7 +482,7 @@ async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
     try {
         await open();
         for (const title of ['First phase', 'Second phase']) {
-            await action('Create template'); await field('#template-name', 'Duplicate workshop');
+            await action('Create Rundown'); await field('#template-name', 'Duplicate workshop');
             await field('.phase-list input[type="text"]', title); await action('Save');
         }
         let library = await stored();

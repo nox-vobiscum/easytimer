@@ -24,7 +24,7 @@ Capture deferred product ideas and small quality-of-life improvements without lo
 
 Approved follow-up reduces visible repetition: heading retained, native field label visually hidden, short selection placeholder, `Load` / `Laden`, `Refresh list` / `Liste aktualisieren`, and `Create new` / `Neu erstellen`. This distinguishes refreshing the saved list from loading the selected Run. Further visual polishing remains open for separate review.
 
-The Editor also retains an older planning-only hint claiming Session execution is unavailable. This pre-existing copy is not changed by the bounded selection-screen increment; include it in a separate Editor copy review.
+The older Editor hint claiming Session execution was unavailable is corrected in DATA-001's local library/backup UI. Workshop field/validation and active Session terminology remain outside that data-portability scope.
 
 **Accepted menu release (publication approved):** The preparation tool is now called **Session Editor** (DE: **Session-Editor**), with subtitle “Create & manage sessions” / “Sessions erstellen & verwalten”. Internal Planner modules, IDs, storage and workshop-template terminology remain unchanged. Mode tiles remain above the separate Editor action; language/theme share a compact row. The owner selected **Variant B - Stopwatch + Echo** from the supplied reference: a dominant stopwatch with two subdued rear stopwatch echoes. This supersedes the earlier review-only A/B/C proposals. The selected inline SVG uses theme-aware color/opacity; there is no icon selection UI. The owner has authorized documentation follow-up and production publication of this bounded menu release (PWA v31). Verify deployment outcome separately.
 
@@ -36,7 +36,7 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | UX-010 | Smartphone landscape Clock-only | Implemented; release approved | Temporary tap/keyboard view; no preference or timer-state change; v26 |
 | PLAN-001 | Insert a new phase directly at a chosen position | Candidate | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Someday | Presentation-only refinement |
-| DATA-001 | Export/import workshop templates as JSON | Candidate | Existing template schema and validation |
+| DATA-001 | Rundown JSON export/import | Accepted for release | Existing schema; reviewed additive copies; publication approved |
 | SYNC-001 | Optional Google Drive template sync | Later / Spike | DATA-001; Google identity, OAuth, mobile PWA feasibility |
 | ST-002 | Executable Session Timer | A and B deployed | B v28 production verified at ead2ad1; see ST-002B record |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
@@ -48,6 +48,7 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | REMOTE-001 | Cross-device timer control/display | Someday / Spike | Separate architecture and security review |
 | CUSTOM-001 | Optional presentation customization | Someday | Stable core UI and audience-display requirements |
 | INFO-001 | Menu links to standalone information pages | Candidate | Owner-approved copy/content; separate page URLs |
+| AI-001 | Image-to-Rundown conversion | Someday (low priority) | DATA-001 portability; separate design/feasibility review |
 
 ## INFO-001 — Standalone information pages from the menu
 
@@ -73,13 +74,13 @@ Add a compact row of text links at the very bottom of the universal menu: **Abou
 
 ## Template portability and optional synchronization
 
-### DATA-001 — Template JSON export/import
+### DATA-001 — Rundown JSON export/import
 
-**Idea:** Export the template library, or selected workshop templates, as portable JSON and import them on another browser/device. This is also an independent backup route.
+**Implemented local scope:** Individual/complete-library JSON downloads, local file validation and explicit review. Single imports open unsaved Editor drafts; bulk imports append independent copies with fresh Rundown/phase IDs using the existing conflict-checked store. Original IDs/names remain visible for collision review; existing records are never replaced or deduplicated. Current Session definitions can be exported from the existing menu without timing changes. See [DATA-001](DATA-001_RUNDOWN_PORTABILITY.md) for file format, limits, safeguards, tests and domain migration.
 
-**Acceptance questions:** Validate imported data using the canonical schema; reject malformed/unsupported content without destroying existing templates; decide stable-ID collisions, duplicates, append/replace behavior, and confirmations explicitly. No hidden synchronization or account requirement. Keep first release small.
+**Portability sequence:** Manual JSON now; optional Drive synchronization later; AI-assisted image conversion someday, low priority. Browser/profile/origin-local storage remains independent: `easytimer.at` does not inherit `et.rbsnet.at` records. Move JSON files manually and review imports on the destination. No Google login is required.
 
-**Status:** Candidate; potential independent increment before or after initial Session Timer runtime.
+**Status:** Implemented locally on `feature/data-001-json-portability`, PWA v35, checkpoint `checkpoint/before-data-001` at `fb719f7`. Owner functional/visual acceptance complete; production publication approved as `release/data-001-v35`. Native iOS/PWA file handling and VoiceOver remain manual acceptance checks. The existing narrow comparison/write race across simultaneous tabs remains documented, not replaced by a synchronization mechanism.
 
 ### SYNC-001 — Optional Google Drive synchronization
 

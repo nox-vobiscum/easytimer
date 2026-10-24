@@ -1,15 +1,16 @@
-import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=34';
-import { createPlanner } from './planner.js?v=34';
-import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=34';
-import { createTemplateStore } from './templates.mjs?v=34';
-import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=34';
+import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=35';
+import { createPlanner } from './planner.js?v=35';
+import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=35';
+import { createTemplateStore } from './templates.mjs?v=35';
+import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=35';
+import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=35';
 
 const copy = {
     en: {
-        planner: 'Session Editor', mode: 'Mode', editorSubtitle: 'Create & manage rundowns',
+        planner: 'Session Editor', mode: 'Mode', editorSubtitle: 'Create & manage rundowns', exportRundown: 'Export Rundown', exportFailed: 'The download could not be prepared. Please try again.',
         clockOnly: 'Show clock-only view', clockControls: 'Show timer controls',
         quick: 'Quick Timer', session: 'Session Timer', chooseWorkshop: 'Load Rundown', backQuick: 'Back to Quick Timer',
-        workshopTemplate: 'Rundown', createRundown: 'Create new',
+        workshopTemplate: 'Rundown', createRundown: 'Open Session Editor', pickerContext: 'Choose a saved rundown for the Session Timer.', pickerEditorSubtitle: 'Create & edit rundowns',
         manual: 'Manual', automatic: 'Automatic', endsAutomatically: 'Workshop ends automatically',
         runNote: 'Saved sequences stay unchanged.',
         pageReloadNote: 'Reloading this page discards the current run.',
@@ -33,10 +34,10 @@ const copy = {
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
     de: {
-        planner: 'Session-Editor', mode: 'Modus', editorSubtitle: 'Rundowns erstellen & verwalten',
+        planner: 'Session-Editor', mode: 'Modus', editorSubtitle: 'Rundowns erstellen & verwalten', exportRundown: 'Rundown exportieren', exportFailed: 'Der Download konnte nicht vorbereitet werden. Bitte erneut versuchen.',
         clockOnly: 'Nur die Uhr anzeigen', clockControls: 'Timer-Bedienung anzeigen',
         quick: 'Quick-Timer', session: 'Session-Timer', chooseWorkshop: 'Rundown laden', backQuick: 'Zurück zum Quick-Timer',
-        workshopTemplate: 'Rundown', createRundown: 'Neu erstellen',
+        workshopTemplate: 'Rundown', createRundown: 'Session-Editor öffnen', pickerContext: 'Wähle einen gespeicherten Rundown für den Session-Timer.', pickerEditorSubtitle: 'Rundowns erstellen & bearbeiten',
         manual: 'Manuell', automatic: 'Automatisch', endsAutomatically: 'Workshop endet automatisch',
         runNote: 'Gespeicherte Abläufe bleiben unverändert.',
         pageReloadNote: 'Beim Neuladen dieser Seite geht der aktuelle Durchlauf verloren.',
@@ -245,6 +246,9 @@ function render() {
     $('session-picker').hidden = !pickerOpen || plannerOpen;
     $('open-quick').setAttribute('aria-pressed', String(mode === 'quick'));
     $('open-session').setAttribute('aria-pressed', String(mode === 'session'));
+    $('export-rundown').hidden = !session;
+    if (!session) { $('export-feedback').hidden = true; $('export-feedback').textContent = ''; }
+    else if (!$('export-feedback').hidden) $('export-feedback').textContent = t.exportFailed;
     $('session-context').hidden = !session;
     planner.setLanguage(language);
     $('planner').setAttribute('aria-label', t.planner);
@@ -420,6 +424,16 @@ $('stop-overtime').addEventListener('click', () => {
     if (mode !== 'session' || !run) return;
     dispatch({ type: 'STOP_OVERTIME' }); $('stop').focus({ preventScroll: true });
 });
+$('export-rundown').addEventListener('click', () => {
+    if (mode !== 'session' || !run) return;
+    try {
+        downloadRundowns(rundownFromRun(run), exportFilename(run.name));
+        $('export-feedback').hidden = true;
+    } catch {
+        $('export-feedback').textContent = copy[language].exportFailed;
+        $('export-feedback').hidden = false;
+    }
+});
 async function openEditor(newDraft = false) {
     setMenuOpen(false);
     // Navigation invalidates fullscreen requests; returning never restores them implicitly.
@@ -434,7 +448,7 @@ async function openEditor(newDraft = false) {
 }
 $('open-planner').addEventListener('click', () => openEditor());
 $('create-rundown').addEventListener('click', () => {
-    if (mode === 'session' && pickerOpen && !plannerOpen) openEditor(true);
+    if (mode === 'session' && pickerOpen && !plannerOpen) openEditor();
 });
 document.addEventListener('click', event => {
     // Consume the restoring click before hidden controls can become interactive again.

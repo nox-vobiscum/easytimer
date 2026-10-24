@@ -1,5 +1,5 @@
-import { createTimer, transition } from './timer.mjs?v=34';
-import { validateTemplate } from './templates.mjs?v=34';
+import { createTimer, transition } from './timer.mjs?v=35';
+import { validateTemplate } from './templates.mjs?v=35';
 
 export function prepareSession(template, runId = crypto.randomUUID()) {
     const snapshot = validateTemplate(template);

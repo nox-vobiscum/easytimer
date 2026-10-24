@@ -8,7 +8,7 @@ ST-001 adds a local Session Planner workspace for reusable workshop templates. I
 
 ## Release baseline and approved update
 
-The last verified production baseline is `29a8fe3845e859fc8e016904c0c5293f4883fe38`, PWA v31: ST-002B plus compact menu, Session Editor terminology and Stopwatch + Echo icon. FTP deployment, all 17 production files and the full isolated production browser regression passed. Native iOS/PWA and VoiceOver acceptance remains manual.
+The last verified production baseline is `fb719f74bd4c9ce01b195803d3b94a792fc60d17`, PWA v34: Rundown entry UX and shared footer, with ST-002B and the compact menu. FTP deployment, all 17 production files and the full isolated production browser regression passed. Native iOS/PWA and VoiceOver acceptance remains manual.
 
 The [ST-002B automatic Session increment](docs/ST-002B_AUTOMATIC_SESSION_TIMER.md), implementation `f6a55e8`, is deployed with annotated `release/st-002b`; rollback `checkpoint/before-st-002b` is preserved. The menu/Session Editor release is deployed with annotated `release/menu-editor-v31`; rollback `checkpoint/before-menu-editor` is preserved. The Rundown entry refinement below is local and unpublished.
 
@@ -61,6 +61,14 @@ This accepted increment uses matching PWA v34 references; the owner approved com
 Verification passed 63/63 unit tests and the complete browser regression, including the new direct-create, Save/Cancel, draft/ID isolation and storage-error cases. Selection-screen screenshots cover DE/EN, Light/Dark, desktop, 390px and 320px portrait, and short landscape; lower content remains reachable by scrolling. Keyboard order is selection, Load, Reload, Create, Back. Native iOS/PWA and VoiceOver checks remain manual.
 
 The same approved release adds the fixed brand credit `Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026` in both languages. The monochrome Unicode heart follows the footer text color and size; both linked names open their respective HTTPS sites in a new tab with `noopener noreferrer`. Normal footer wrapping, safe areas and progress docking are preserved. [INFO-001](docs/backlog.md#info-001--standalone-information-pages-from-the-menu) records future menu links to About, FAQ, Imprint and Privacy policy, each with a standalone URL; those pages are not implemented here.
+
+## DATA-001 portability (accepted for release)
+
+The [DATA-001 contract](docs/DATA-001_RUNDOWN_PORTABILITY.md) adds individual JSON exports, Export all as JSON and reviewed local imports to the Session Editor. Data & Backup is secondary to Create; a discreet warning explains browser-local storage loss. Single imports open unsaved drafts, while bulk imports append a complete batch of fresh-ID copies only after explicit confirmation. Unknown fields/invalid data are rejected; conflicts and failed writes keep the review. Existing template storage schema and timing remain unchanged. A contextual Session menu action exports the isolated original definition without affecting a running clock.
+
+Use JSON export/import to transfer Rundowns between browsers/devices or between `et.rbsnet.at` and `easytimer.at`; those origins do not share localStorage. Import limit: 10 MiB. Backups are manual and contain no active runtime state. Google Drive/login/cloud sync and AI image conversion remain deferred. Local shell v35 caches the new portability module. Branch `feature/data-001-json-portability`, annotated `checkpoint/before-data-001` at `fb719f74bd4c9ce01b195803d3b94a792fc60d17`; owner acceptance and production publication approved. Release tag: `release/data-001-v35`.
+
+Verification passed all **73 unit tests** and the complete browser regression including real JSON downloads/offline use, single/bulk import and actual cross-tab conflict/quota safeguards. The DATA-001 browser module prints a temporary before/after gallery; generated files remain outside the repository. Native iOS/PWA downloads/file picking and VoiceOver remain manual acceptance checks.
 
 ## Run locally
 

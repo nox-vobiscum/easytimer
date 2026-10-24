@@ -4,11 +4,13 @@
 **Repository:** https://github.com/nox-vobiscum/easytimer  
 **Production:** https://et.rbsnet.at/
 
-**Last verified production baseline:** `29a8fe3845e859fc8e016904c0c5293f4883fe38`, PWA v31, including ST-002B and the compact menu/Session Editor/Stopwatch + Echo release. FTP workflow, byte-for-byte checks of 17 served files and the full isolated production browser regression passed. Native iOS/PWA/VoiceOver acceptance remains manual.
+**Last verified production baseline:** `fb719f74bd4c9ce01b195803d3b94a792fc60d17`, PWA v34, including Rundown entry/footer, ST-002B and compact menu. FTP workflow, byte-for-byte checks of 17 served files and the full isolated production browser regression passed. Native iOS/PWA/VoiceOver acceptance remains manual.
 
-**Deployed menu release:** `release/menu-editor-v31`, rollback `checkpoint/before-menu-editor`; feature branch preserved. The Rundown entry increment below is local only and has no publication approval.
+**Deployed menu release:** `release/menu-editor-v31`, rollback `checkpoint/before-menu-editor`; feature branch preserved. Rundown entry/footer subsequently shipped as `release/rundown-footer-v34`; DATA-001 below is accepted for release.
 
 ## 1. Current product
+
+**DATA-001 (accepted for release):** [Rundown portability](DATA-001_RUNDOWN_PORTABILITY.md), branch `feature/data-001-json-portability`, annotated `checkpoint/before-data-001` on verified production `fb719f7` (v34). Editor row downloads and secondary Data & Backup reuse schemaVersion 1. Strict 10 MiB JSON imports show a review before opening one dirty unsaved fresh-ID draft or saving a complete additive fresh-ID batch through existing conflict checks. Source definitions, timers and local storage keys remain independent. Session menu export uses the original isolated snapshot only. Shell v35 caches `portability.mjs`. Owner acceptance and production publication approved; release tag `release/data-001-v35`. INFO-001 information pages, cloud/login/Drive and AI conversion remain separate backlog work; no menu-footer link work is included.
 
 **Accepted Rundown entry release:** `feature/rundown-entry-ux` uses **Rundown** in both languages on the Session selection screen and menu subtitle. Load retains independent snapshot/READY semantics; Reload retains storage behavior. Create opens the existing Session Editor with its normal fresh unsaved draft/defaults and focus, using a guarded `newDraft` entry option. No new editor, persisted format, timer state or automatic start is introduced. Shell/import/cache references use v34. Full coverage is integrated through `tests/rundown-entry-browser.mjs`, including cancellation, Save, initial-phase deletion, storage-error protection and temporary before/after galleries. The owner has authorized commit, integration and production publication with the updated footer; verify deployment success separately. Workshop terminology elsewhere remains intentionally outside this increment.
 
