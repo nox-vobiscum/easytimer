@@ -240,7 +240,7 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
 .clock-only header, .clock-only .preferences-menu, .clock-only .fullscreen-button,
 .clock-only .timer > h1, .clock-only .session-context, .clock-only .controls-region,
 .clock-only #status, .clock-only #help, .clock-only .bottom-dock, .clock-only footer { display:none; }
-.clock-only main { min-height:0; padding-top:max(3rem,calc(env(safe-area-inset-top) + 2.5rem)); padding-bottom:max(.5rem,env(safe-area-inset-bottom)); }
+.clock-only main { min-height:0; }
 .clock-only .timer-stage { --readout-details:0rem; --clock-limit:100rem; min-height:0; }
 .clock-only #clock-view-toggle { position:fixed; inset:0; width:100%; height:100%; z-index:5; }
 .clock-only #clock-view-toggle:focus-visible { outline-offset:-7px; }
@@ -374,4 +374,4 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
   [data-mode="session"].presentation main { padding-bottom:.25rem; }
 }
 .clock-only.presentation .session-context { display:none; }
-body.clock-only.presentation main { padding-bottom:max(.5rem,env(safe-area-inset-bottom)); }
+body.clock-only.presentation main { padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }

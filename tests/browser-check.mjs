@@ -144,8 +144,8 @@ try {
     } else {
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=26'&&js==='js/app.js?v=26'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=26')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=27'&&js==='js/app.js?v=27'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=27')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');

@@ -1,8 +1,8 @@
-import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=26';
-import { createPlanner } from './planner.js?v=26';
-import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=26';
-import { createTemplateStore } from './templates.mjs?v=26';
-import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=26';
+import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=27';
+import { createPlanner } from './planner.js?v=27';
+import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=27';
+import { createTemplateStore } from './templates.mjs?v=27';
+import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=27';
 
 const copy = {
     en: {

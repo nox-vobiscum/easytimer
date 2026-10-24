@@ -28,8 +28,8 @@ export async function checkClockView({ evaluate, click, text, cdp, configure }) 
         await cdp('Page.captureScreenshot',{format:'png'});
     };
     const geometry = async () => {
-        const actual = await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const brand=document.querySelector('.presentation-brand').getBoundingClientRect();const t=document.querySelector('#clock-view-toggle');return {fits:r.left>=0&&r.right<=innerWidth&&r.top>=brand.bottom&&r.bottom<=innerHeight,overflow:document.documentElement.scrollWidth>innerWidth,role:document.querySelector('#time').getAttribute('role'),live:document.querySelector('#time').getAttribute('aria-live'),duplicates:document.querySelectorAll('#overtime,#overtime-time,.overtime').length,focus:document.activeElement===t,targets:Array.from(document.querySelectorAll('button,a,input,select,[tabindex]')).filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').map(e=>e.id),statusVisible:document.querySelector('#status').getClientRects().length>0};})()`);
-        assert.deepEqual(actual,{fits:true,overflow:false,role:'timer',live:'off',duplicates:0,focus:true,targets:['clock-view-toggle'],statusVisible:false});
+        const actual = await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const t=document.querySelector('#clock-view-toggle');const main=getComputedStyle(document.querySelector('main'));return {fits:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,centered:Math.abs((r.top+r.bottom)/2-(parseFloat(main.paddingTop)+innerHeight-parseFloat(main.paddingBottom))/2)<1,fixedBrand:getComputedStyle(document.querySelector('.presentation-brand')).position==='fixed',overflow:document.documentElement.scrollWidth>innerWidth,role:document.querySelector('#time').getAttribute('role'),live:document.querySelector('#time').getAttribute('aria-live'),duplicates:document.querySelectorAll('#overtime,#overtime-time,.overtime').length,focus:document.activeElement===t,targets:Array.from(document.querySelectorAll('button,a,input,select,[tabindex]')).filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').map(e=>e.id),statusVisible:document.querySelector('#status').getClientRects().length>0};})()`);
+        assert.deepEqual(actual,{fits:true,centered:true,fixedBrand:true,overflow:false,role:'timer',live:'off',duplicates:0,focus:true,targets:['clock-view-toggle'],statusVisible:false});
     };
     const capture = async name => {
         const file=name+'.png';const shot=await cdp('Page.captureScreenshot',{format:'png'});
@@ -113,6 +113,7 @@ export async function checkClockView({ evaluate, click, text, cdp, configure }) 
         for (const [width,height,screenWidth,screenHeight,touch] of [[1280,800,1280,800,false],[667,320,1024,768,true],[1024,768,1024,768,true]]) {
             await cdp('Emulation.setTouchEmulationEnabled',{enabled:touch});
             await cdp('Emulation.setDeviceMetricsOverride',{width,height,screenWidth,screenHeight,mobile:false,deviceScaleFactor:1});
+            await cdp('Page.captureScreenshot',{format:'png'});
             assert.equal(await evaluate(`document.querySelector('#clock-view-toggle').hidden`),true,'Desktop/tablet including split view cannot enter Clock-only');
         }
         await phone();await menu('#open-planner');
