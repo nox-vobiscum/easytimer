@@ -1,4 +1,4 @@
-import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=31';
+import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=34';
 
 const copy = {
     en: {
@@ -368,7 +368,16 @@ export function createPlanner(root, onClose, initialLanguage) {
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
     return {
         close,
-        open() { if (active) { focusHeading(); return; } active = true; load(); render(); focusHeading(); },
+        open({ newDraft = false } = {}) {
+            if (active) {
+                if (newDraft) { if (!canDiscard()) return; begin(); }
+                else focusHeading();
+                return;
+            }
+            active = true; load();
+            if (newDraft) begin();
+            else { render(); focusHeading(); }
+        },
         setLanguage(next) {
             if (language === next) return;
             const previousRepositionId = repositionId;

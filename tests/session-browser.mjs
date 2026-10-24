@@ -55,7 +55,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await evaluate(`document.querySelector('#session-picker').hidden`),false);
         await tick(90000); assert.equal(await evaluate('document.title'),'easyTimer','Picker has no continuing Quick clock');
         await evaluate(`localStorage.removeItem('easyTimerTemplates')`); await click('#reload-templates');
-        assert.match(await text('#session-feedback'),/No workshop templates/);
+        assert.match(await text('#session-feedback'),/No Rundowns saved yet/);
         assert.equal(await evaluate(`document.querySelector('#prepare-session').disabled`),true);
         await evaluate(`localStorage.setItem('easyTimerTemplates','{broken')`); await click('#reload-templates');
         assert.match(await text('#session-feedback'),/could not be loaded/);

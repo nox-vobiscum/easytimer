@@ -1,19 +1,20 @@
-import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=31';
-import { createPlanner } from './planner.js?v=31';
-import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=31';
-import { createTemplateStore } from './templates.mjs?v=31';
-import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=31';
+import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=34';
+import { createPlanner } from './planner.js?v=34';
+import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=34';
+import { createTemplateStore } from './templates.mjs?v=34';
+import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=34';
 
 const copy = {
     en: {
-        planner: 'Session Editor', mode: 'Mode', editorSubtitle: 'Create & manage sessions',
+        planner: 'Session Editor', mode: 'Mode', editorSubtitle: 'Create & manage rundowns',
         clockOnly: 'Show clock-only view', clockControls: 'Show timer controls',
-        quick: 'Quick Timer', session: 'Session Timer', chooseWorkshop: 'Choose a workshop', backQuick: 'Back to Quick Timer',
-        executionHint: 'Phases follow the template’s Manual or Automatic transition mode.', workshopTemplate: 'Workshop template',
+        quick: 'Quick Timer', session: 'Session Timer', chooseWorkshop: 'Load Rundown', backQuick: 'Back to Quick Timer',
+        workshopTemplate: 'Rundown', createRundown: 'Create new',
         manual: 'Manual', automatic: 'Automatic', endsAutomatically: 'Workshop ends automatically',
-        runNote: 'A new run uses a copy. Saved templates stay unchanged. Reloading loses the active run.',
-        prepare: 'Prepare workshop', reloadTemplates: 'Reload templates', chooseTemplate: 'Choose a template',
-        emptyTemplates: 'No workshop templates saved. Create one in Session Editor.', loadTemplatesError: 'Templates could not be loaded. Saved data has not been changed. Try reloading templates.',
+        runNote: 'Saved sequences stay unchanged.',
+        pageReloadNote: 'Reloading this page discards the current run.',
+        prepare: 'Load', reloadTemplates: 'Refresh list', chooseTemplate: 'Select …',
+        emptyTemplates: 'No Rundowns saved yet. Create a new Rundown below.', loadTemplatesError: 'Rundowns could not be loaded. Saved data has not been changed. Try reloading Rundowns.',
         next: 'Next phase', complete: 'Complete workshop',
         stopWorkshop: 'Stop workshop', stopOvertime: 'Stop overtime', workshopComplete: 'Workshop complete', overtimeStopped: 'Overtime stopped',
         OVERTIME_PAUSED: 'Overtime paused', phaseExpired: 'Phase time elapsed', phaseOvertime: 'Phase overtime', finalOvertime: 'Workshop overtime',
@@ -22,7 +23,7 @@ const copy = {
         stopWorkshopConfirm: 'Stop this workshop and reset all phases and overtime to phase 1?',
         countdown: 'Countdown', light: 'Light', dark: 'Dark', system: 'System', theme: 'Appearance', language: 'Language',
         de: 'German', en: 'English', duration: 'Duration',
-        start: 'Start', pause: 'Pause', resume: 'Resume', stop: 'Stop', credit: 'Created by',
+        start: 'Start', pause: 'Pause', resume: 'Resume', stop: 'Stop',
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: "Time’s up", newRun: 'Start again', overtime: 'Overtime',
         openMenu: 'Open preferences', closeMenu: 'Close preferences',
         preset: minutes => `Set ${minutes} minutes`,
@@ -32,14 +33,15 @@ const copy = {
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
     de: {
-        planner: 'Session-Editor', mode: 'Modus', editorSubtitle: 'Sessions erstellen & verwalten',
+        planner: 'Session-Editor', mode: 'Modus', editorSubtitle: 'Rundowns erstellen & verwalten',
         clockOnly: 'Nur die Uhr anzeigen', clockControls: 'Timer-Bedienung anzeigen',
-        quick: 'Quick-Timer', session: 'Session-Timer', chooseWorkshop: 'Workshop auswählen', backQuick: 'Zurück zum Quick-Timer',
-        executionHint: 'Phasen folgen dem manuellen oder automatischen Übergang der Vorlage.', workshopTemplate: 'Workshop-Vorlage',
+        quick: 'Quick-Timer', session: 'Session-Timer', chooseWorkshop: 'Rundown laden', backQuick: 'Zurück zum Quick-Timer',
+        workshopTemplate: 'Rundown', createRundown: 'Neu erstellen',
         manual: 'Manuell', automatic: 'Automatisch', endsAutomatically: 'Workshop endet automatisch',
-        runNote: 'Ein neuer Durchlauf verwendet eine Kopie. Gespeicherte Vorlagen bleiben unverändert. Beim Neuladen geht der aktive Durchlauf verloren.',
-        prepare: 'Workshop vorbereiten', reloadTemplates: 'Vorlagen neu laden', chooseTemplate: 'Vorlage auswählen',
-        emptyTemplates: 'Keine Workshop-Vorlagen gespeichert. Bitte im Session-Editor eine erstellen.', loadTemplatesError: 'Vorlagen konnten nicht geladen werden. Gespeicherte Daten bleiben unverändert. Bitte erneut laden.',
+        runNote: 'Gespeicherte Abläufe bleiben unverändert.',
+        pageReloadNote: 'Beim Neuladen dieser Seite geht der aktuelle Durchlauf verloren.',
+        prepare: 'Laden', reloadTemplates: 'Liste aktualisieren', chooseTemplate: 'Auswählen …',
+        emptyTemplates: 'Noch keine Rundowns gespeichert. Unten kannst du einen neuen Rundown erstellen.', loadTemplatesError: 'Rundowns konnten nicht geladen werden. Gespeicherte Daten bleiben unverändert. Bitte Rundowns neu laden.',
         next: 'Nächste Phase', complete: 'Workshop abschließen',
         stopWorkshop: 'Workshop stoppen', stopOvertime: 'Überzeit stoppen', workshopComplete: 'Workshop abgeschlossen', overtimeStopped: 'Überzeit gestoppt',
         OVERTIME_PAUSED: 'Überzeit pausiert', phaseExpired: 'Phasenzeit abgelaufen', phaseOvertime: 'Phasenüberzeit', finalOvertime: 'Workshop-Überzeit',
@@ -48,7 +50,7 @@ const copy = {
         stopWorkshopConfirm: 'Workshop stoppen und alle Phasen und Überzeiten auf Phase 1 zurücksetzen?',
         countdown: 'Countdown', light: 'Hell', dark: 'Dunkel', system: 'System', theme: 'Darstellung', language: 'Sprache',
         de: 'Deutsch', en: 'Englisch', duration: 'Dauer',
-        start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', stop: 'Stoppen', credit: 'Erstellt von',
+        start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', stop: 'Stoppen',
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Zeit abgelaufen', newRun: 'Erneut starten', overtime: 'Überzeit',
         openMenu: 'Einstellungen öffnen', closeMenu: 'Einstellungen schließen',
         preset: minutes => `${minutes} Minuten einstellen`,
@@ -418,7 +420,7 @@ $('stop-overtime').addEventListener('click', () => {
     if (mode !== 'session' || !run) return;
     dispatch({ type: 'STOP_OVERTIME' }); $('stop').focus({ preventScroll: true });
 });
-$('open-planner').addEventListener('click', async () => {
+async function openEditor(newDraft = false) {
     setMenuOpen(false);
     // Navigation invalidates fullscreen requests; returning never restores them implicitly.
     plannerOpen = true;
@@ -428,7 +430,11 @@ $('open-planner').addEventListener('click', async () => {
     if (exiting) await exiting;
     if (!plannerOpen) return;
     updatePresentation();
-    planner.open();
+    planner.open({ newDraft });
+}
+$('open-planner').addEventListener('click', () => openEditor());
+$('create-rundown').addEventListener('click', () => {
+    if (mode === 'session' && pickerOpen && !plannerOpen) openEditor(true);
 });
 document.addEventListener('click', event => {
     // Consume the restoring click before hidden controls can become interactive again.

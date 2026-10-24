@@ -20,6 +20,12 @@ Capture deferred product ideas and small quality-of-life improvements without lo
 
 ## Ideas at a glance
 
+**Accepted Rundown entry release:** The owner approved **Rundown** in DE/EN for the Session selection screen, with Load/Reload/Create actions and menu subtitle `Create & manage rundowns` / `Rundowns erstellen & verwalten`. A Rundown is a use-case-neutral reusable phase sequence. Create routes into the existing Editor's unsaved draft; no storage/schema/runtime changes are included. Later terminology consistency remains OPEN for Editor Workshop name/library/validation copy and active Session stop/completion/remaining-time wording. Do not globally rename models or persistence keys. Accepted PWA v34; publication with the new footer is approved, subject to deployment verification.
+
+Approved follow-up reduces visible repetition: heading retained, native field label visually hidden, short selection placeholder, `Load` / `Laden`, `Refresh list` / `Liste aktualisieren`, and `Create new` / `Neu erstellen`. This distinguishes refreshing the saved list from loading the selected Run. Further visual polishing remains open for separate review.
+
+The Editor also retains an older planning-only hint claiming Session execution is unavailable. This pre-existing copy is not changed by the bounded selection-screen increment; include it in a separate Editor copy review.
+
 **Accepted menu release (publication approved):** The preparation tool is now called **Session Editor** (DE: **Session-Editor**), with subtitle “Create & manage sessions” / “Sessions erstellen & verwalten”. Internal Planner modules, IDs, storage and workshop-template terminology remain unchanged. Mode tiles remain above the separate Editor action; language/theme share a compact row. The owner selected **Variant B - Stopwatch + Echo** from the supplied reference: a dominant stopwatch with two subdued rear stopwatch echoes. This supersedes the earlier review-only A/B/C proposals. The selected inline SVG uses theme-aware color/opacity; there is no icon selection UI. The owner has authorized documentation follow-up and production publication of this bounded menu release (PWA v31). Verify deployment outcome separately.
 
 The ST-001 density/reordering, initial-phase default and final repositioning-popover polish shipped in [commit 516d939](https://github.com/nox-vobiscum/easytimer/commit/516d939bdd5510d8c2f5bb68b205485c980ee9b4) on 2026-10-23 (PWA shell v22). They are delivered functionality, not pending backlog items. Native iOS Safari/PWA and screen-reader acceptance checks remain open as documented in the [README](../README.md#st-001-session-planner).
@@ -41,6 +47,11 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | PRES-001 | Moderator View + Audience View on one device | Someday (low) | One authoritative timer; two synchronized windows |
 | REMOTE-001 | Cross-device timer control/display | Someday / Spike | Separate architecture and security review |
 | CUSTOM-001 | Optional presentation customization | Someday | Stable core UI and audience-display requirements |
+| INFO-001 | Menu links to standalone information pages | Candidate | Owner-approved copy/content; separate page URLs |
+
+## INFO-001 — Standalone information pages from the menu
+
+Add a compact row of text links at the very bottom of the universal menu: **About · FAQ · Imprint · Privacy policy**. Prefer four distinct links; consolidation to three needs a later content decision. Each destination must be a normal page with its own stable, directly addressable URL. Use standard page navigation, with browser history, direct links and bookmarking; no overlays, dialogs or popups. Preserve the existing mode/tool/settings hierarchy, keyboard focus and readable responsive wrapping. Support DE/EN consistently with the application. Page contents, final localized labels and exact routes require separate approval; this entry does not implement or authorize the pages. Keep the static, dependency-free architecture and existing timer/storage behavior.
 
 ## Session Planner improvements
 
