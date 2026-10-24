@@ -1,11 +1,10 @@
-import { createTimer, transition } from './timer.mjs?v=27';
-import { validateTemplate } from './templates.mjs?v=27';
+import { createTimer, transition } from './timer.mjs?v=28';
+import { validateTemplate } from './templates.mjs?v=28';
 
 export function prepareSession(template, runId = crypto.randomUUID()) {
     const snapshot = validateTemplate(template);
-    if (snapshot.transitionMode !== 'manual') throw new RangeError('Automatic execution is not supported');
     return {
-        run: { runId, sourceTemplateId: snapshot.id, name: snapshot.name, phases: snapshot.phases,
+        run: { runId, sourceTemplateId: snapshot.id, name: snapshot.name, phases: snapshot.phases, transitionMode: snapshot.transitionMode,
             currentIndex: 0, stage: 'PHASE', phaseOvertime: {} },
         clock: createTimer(snapshot.phases[0].durationSeconds * 1000, 'session'),
     };
@@ -24,6 +23,25 @@ export function hasSessionProgress(run, clock) {
 export function transitionSession(run, clock, action, now) {
     if (clock.policy !== 'session') throw new TypeError('Invalid session clock');
     let current = transition(clock, { type: 'TICK' }, now);
+    if (run.transitionMode === 'automatic' && run.stage === 'PHASE' && current.status === 'FINISHED') {
+        let index = run.currentIndex;
+        let stage = run.stage;
+        const phaseOvertime = { ...run.phaseOvertime };
+        while (current.status === 'FINISHED' && stage === 'PHASE') {
+            const boundary = current.deadlineMs;
+            // Callback latency is not phase overtime. Copy the records only once per catch-up.
+            Object.defineProperty(phaseOvertime, run.phases[index].id, { value: 0, enumerable: true, writable: true, configurable: true });
+            if (index === run.phases.length - 1) {
+                stage = 'COMPLETED';
+                current = transition(current, { type: 'BEGIN_OVERTIME' }, boundary);
+            } else {
+                index += 1;
+                current = transition(createTimer(run.phases[index].durationSeconds * 1000, 'session'), { type: 'START' }, boundary);
+            }
+            current = transition(current, { type: 'TICK' }, now);
+        }
+        run = { ...run, currentIndex: index, stage, phaseOvertime };
+    }
     const last = run.currentIndex === run.phases.length - 1;
     const settle = () => ({ ...run.phaseOvertime, [run.phases[run.currentIndex].id]: current.overtimeMs });
     let type = action.type;
@@ -38,13 +56,13 @@ export function transitionSession(run, clock, action, now) {
         case 'PAUSE': current = transition(current, { type: current.status === 'FINISHED' ? 'PAUSE_OVERTIME' : 'PAUSE' }, now); break;
         case 'RESUME': current = transition(current, { type: current.status === 'OVERTIME_PAUSED' ? 'RESUME_OVERTIME' : 'RESUME' }, now); break;
         case 'NEXT':
-            if (run.stage === 'PHASE' && !last) {
+            if (run.transitionMode === 'manual' && run.stage === 'PHASE' && !last) {
                 run = { ...run, currentIndex: run.currentIndex + 1, phaseOvertime: settle() };
                 current = createTimer(run.phases[run.currentIndex].durationSeconds * 1000, 'session');
             }
             break;
         case 'COMPLETE':
-            if (run.stage === 'PHASE' && last) {
+            if (run.transitionMode === 'manual' && run.stage === 'PHASE' && last) {
                 run = { ...run, stage: 'COMPLETED', phaseOvertime: settle() };
                 current = transition(current, { type: 'BEGIN_OVERTIME' }, now);
             }

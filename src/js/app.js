@@ -1,19 +1,20 @@
-import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=27';
-import { createPlanner } from './planner.js?v=27';
-import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=27';
-import { createTemplateStore } from './templates.mjs?v=27';
-import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=27';
+import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=28';
+import { createPlanner } from './planner.js?v=28';
+import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=28';
+import { createTemplateStore } from './templates.mjs?v=28';
+import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=28';
 
 const copy = {
     en: {
         planner: 'Session Planner',
         clockOnly: 'Show clock-only view', clockControls: 'Show timer controls',
         quick: 'Quick Timer', session: 'Session Timer', chooseWorkshop: 'Choose a workshop', backQuick: 'Back to Quick Timer',
-        manualOnly: 'Manual execution only. Automatic transitions follow in a later release.', workshopTemplate: 'Workshop template',
+        executionHint: 'Phases follow the template’s Manual or Automatic transition mode.', workshopTemplate: 'Workshop template',
+        manual: 'Manual', automatic: 'Automatic', endsAutomatically: 'Workshop ends automatically',
         runNote: 'A new run uses a copy. Saved templates stay unchanged. Reloading loses the active run.',
         prepare: 'Prepare workshop', reloadTemplates: 'Reload templates', chooseTemplate: 'Choose a template',
         emptyTemplates: 'No workshop templates saved. Create one in Session Planner.', loadTemplatesError: 'Templates could not be loaded. Saved data has not been changed. Try reloading templates.',
-        automaticLater: 'Automatic execution is not available yet', next: 'Next phase', complete: 'Complete workshop',
+        next: 'Next phase', complete: 'Complete workshop',
         stopWorkshop: 'Stop workshop', stopOvertime: 'Stop overtime', workshopComplete: 'Workshop complete', overtimeStopped: 'Overtime stopped',
         OVERTIME_PAUSED: 'Overtime paused', phaseExpired: 'Phase time elapsed', phaseOvertime: 'Phase overtime', finalOvertime: 'Workshop overtime',
         workshopRemaining: 'Workshop remaining', phaseCount: (n, total) => `Phase ${n} of ${total}`, upNext: 'Up next',
@@ -34,11 +35,12 @@ const copy = {
         planner: 'Session-Planer',
         clockOnly: 'Nur die Uhr anzeigen', clockControls: 'Timer-Bedienung anzeigen',
         quick: 'Quick-Timer', session: 'Session-Timer', chooseWorkshop: 'Workshop auswählen', backQuick: 'Zurück zum Quick-Timer',
-        manualOnly: 'Nur manuelle Ausführung. Automatische Übergänge folgen in einer späteren Version.', workshopTemplate: 'Workshop-Vorlage',
+        executionHint: 'Phasen folgen dem manuellen oder automatischen Übergang der Vorlage.', workshopTemplate: 'Workshop-Vorlage',
+        manual: 'Manuell', automatic: 'Automatisch', endsAutomatically: 'Workshop endet automatisch',
         runNote: 'Ein neuer Durchlauf verwendet eine Kopie. Gespeicherte Vorlagen bleiben unverändert. Beim Neuladen geht der aktive Durchlauf verloren.',
         prepare: 'Workshop vorbereiten', reloadTemplates: 'Vorlagen neu laden', chooseTemplate: 'Vorlage auswählen',
         emptyTemplates: 'Keine Workshop-Vorlagen gespeichert. Bitte im Session-Planer eine erstellen.', loadTemplatesError: 'Vorlagen konnten nicht geladen werden. Gespeicherte Daten bleiben unverändert. Bitte erneut laden.',
-        automaticLater: 'Automatische Ausführung ist noch nicht verfügbar', next: 'Nächste Phase', complete: 'Workshop abschließen',
+        next: 'Nächste Phase', complete: 'Workshop abschließen',
         stopWorkshop: 'Workshop stoppen', stopOvertime: 'Überzeit stoppen', workshopComplete: 'Workshop abgeschlossen', overtimeStopped: 'Überzeit gestoppt',
         OVERTIME_PAUSED: 'Überzeit pausiert', phaseExpired: 'Phasenzeit abgelaufen', phaseOvertime: 'Phasenüberzeit', finalOvertime: 'Workshop-Überzeit',
         workshopRemaining: 'Workshop-Restzeit', phaseCount: (n, total) => `Phase ${n} von ${total}`, upNext: 'Als Nächstes',
@@ -197,12 +199,11 @@ function renderPicker() {
     for (const template of pickerTemplates) {
         const option = document.createElement('option');
         option.value = template.id;
-        option.disabled = template.transitionMode !== 'manual';
-        option.textContent = `${template.name}${option.disabled ? ` · ${t.automaticLater}` : ''}`;
+        option.textContent = `${template.name} · ${t[template.transitionMode]}`;
         select.append(option);
     }
     select.value = selected;
-    $('prepare-session').disabled = !pickerTemplates.some(item => item.id === select.value && item.transitionMode === 'manual');
+    $('prepare-session').disabled = !pickerTemplates.some(item => item.id === select.value);
     $('session-feedback').textContent = t[pickerMessage] || '';
 }
 function loadTemplates() {
@@ -322,8 +323,9 @@ function render() {
     $('stop').querySelector('.action-label').textContent = stopLabel;
     $('stop').setAttribute('aria-label', stopLabel);
     $('stop').title = stopLabel;
-    $('next').hidden = !session || run.stage === 'COMPLETED';
-    $('next').disabled = !session || run.stage === 'COMPLETED';
+    const automatic = session && run.transitionMode === 'automatic';
+    $('next').hidden = !session || automatic || run.stage === 'COMPLETED';
+    $('next').disabled = !session || automatic || run.stage === 'COMPLETED';
     const upcoming = session && run.stage === 'PHASE' ? run.phases[run.currentIndex + 1] : null;
     const nextLabel = upcoming ? `${t.upNext}: ${upcoming.title}` : t.complete;
     $('next-label').textContent = upcoming ? t.upNext : t.complete;
@@ -331,6 +333,10 @@ function render() {
     $('next-phase').hidden = !upcoming;
     $('next').setAttribute('aria-label', nextLabel); $('next').title = nextLabel;
     $('next-icon').setAttribute('d', upcoming ? 'M4 12h16m-6-6 6 6-6 6' : 'm4 12 5 5L20 6');
+    $('automatic-preview').hidden = !automatic || run.stage === 'COMPLETED';
+    $('automatic-next-label').textContent = upcoming ? t.upNext : t.endsAutomatically;
+    $('automatic-next-phase').textContent = upcoming ? upcoming.title : '';
+    $('automatic-next-phase').hidden = !upcoming;
     $('stop-overtime').hidden = !session || run.stage !== 'COMPLETED' || timer.status === 'OVERTIME_STOPPED';
     $('stop-overtime').setAttribute('aria-label', t.stopOvertime); $('stop-overtime').title = t.stopOvertime;
     document.querySelectorAll('[data-adjustment]').forEach(button => button.setAttribute('aria-label', t.addTime(Number(button.dataset.adjustment) / 1000)));
@@ -352,6 +358,7 @@ $('primary').addEventListener('click', () => {
 });
 $('stop').addEventListener('click', () => {
     if (mode === 'session') {
+        dispatch({ type: 'TICK' });
         if (!run || !window.confirm(copy[language].stopWorkshopConfirm)) { dispatch({ type: 'TICK' }); return; }
         dispatch({ type: 'STOP_WORKSHOP' }); $('primary').focus({ preventScroll: true }); return;
     }
@@ -389,12 +396,12 @@ $('open-quick').addEventListener('click', () => switchMode('quick'));
 $('picker-back').addEventListener('click', () => switchMode('quick'));
 $('reload-templates').addEventListener('click', () => { loadTemplates(); render(); });
 $('session-template').addEventListener('change', () => {
-    $('prepare-session').disabled = !pickerTemplates.some(item => item.id === $('session-template').value && item.transitionMode === 'manual');
+    $('prepare-session').disabled = !pickerTemplates.some(item => item.id === $('session-template').value);
 });
 $('prepare-session').addEventListener('click', () => {
     if (mode !== 'session' || !pickerOpen || plannerOpen) return;
     const template = pickerTemplates.find(item => item.id === $('session-template').value);
-    if (!template || template.transitionMode !== 'manual') return;
+    if (!template) return;
     try {
         const prepared = prepareSession(template);
         run = prepared.run; timer = prepared.clock; pickerOpen = false;
@@ -402,7 +409,7 @@ $('prepare-session').addEventListener('click', () => {
     } catch { pickerMessage = 'loadTemplatesError'; render(); }
 });
 $('next').addEventListener('click', () => {
-    if (mode !== 'session' || !run || run.stage !== 'PHASE') return;
+    if (mode !== 'session' || !run || run.stage !== 'PHASE' || run.transitionMode !== 'manual') return;
     dispatch({ type: run.currentIndex === run.phases.length - 1 ? 'COMPLETE' : 'NEXT' });
     $('primary').focus({ preventScroll: true });
 });

@@ -23,7 +23,7 @@ test('preparation validates and snapshots templates with stable phase IDs and fr
     assert.equal(saved.phases[0].title, before.phases[0].title);
     assert.equal('clock' in first.run, false, 'Metadata does not own another clock');
     for (const value of [null, {}, {...template(),phases:[]}]) assert.throws(() => prepareSession(value));
-    assert.throws(() => prepareSession({...template(),transitionMode:'automatic'}), /Automatic/);
+    assert.equal(prepareSession({...template(),transitionMode:'automatic'}).run.transitionMode,'automatic');
 });
 
 test('manual expiry and arbitrarily late callbacks never advance phases or consume future time', () => {
@@ -152,4 +152,112 @@ test('unsupported actions cannot modify session phases or bypass phase progressi
     assert.throws(()=>act(initial,'ADJUST',1000),/Unknown session action/);
     assert.throws(()=>act(initial,'TICK',NaN),/Invalid clock/);
     assert.throws(()=>transitionSession(initial.run,createTimer(),{type:'TICK'},0),/Invalid session clock/);
+});
+
+const automatic = () => ({...template(),transitionMode:'automatic',phases:[
+    {id:'opening',title:'Opening',durationSeconds:60},
+    {id:'discussion',title:'Discussion',durationSeconds:120},
+    {id:'closing',title:'Closing',durationSeconds:60},
+]});
+
+test('automatic preparation snapshots mode/data and stays READY until explicit Start', () => {
+    const saved=automatic();const initial=prepareSession(saved,'automatic-test');
+    saved.transitionMode='manual';saved.phases[1].durationSeconds=600;
+    assert.equal(initial.run.transitionMode,'automatic');assert.equal(initial.run.phases[1].durationSeconds,120);
+    assert.equal(initial.clock.status,'READY');assert.deepEqual(act(initial,'TICK',99999999),initial);
+    assert.equal('clock' in initial.run,false);assert.equal('deadlineMs' in initial.run,false);
+});
+
+test('automatic exact boundaries use scheduled deadlines and never expose phase overtime', () => {
+    const started=act(prepareSession(automatic()),'START',1000);
+    for(const [now,index,remaining,deadline,stage,overdue] of [
+        [60999,0,1,61000,'PHASE',0], [61000,1,120000,181000,'PHASE',0],
+        [61001,1,119999,181000,'PHASE',0], [181000,2,60000,241000,'PHASE',0],
+        [241000,2,0,241000,'COMPLETED',0], [251000,2,0,241000,'COMPLETED',10000],
+    ]) {
+        const result=act(started,'TICK',now);
+        assert.equal(result.run.currentIndex,index);assert.equal(result.run.stage,stage);
+        assert.equal(result.clock.remainingMs,remaining);assert.equal(result.clock.deadlineMs,deadline);
+        assert.equal(result.clock.overtimeMs,overdue);
+        assert.equal(result.clock.status,stage==='PHASE'?'RUNNING':'FINISHED');
+        assert.ok(Object.values(result.run.phaseOvertime).every(value=>value===0));
+    }
+});
+
+test('one delayed catch-up equals timely ticks including completion, with immutable inputs and no drift', () => {
+    const started=act(prepareSession(automatic(),'same-run'),'START',0);
+    const before=structuredClone(started);
+    for(const target of [60000,150000,200000,240000,250000,1000000000]) {
+        let timely=started;
+        for(let now=333;now<Math.min(target,250000);now+=333)timely=act(timely,'TICK',now);
+        timely=act(timely,'TICK',target);
+        const delayed=act(started,'TICK',target);
+        assert.deepEqual(delayed,timely);assert.deepEqual(act(delayed,'TICK',target),delayed);
+    }
+    assert.deepEqual(started,before);
+    assert.equal(sessionRemaining(act(started,'TICK',150000).run,act(started,'TICK',150000).clock),90000);
+});
+
+test('PAUSE and PRIMARY reconcile crossed phases and workshop end before interpreting the action', () => {
+    const started=act(prepareSession(automatic()),'START',0);
+    for(const type of ['PAUSE','PRIMARY'])for(const [now,index,remaining,overdue,stage] of [
+        [59999,0,1,0,'PHASE'],[60000,1,120000,0,'PHASE'],[200000,2,40000,0,'PHASE'],
+        [240000,2,0,0,'COMPLETED'],[250000,2,0,10000,'COMPLETED'],
+    ]) {
+        const paused=act(started,type,now);
+        assert.equal(paused.run.currentIndex,index);assert.equal(paused.run.stage,stage);
+        assert.equal(paused.clock.remainingMs,remaining);assert.equal(paused.clock.overtimeMs,overdue);
+        assert.equal(paused.clock.status,stage==='PHASE'?'PAUSED':'OVERTIME_PAUSED');
+        assert.equal(paused.clock.deadlineMs,null);assert.deepEqual(act(paused,'TICK',now+999999999),paused);
+    }
+});
+
+test('automatic resume excludes pause duration and chains all future phase deadlines from the shifted boundary', () => {
+    let state=act(prepareSession(automatic()),'START',0);
+    state=act(state,'PAUSE',30000);state=act(state,'RESUME',1000000);
+    assert.equal(state.clock.deadlineMs,1030000);
+    state=act(state,'TICK',1030000);
+    assert.equal(state.run.currentIndex,1);assert.equal(state.clock.deadlineMs,1150000);
+    state=act(state,'TICK',1215000);
+    assert.equal(state.run.stage,'COMPLETED');assert.equal(state.clock.deadlineMs,1210000);
+    assert.equal(state.clock.overtimeMs,5000);
+});
+
+test('automatic final overtime supports pause/resume and terminal stop directly after missed completion', () => {
+    const started=act(prepareSession(automatic()),'START',0);
+    let state=act(started,'PAUSE',250000);
+    state=act(state,'RESUME',1000000);assert.equal(act(state,'TICK',1002000).clock.overtimeMs,12000);
+    for(const source of [started,state,act(state,'PAUSE',1002000)]) {
+        const stopped=act(source,'STOP_OVERTIME',1005000);
+        assert.equal(stopped.run.stage,'COMPLETED');assert.equal(stopped.clock.status,'OVERTIME_STOPPED');
+        for(const type of ['TICK','PRIMARY','START','RESUME','PAUSE','NEXT','COMPLETE','STOP_OVERTIME'])assert.deepEqual(act(stopped,type,999999999),stopped);
+    }
+});
+
+test('automatic NEXT/COMPLETE are no-ops after catch-up; Stop resets the automatic snapshot to READY', () => {
+    const initial=prepareSession(automatic());const started=act(initial,'START',0);
+    for(const source of [initial,started])for(const now of [0,5000,60000,200000,250000]) {
+        for(const type of ['NEXT','COMPLETE'])assert.deepEqual(act(source,type,now),act(source,'TICK',now));
+        const reset=act(source,'STOP_WORKSHOP',now);
+        assert.equal(reset.run.transitionMode,'automatic');assert.equal(reset.run.currentIndex,0);
+        assert.equal(reset.run.stage,'PHASE');assert.deepEqual(reset.run.phaseOvertime,{});
+        assert.equal(reset.clock.status,'READY');assert.equal(reset.clock.remainingMs,60000);
+        assert.deepEqual(reset.run.phases,initial.run.phases);
+    }
+});
+
+test('automatic catch-up handles the maximum valid workshop phase count without repeated record copying', () => {
+    const phases=Array.from({length:60000},(_,i)=>({id:`phase-${i}`,title:'Phase',durationSeconds:60}));
+    const state=act(act(prepareSession({...automatic(),phases}),'START',0),'TICK',3600000001);
+    assert.equal(state.run.stage,'COMPLETED');assert.equal(state.run.currentIndex,59999);
+    assert.equal(state.clock.deadlineMs,3600000000);assert.equal(state.clock.overtimeMs,1);
+    assert.equal(Object.keys(state.run.phaseOvertime).length,60000);
+});
+
+test('automatic records preserve arbitrary valid stable phase IDs safely', () => {
+    const phases=['__proto__','constructor','last'].map(id=>({id,title:'Phase',durationSeconds:60}));
+    const initial=act(prepareSession({...automatic(),phases}),'START',0);
+    const result=act(initial,'TICK',180000);
+    for(const id of phases.map(p=>p.id)) {assert.equal(Object.hasOwn(result.run.phaseOvertime,id),true);assert.equal(result.run.phaseOvertime[id],0);}
+    assert.deepEqual(initial.run.phaseOvertime,{});
 });

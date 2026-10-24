@@ -21,7 +21,7 @@ Each run prints the output directory and gallery URL. Open its `index.html` to c
 
 Options:
 
-- `--scenario NAME`: repeat or comma-separate names; `all` selects all 20 scenarios.
+- `--scenario NAME`: repeat or comma-separate names; `all` selects all 31 scenarios (including 11 automatic ST-002B cases).
 - `--theme light|dark|both`: defaults to both.
 - `--advance 10s|2m|1.5h|1250ms`: additional virtual time after reaching the selected state. Paused/stopped clocks remain frozen. Default: zero.
 - `--viewport 320x568`: screenshot viewport; default `1280x800`. This is viewport sizing, not native iOS or smartphone hardware emulation.
@@ -52,7 +52,9 @@ node tests/browser-check.mjs --scenario quick-paused-endgame,session-paused-endg
 | `session-workshop-overtime-paused` | Workshop overtime paused at +00:10 |
 | `session-workshop-overtime-stopped` | Workshop overtime stopped at +00:10 |
 
-Countdown cases use a five-minute current timebox. Session cases use an isolated three-phase fixture (5, 15 and 2 minutes). Completion scenarios invoke the existing manual Next action through all phases; virtual time does not introduce automatic phase transitions. Additional time is advanced only after the selected starting state is established.
+Automatic scenarios: `auto-ready`, `auto-before-transition`, `auto-transition`, `auto-delayed-phase`, `auto-paused`, `auto-multiple-transitions`, `auto-last-endgame`, `auto-completion`, `auto-workshop-overtime`, `auto-workshop-overtime-paused`, `auto-workshop-overtime-stopped`. They use the same 5/15/2-minute fixture in Automatic mode: boundaries at 5, 20 and 22 minutes. An optional `--advance` may cross further scheduled phases or completion; paused/stopped/READY cases remain frozen.
+
+Countdown cases use a five-minute current timebox. Session cases use an isolated three-phase fixture (5, 15 and 2 minutes). Completion scenarios invoke the existing manual Next action through all phases; those manual cases never transition automatically. Automatic ST-002B cases follow their scheduled boundaries instead. Additional time is advanced only after the selected starting state is established.
 
 ## Implementation and safety
 

@@ -30,6 +30,17 @@ export const scenarios = {
     'session-workshop-overtime-2m': {session:true,complete:true,elapsed:120000},
     'session-workshop-overtime-paused': {session:true,complete:true,elapsed:10000,pause:true},
     'session-workshop-overtime-stopped': {session:true,complete:true,elapsed:10000,stop:true},
+    'auto-ready': {session:true,automatic:true,ready:true,elapsed:0},
+    'auto-before-transition': {session:true,automatic:true,elapsed:299999},
+    'auto-transition': {session:true,automatic:true,elapsed:300000},
+    'auto-delayed-phase': {session:true,automatic:true,elapsed:350000},
+    'auto-paused': {session:true,automatic:true,elapsed:350000,pause:true},
+    'auto-multiple-transitions': {session:true,automatic:true,elapsed:1230000},
+    'auto-last-endgame': {session:true,automatic:true,elapsed:1310000},
+    'auto-completion': {session:true,automatic:true,elapsed:1320000},
+    'auto-workshop-overtime': {session:true,automatic:true,elapsed:1330000},
+    'auto-workshop-overtime-paused': {session:true,automatic:true,elapsed:1330000,pause:true},
+    'auto-workshop-overtime-stopped': {session:true,automatic:true,elapsed:1330000,stop:true},
 };
 
 export function parseTimeTravelOptions(args) {
@@ -89,12 +100,22 @@ export async function runTimeTravel({evaluate,click,text,cdp,configure},options)
         return evaluate(`(()=>{const main=document.querySelector('#time');return {mode:document.body.dataset.mode,visualState:main.dataset.visualState,time:main.textContent,overtime:main.textContent,overtimeShown:main.dataset.visualState==='EXPIRED',status:document.querySelector('#status').textContent,phase:document.querySelector('#phase-number').textContent,phaseTitle:document.querySelector('#current-phase').textContent,budget:document.querySelector('#time-budget').textContent,mainColor:getComputedStyle(main).color,overtimeColor:getComputedStyle(main).color,virtualNow:Date.now()};})()`);
     }
     function verify(actual,scenario,extra,theme) {
-        const elapsed=scenario.elapsed+(scenario.pause||scenario.stop?0:extra);
-        const total=300000+(scenario.extension?300000:0);
-        const remaining=scenario.complete?0:Math.max(0,total-elapsed);
-        const overdue=scenario.complete?elapsed:Math.max(0,elapsed-total);
+        const elapsed=scenario.elapsed+(scenario.pause||scenario.stop||scenario.ready?0:extra);
+        let total=300000+(scenario.extension?300000:0);
+        let remaining=scenario.complete?0:Math.max(0,total-elapsed);
+        let overdue=scenario.complete?elapsed:Math.max(0,elapsed-total);
+        if(scenario.automatic) {
+            const durations=[300000,900000,120000];
+            let index=0,start=0;
+            while(index<durations.length-1&&elapsed>=start+durations[index])start+=durations[index++];
+            total=durations[index];remaining=Math.max(0,start+total-elapsed);overdue=Math.max(0,elapsed-1320000);
+            if(elapsed<1320000) {
+                assert.equal(actual.phase,options.language==='de'?`Phase ${index+1} von 3`:`Phase ${index+1} of 3`);
+                assert.ok(actual.budget.includes(formatTime(remaining+durations.slice(index+1).reduce((a,b)=>a+b,0))));
+            }
+        }
         const expired=scenario.complete||remaining===0;
-        const status=expired?'FINISHED':scenario.pause?'PAUSED':'RUNNING';
+        const status=scenario.ready?'READY':expired?'FINISHED':scenario.pause?'PAUSED':'RUNNING';
         assert.equal(actual.mode,scenario.session?'session':'quick');
         assert.equal(actual.time,expired?formatOvertime(overdue):formatTime(remaining));
         assert.equal(actual.overtimeShown,expired);
@@ -121,7 +142,7 @@ export async function runTimeTravel({evaluate,click,text,cdp,configure},options)
             await click(`[data-language="${options.language}"]`);await click(`[data-theme="${theme}"]`);
             const scenario=scenarios[name];
             if(scenario.session) {
-                const fixture={schemaVersion:1,templates:[{id:'dev001-workshop',name:'Test workshop',transitionMode:'manual',phases:[
+                const fixture={schemaVersion:1,templates:[{id:'dev001-workshop',name:'Test workshop',transitionMode:scenario.automatic?'automatic':'manual',phases:[
                     {id:'dev001-opening',title:'Opening',durationSeconds:300},{id:'dev001-discussion',title:'Discussion',durationSeconds:900},{id:'dev001-wrap',title:'Wrap-up',durationSeconds:120},
                 ]}]};
                 // Only this disposable browser profile/origin sees the fixture.
@@ -130,7 +151,7 @@ export async function runTimeTravel({evaluate,click,text,cdp,configure},options)
                 await evaluate(`(()=>{const select=document.querySelector('#session-template');select.value='dev001-workshop';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
                 await click('#prepare-session');
             } else await configure(0,5,0);
-            await click('#primary');
+            if(!scenario.ready)await click('#primary');
             if(scenario.complete) {await click('#next');await click('#next');await click('#next');}
             await clock.advance(scenario.elapsed);
             if(scenario.extension)await click('[data-adjustment="300000"]');

@@ -1,4 +1,4 @@
-import { formatTime, formatOvertime } from './timer.mjs?v=27';
+import { formatTime, formatOvertime } from './timer.mjs?v=28';
 
 export function formatTimerReadout(clock) {
     return ['FINISHED', 'OVERTIME_PAUSED', 'OVERTIME_STOPPED'].includes(clock.status)

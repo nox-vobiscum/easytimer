@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/branding/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="assets/branding/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="css/styles.css?v=27">
+  <link rel="stylesheet" href="css/styles.css?v=28">
 </head>
 <body data-duration-entry="presets-adjustments">
   <header>
@@ -127,7 +127,7 @@
         <h1 id="session-picker-heading" tabindex="-1" data-copy="chooseWorkshop">Choose a workshop</h1>
         <button id="picker-back" type="button" data-copy="backQuick">Back to Quick Timer</button>
       </div>
-      <p data-copy="manualOnly">Manual execution only. Automatic transitions follow in a later release.</p>
+      <p data-copy="executionHint">Phases follow the template’s Manual or Automatic transition mode.</p>
       <p id="session-feedback" role="status"></p>
       <label for="session-template" data-copy="workshopTemplate">Workshop template</label>
       <select id="session-template" aria-describedby="session-picker-note"></select>
@@ -146,11 +146,15 @@
       <span class="next-phase-copy"><span id="next-label">Up next</span><span id="next-phase"></span></span>
       <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path id="next-icon" d="M4 12h16m-6-6 6 6-6 6"/></svg>
     </button>
+    <div id="automatic-preview" class="automatic-preview" hidden>
+      <span id="automatic-next-label"></span>
+      <span id="automatic-next-phase"></span>
+    </div>
     </div>
     <div id="progress" class="progress-strip" aria-hidden="true"><span class="progress-marker"></span></div>
   </div>
   <footer><span data-copy="credit">Created by</span> <a href="https://rolandseper.at">Roland B. Seper</a> · © 2026</footer>
   <noscript>This timer requires JavaScript. / Dieser Timer benötigt JavaScript.</noscript>
-  <script type="module" src="js/app.js?v=27"></script>
+  <script type="module" src="js/app.js?v=28"></script>
 </body>
 </html>

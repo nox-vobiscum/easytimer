@@ -30,7 +30,7 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | PLAN-002 | Friendlier planned-total formatting | Someday | Presentation-only refinement |
 | DATA-001 | Export/import workshop templates as JSON | Candidate | Existing template schema and validation |
 | SYNC-001 | Optional Google Drive template sync | Later / Spike | DATA-001; Google identity, OAuth, mobile PWA feasibility |
-| ST-002 | Executable Session Timer | A deployed | Release 9d8a898, v25; B automatic execution remains deferred |
+| ST-002 | Executable Session Timer | A deployed; B implemented locally | Automatic scheduled-boundary catch-up approved; unreleased v28; see ST-002B record |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
 | ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
 | QT-002 | More flexible Quick Timer duration controls | Later | Preserve current one-timer simplicity |
@@ -84,7 +84,7 @@ The following packages are **already covered in more detail** by the ET-001 deci
 
 Implement a **Session Run** separate from reusable **Workshop Templates**. Use ordered named phases; manual/automatic phase transitions; large current countdown; subtle next-phase preview; calculated workshop time remaining; final completion and overtime. Define the relationship to the existing Quick Timer and mode switching deliberately. Preserve the single-clock/single-authoritative-state principle.
 
-**Status:** ST-002A manual execution, UX-008, DEV-001 and the Session hierarchy shipped in `9d8a898` (2026-10-24, PWA v25). ST-002B automatic execution/catch-up, runtime editing, detailed statistics and recovery remain separately scoped future work; they are not authorized.
+**Status:** ST-002A is deployed; the current production baseline is `7f6f9c0` with UX-009/UX-010 and centering (v27). [ST-002B](ST-002B_AUTOMATIC_SESSION_TIMER.md) is accepted for local release preparation: automatic templates, deadline-based multi-phase catch-up and automatic final overtime (v28). Local commit, integration and annotated `release/st-002b` are authorized; push/deployment require separate approval. Live editing, statistics, reload recovery and active-run transition-mode switching remain future scope.
 
 ### ST-003 — Editing and statistics during a session
 

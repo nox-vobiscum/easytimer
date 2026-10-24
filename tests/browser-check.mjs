@@ -9,6 +9,7 @@ import { checkPlanner } from './planner-browser.mjs';
 import { checkSession } from './session-browser.mjs';
 import { checkTimeVisuals } from './time-visuals-browser.mjs';
 import { checkClockView } from './clock-view-browser.mjs';
+import { checkAutomaticSession } from './automatic-session-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
 const timeTravelOptions=parseTimeTravelOptions(process.argv.slice(2));
@@ -144,8 +145,8 @@ try {
     } else {
     assert.equal(await text('#time'), '05:00');
     await checkTitle('READY');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=27'&&js==='js/app.js?v=27'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=27')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=28'&&js==='js/app.js?v=28'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>['styles.css','app.js','planner.js','templates.mjs','timer.mjs','session.mjs','time-visuals.mjs'].every(file=>source.includes(file+'?v=28')))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -796,6 +797,7 @@ try {
     assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),true);
     await checkPlanner({ evaluate, click, text, cdp, configure });
     await checkSession({ evaluate, click, text, cdp, configure });
+    await checkAutomaticSession({ evaluate, click, text, cdp });
     await checkTimeVisuals({ evaluate, click, text, cdp, configure });
     await checkClockView({ evaluate, click, text, cdp, configure });
     await evaluate(`(()=>{const data=JSON.parse(localStorage.getItem('easyTimerTemplates'));data.templates.push({id:'offline-session',name:'Offline workshop',transitionMode:'manual',phases:[{id:'offline-phase',title:'Offline phase',durationSeconds:60}]});localStorage.setItem('easyTimerTemplates',JSON.stringify(data));})()`);

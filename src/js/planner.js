@@ -1,4 +1,4 @@
-import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=27';
+import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=28';
 
 const copy = {
     en: {

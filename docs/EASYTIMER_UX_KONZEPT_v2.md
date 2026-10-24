@@ -1,5 +1,11 @@
 # easyTimer — Product, UX and MVP Concept v2
 
+### ST-002B — Automatic Session execution (approved, implemented locally)
+
+Automatic templates can be prepared READY and explicitly started. The Run snapshots `transitionMode`; one shared clock remains owned by `app.js`. The coordinator reconciles every elapsed phase before interpreting actions, chaining deadlines from scheduled boundaries and completing automatically into final workshop overtime. Delayed callbacks are not phase overrun. Manual execution, Quick Timer, UX-008 thresholds, unified positive overtime and Clock-only remain unchanged. Automatic upcoming-phase information has no arrow, button styling or focus action; the final phase says the workshop ends automatically. No early automatic Skip/Complete is allowed.
+
+The [ST-002B implementation record](ST-002B_AUTOMATIC_SESSION_TIMER.md) specifies boundary/pause/stop semantics, linear catch-up, acceptance tests and limits. This implements ET-001 decisions 7, 22–23 and 33 within a surviving page context. Reload recovery, four-hour recovery, live editing/statistics/signals and active-run Manual/Automatic switching remain deferred. Local branch `feature/st-002b-automatic-session-timer`, checkpoint `checkpoint/before-st-002b` at deployed v27 commit `7f6f9c0`; accepted local PWA v28. Local release commit, fast-forward integration into `main` and annotated `release/st-002b` are authorized; push and deployment require separate approval.
+
 **Date:** 2026-10-20
 **Last reviewed:** 2026-10-23
 **Status:** Canonical product and UX direction; MVP-01, MVP-02, PWA delivery, mobile refinements, and QT-001 overtime are implemented in production

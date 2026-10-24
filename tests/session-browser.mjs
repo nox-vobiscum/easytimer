@@ -63,8 +63,10 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         await click('#reload-templates'); assert.match(await text('#session-feedback'),/could not be loaded/);
         await evaluate(`Storage.prototype.getItem=window.sessionGetItem;localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(library))})`);
         await click('#reload-templates');
-        assert.equal(await evaluate(`document.querySelector('#session-template option[value="automatic-run"]').disabled`),true);
-        await choose('automatic-run'); assert.equal(await evaluate(`document.querySelector('#session-picker').hidden`),false);
+        assert.equal(await evaluate(`document.querySelector('#session-template option[value="automatic-run"]').disabled`),false);
+        await choose('automatic-run'); assert.equal(await text('#status'),'Ready');
+        assert.equal(await evaluate(`document.querySelector('#next').hidden&&document.querySelector('#next').disabled`),true);
+        await menu('#open-session');
         await evaluate(`const select=document.querySelector('#session-template');select.value='';select.focus();`);
         await key('ArrowDown','ArrowDown',40); await key('Tab','Tab',9);
         assert.equal(await evaluate('document.activeElement.id'),'prepare-session','Native picker selection and Tab reach Prepare');
