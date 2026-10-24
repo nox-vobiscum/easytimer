@@ -6,7 +6,7 @@
 
 **Production baseline:** `7f6f9c057dc1350a53bf6845a91069dbee60794a`, PWA v27, including ST-002A, UX-009/UX-010 and centered Clock-only. Native iOS/PWA/VoiceOver acceptance remains manual.
 
-**Accepted local release candidate:** [ST-002B automatic Session execution](ST-002B_AUTOMATIC_SESSION_TIMER.md), branch `feature/st-002b-automatic-session-timer`, annotated checkpoint `checkpoint/before-st-002b` at the production baseline. PWA v28; local commit, fast-forward integration into `main` and annotated `release/st-002b` are authorized. Push and deployment remain subject to separate approval.
+**Accepted release:** [ST-002B automatic Session execution](ST-002B_AUTOMATIC_SESSION_TIMER.md), implementation `f6a55e8be126ed620d40470b83ec65243f4810e7`, annotated `release/st-002b`, PWA v28. Local fast-forward integration is complete; branch `feature/st-002b-automatic-session-timer` and rollback `checkpoint/before-st-002b` are preserved. The owner separately authorized documentation follow-up and production publication. Deployment completion and served assets require verification; the production baseline above remains the last verified release until then.
 
 ## 1. Current product
 

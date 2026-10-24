@@ -1,6 +1,6 @@
 # ST-002B: Automatic Session Timer
 
-**Status:** Release candidate accepted by the owner. Local release commit, fast-forward integration into `main` and annotated `release/st-002b` are authorized. Push and deployment require separate approval.
+**Status:** Release candidate accepted, locally integrated and tagged. The owner has separately authorized documentation follow-up, push and production deployment through the unchanged FTP workflow. Deployment outcome requires verification.
 **Baseline:** Production `7f6f9c057dc1350a53bf6845a91069dbee60794a` (ST-002A, UX-009/UX-010 and centering hotfix), PWA v27.
 **Rollback:** Annotated `checkpoint/before-st-002b`, unchanged at the baseline.
 **Branch:** `feature/st-002b-automatic-session-timer`.
@@ -57,8 +57,12 @@ Verification on 2026-10-24 passed **63/63 unit tests**, the **complete Quick/Pla
 
 The owner accepted the release candidate and authorized one local release commit on the preserved feature branch, fast-forward integration into local `main` and annotated `release/st-002b`. A fresh remote fetch confirmed that local `main` and `origin/main` still matched the approved baseline. Final preparation passed all 63 unit tests, the complete browser regression (including the open Planner draft case) and all 62 Light/Dark virtual-time captures. Full tracked/untracked inventory, syntax, whitespace and matching v28 references were checked. Screenshots/profiles remain outside the repository; the timer engine, template storage and FTP workflow are unchanged. Publishing branches or tags, deployment and infrastructure changes remain explicitly excluded. The release commit SHA and final ref state are reported outside this document to avoid a self-referencing commit hash.
 
-## Remaining acceptance limits
+## Production publication approval
+
+Local release preparation produced implementation commit `f6a55e8be126ed620d40470b83ec65243f4810e7`, fast-forwarded into `main`, with annotated `release/st-002b` pointing to that commit. The feature branch and original rollback checkpoint are preserved. All 63 unit tests, the full browser regression and all 62 virtual-time Light/Dark captures passed in the final preparation. A subsequent owner instruction authorizes documentation consolidation and immediate production publication. The documentation-only follow-up is a separate commit above the unchanged implementation tag; it changes no application assets and requires no further cache bump. No temporary files are present in the repository; generated screenshot galleries remain outside it as review evidence. Verify the pushed `main` SHA, successful FTP workflow and served v28 files before declaring production success. Do not modify DNS/hosting, rewrite tags or begin another feature.
+
+## Device and recovery limits
 
 Sleep/wake catch-up requires the original page context to survive. A full reload, browser restart or OS eviction still starts a fresh Quick Timer. Cross-reload recovery, four-hour recovery notifications/dialogs, rewind, active-session Manual/Automatic switching, live editing, statistics UI, signals and additional restart controls remain deferred. Existing `Date.now()` sensitivity to manual system-clock changes is unchanged. No missed signals are replayed.
 
-Native iOS Safari/PWA sleep/wake, process eviction, browser chrome/safe areas, orientation and VoiceOver acceptance remain manual checks; Chromium emulation does not establish them. Production stays v27 until separate release approval. Keep all previous checkpoints and the feature branch; do not publish, modify hosting/DNS or begin another increment without authorization.
+Native iOS Safari/PWA sleep/wake, process eviction, browser chrome/safe areas, orientation and VoiceOver acceptance remain manual checks; Chromium emulation does not establish them. The last verified production baseline is v27 until the approved v28 publication is verified. Keep all previous checkpoints and the feature branch; publication approval does not authorize hosting/DNS changes or another increment.

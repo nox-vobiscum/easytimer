@@ -1,6 +1,6 @@
 # ST-002A — Session Timer Preparation and Scope Proposal
 
-**Follow-up:** The owner-accepted [ST-002B implementation](ST-002B_AUTOMATIC_SESSION_TIMER.md) now enables Automatic templates locally while preserving the historical Manual contract below. Its production baseline is v27 and local shell v28. Local release preparation is authorized; publication requires separate approval.
+**Follow-up:** The owner-accepted [ST-002B implementation](ST-002B_AUTOMATIC_SESSION_TIMER.md) now enables Automatic templates while preserving the historical Manual contract below. Implementation `f6a55e8` is locally integrated and tagged `release/st-002b` (v28). The owner has separately authorized publication through the existing FTP workflow; successful deployment still requires verification.
 
 **Date:** 2026-10-23
 **Status:** Provisionally accepted after final review. Local release commit, integration into local `main` and annotated `release/st-002a-ux008` checkpoint authorized on 2026-10-24. No push/deployment authorization.

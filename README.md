@@ -10,7 +10,7 @@ ST-001 adds a local Session Planner workspace for reusable workshop templates. I
 
 The current production baseline is [7f6f9c0](https://github.com/nox-vobiscum/easytimer/commit/7f6f9c057dc1350a53bf6845a91069dbee60794a), PWA v27: ST-002A, UX-008/009/010 and the centered Clock-only hotfix. Production files matched the release and focused production browser checks passed. Real iOS Safari/PWA and VoiceOver acceptance remains manual.
 
-The accepted [ST-002B automatic Session increment](docs/ST-002B_AUTOMATIC_SESSION_TIMER.md) uses PWA shell v28, starting at `checkpoint/before-st-002b` on the production baseline. Local release preparation is authorized: commit on `feature/st-002b-automatic-session-timer`, fast-forward local `main` and annotate `release/st-002b`. Push and deployment require separate approval; production remains v27.
+The accepted [ST-002B automatic Session increment](docs/ST-002B_AUTOMATIC_SESSION_TIMER.md) uses PWA shell v28. Implementation commit `f6a55e8be126ed620d40470b83ec65243f4810e7` is integrated into local `main` and protected by annotated `release/st-002b`; rollback remains `checkpoint/before-st-002b` at the v27 baseline. The owner has authorized the documentation follow-up and production publication through the unchanged FTP workflow. Deployment outcome must be verified separately; approval alone does not establish a successful release.
 
 UX-004: the browser tab title shows remaining time while running, adds a pause marker while paused, and shows signed overtime after expiry. READY uses `easyTimer`. Existing deadline-based updates correct the title when browser execution resumes; background updates can be throttled by the browser.
 
