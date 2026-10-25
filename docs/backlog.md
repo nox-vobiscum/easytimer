@@ -35,6 +35,7 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | DATA-001 | Rundown JSON export/import | Done / deployed | `9dcf75d`, `release/data-001-v35`; footer hotfix `409229a` |
 | SYNC-001 | Optional Google Drive template sync | Later / Spike | DATA-001; Google identity, OAuth, mobile PWA feasibility |
 | ST-002 | Executable Session Timer | A and B deployed | B v28 production verified at ead2ad1; see ST-002B record |
+| UX-011 | Confirm actions that end an active Rundown | Candidate / owner-reported change request | Audit Quick Timer navigation and all run-ending actions; preserve run on Cancel |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
 | ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
 | QT-002 | More flexible Quick Timer duration controls | Later | Preserve current one-timer simplicity |
@@ -96,6 +97,17 @@ Implement a **Session Run** separate from reusable **Workshop Templates**. Use o
 
 **Status:** ST-002A and [ST-002B](ST-002B_AUTOMATIC_SESSION_TIMER.md) are deployed and verified at `ead2ad1` (v28), with UX-009/UX-010 and centering. ST-002B provides automatic templates, deadline-based multi-phase catch-up and automatic final overtime. Annotated `release/st-002b` remains at implementation `f6a55e8`; rollback is preserved. Live editing, statistics, reload recovery and active-run transition-mode switching remain future scope.
 
+### UX-011 ? Confirm before ending an active Rundown
+
+**Owner-reported issue / change request:** Selecting Quick Timer from the menu while a Rundown is running can discard the active run and switch modes without a sufficiently clear warning. Treat this as a reported behavior to reproduce during implementation analysis, not a confirmed root cause.
+
+**Required outcome:** Before any action that would end or discard an active Rundown, require an explicit confirmation explaining that consequence. Audit all such entry points, including the Quick Timer menu action, rather than protecting only one button. Cover Manual and Automatic sessions, paused runs and active phase/final overtime where the run would otherwise be lost. Opening the Editor or changing theme/language must not trigger a warning unless the action actually ends the run.
+
+**Draft copy, not final wording:** "This ends the current Rundown." Provide natural DE/EN copy and clear confirm/cancel actions; final wording and button labels require review. Cancel, Escape or dismiss must leave the current Rundown and view intact without resets, hidden running sessions or persistence changes. Elapsed wall-clock time continues according to existing pause/running semantics; the confirmation must not introduce a second timer or silently pause the run. Only explicit confirmation permits the requested destructive transition.
+
+**Acceptance planning:** Reproduce the reported menu case; inspect existing confirmation guards and cover any gaps. Add focused checks for confirm/cancel and every discovered run-ending path, keyboard/focus, DE/EN, Manual/Automatic, paused and overtime states. Preserve stored Rundown definitions and existing draft safeguards. Browser reload/tab-close recovery remains the separate REL-001 concern; this item does not promise custom browser-exit dialogs or cross-reload restoration.
+
+**Status:** Recorded as a change request only; no implementation or release authorized.
 ### ST-003 — Editing and statistics during a session
 
 Later: edit the current and upcoming phases without stopping the running session, with protected current/completed phases, conflict-safe drafts, per-phase time saved/overrun, workshop totals, and recovery behavior. Follow ET-001 decisions 39–43, 45–48, and 53–56 instead of simplifying them silently.
