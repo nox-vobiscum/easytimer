@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer-when-downgrade">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="poc.css">
+<title>SYNC-001 isolated experiment</title>
+<main>
+  <h1>SYNC-001 — disposable experiment</h1>
+  <p>This is not easyTimer synchronization. No production imports, storage, service worker or timer access. No Google requests until you load GIS.</p>
+  <p>Only a separate Google Cloud test project and test accounts may be used. Never paste a secret or token. Reload/disconnect clears authorization and read baselines.</p>
+  <label>Public test OAuth client ID <input id="client-id" autocomplete="off" spellcheck="false" value="896158829302-h2rlgdbilmek2b1lmkr65kealt2t5rr8.apps.googleusercontent.com"></label>
+  <p>Owner-configured test project: <strong>easytimer-sync-poc</strong>. Real Google authorization is registered for <strong>http://localhost:8000</strong> only. Do not use the numeric loopback address for OAuth.</p>
+  <label class="consent"><input id="approved" type="checkbox"> I confirm this is the separate test project and authorize this page to create/update only synthetic PoC files.</label>
+  <div class="actions">
+    <button id="load-gis">1. Load Google GIS</button>
+    <button id="connect" disabled>2. Authorize / reauthorize</button>
+    <button id="disconnect">Disconnect locally</button>
+    <button id="abort">Abort current request</button>
+  </div>
+  <p id="connection" role="status">Not connected. Authentication: UNRESOLVED.</p>
+  <h2>Immutable snapshot experiment</h2>
+  <p>The previous If-Match strategy FAILED in the owner's Firefox test. Its PATCH controls below are retired. This experiment only creates new snapshot files; it never updates or deletes them.</p>
+  <p>Use the shared Run ID below, authorize, then Discover. Copy parent snapshot hashes from the discovery output. Use no parents only for the first root. For reconciliation, explicitly enter BOTH branch hashes; this fixture records a synthetic M result, not an automatic merge.</p>
+  <label>Parent snapshot hashes (separated by spaces)<textarea id="snapshot-parents" rows="3" spellcheck="false"></textarea></label>
+  <label>Snapshot fixture role<select id="snapshot-role"><option>A</option><option>B</option><option>C</option><option>M</option></select></label>
+  <div class="actions">
+    <button id="snapshot-discover">Discover snapshots and heads</button>
+    <button id="snapshot-prepare">Prepare NEW operation + Drive ID</button>
+    <button id="snapshot-publish">Publish / repeat SAME operation</button>
+    <button id="snapshot-lost">Publish then simulate lost acknowledgement</button>
+    <button id="snapshot-recover">Recover: read and verify SAME operation</button>
+  </div>
+  <label>Recovery ticket (synthetic data only; retain unchanged outside this page before upload)<textarea id="snapshot-ticket" rows="6" spellcheck="false"></textarea></label>
+  <p>Disconnect/reload clears this page's ticket. Save it manually outside the repository if testing recovery across reload. Never include tokens. A timeout does not authorize preparing a new operation.</p>
+  <pre id="snapshot-view" tabindex="0" aria-label="Verified complete snapshots and branch heads"></pre>
+  <h2>Shared Run ID and original CRUD fixture</h2>
+  <p>Client A creates the file. Copy its Run ID and File ID to independently authorized client B. Both clients must read before A updates. Never substitute a real Rundown file.</p>
+  <label>Shared PoC Run ID <input id="run-id" autocomplete="off" spellcheck="false"></label>
+  <label>File ID from this run <input id="file-id" autocomplete="off" spellcheck="false"></label>
+  <div class="actions">
+    <button id="create">Create synthetic file</button>
+    <button id="list">List this run's files</button>
+    <button id="read">Read and retain baseline</button>
+  </div>
+  <label>Client role <select id="role"><option>A</option><option>B</option></select></label>
+  <label>Conditional-write validator <select id="validator"><option value="metadata">Metadata response ETag</option><option value="media">Media response ETag</option></select></label>
+  <div class="actions">
+    <button id="update">PATCH with retained If-Match</button>
+    <button id="probe">PATCH with deliberately invalid If-Match</button>
+    <button id="crud">Unconditional synthetic PATCH (CRUD test only)</button>
+  </div>
+  <p>Unconditional PATCH is deliberately unsafe for synchronization and is restricted to marked disposable fixtures. A 2xx response to the invalid-validator probe disproves that tested precondition. A 412 alone does not prove the whole concurrency gate: reread separately and verify A's content survived. No automatic retries.</p>
+  <p id="result" role="status">No real API tests performed.</p>
+  <h2>Sanitized observations</h2>
+  <p>HTTP status, readable validator availability and synthetic revision metadata only. Never save a HAR, OAuth callback, request headers or token response. This page never logs them.</p>
+  <pre id="observations" tabindex="0" aria-label="Sanitized experiment observations"></pre>
+</main>
+<script type="module" src="poc.mjs"></script>
+</html>

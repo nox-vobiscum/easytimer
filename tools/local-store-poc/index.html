@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SYNC-002A local transactions</title>
+<main><h1>SYNC-002A — local transactions only</h1>
+<p>Test-only IndexedDB on a separate localhost origin. Synthetic libraries only. No OAuth, Google, remote writes or production initialization. The adapter never changes or removes the legacy source. Tests refuse an existing legacy value, seed a temporary synthetic one and clean up that fixture afterwards.</p>
+<button id="run" type="button">Run isolated browser experiments</button>
+<pre id="results" role="status">Not run.</pre></main>
+<script type="module" src="/tools/local-store-poc/ui.mjs"></script></html>
