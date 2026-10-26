@@ -34,7 +34,7 @@ async function validateTicket(ticket) {
     if (Object.keys(parsed).sort().join(',') !== 'library,libraryId,localRevision' || parsed.libraryId !== ticket.libraryId || parsed.localRevision !== ticket.localRevision) fail('INVALID_TICKET');
     return parsed;
 }
-export function openLocalStore({ name, factory = globalThis.indexedDB, fault = () => {}, onVersionChange = () => {} } = {}) {
+export function openLocalStore({ name, factory = globalThis.indexedDB, fault = () => {}, onVersionChange = () => {}, integration = null } = {}) {
     if (!name?.startsWith(DB_PREFIX)) return Promise.reject(new Error('TEST_DATABASE_REQUIRED'));
     return new Promise((resolve, reject) => {
         let request, finished = false;
@@ -85,12 +85,12 @@ export function openLocalStore({ name, factory = globalThis.indexedDB, fault = (
                         if (revision === Number.MAX_SAFE_INTEGER) fail('REVISION_OVERFLOW');
                         objects.metadata.get(key).onsuccess = safe(event => {
                         const oldMetadata = event.target.result;
-                        if (current ? !oldMetadata?.syncDirty || oldMetadata.dirtyRevision !== revision : Boolean(oldMetadata)) fail('CORRUPT_STATE');
-                        const state = { libraryId: current?.libraryId || crypto.randomUUID(), localRevision: revision + 1, library: valid };
+                        if (current ? (integration ? typeof oldMetadata?.syncDirty !== 'boolean' : !oldMetadata?.syncDirty) || oldMetadata.dirtyRevision !== revision : Boolean(oldMetadata)) fail('CORRUPT_STATE');
+                        const state = { libraryId: current?.libraryId || integration?.libraryId || crypto.randomUUID(), localRevision: revision + 1, library: valid };
                         fault('before-library');
                         objects.library.put(state, key);
                         fault('after-library-request', { tx: objects.library.transaction, objects });
-                        const metadata = { syncDirty: true, dirtyRevision: state.localRevision, migration };
+                        const metadata = { ...oldMetadata, syncDirty: true, dirtyRevision: state.localRevision, migration };
                         objects.metadata.put(metadata, key);
                         fault('after-dirty-request');
                         // Wait for actual request success, still inside the transaction, for late-abort experiments.
@@ -101,11 +101,30 @@ export function openLocalStore({ name, factory = globalThis.indexedDB, fault = (
             }
             resolve({
                 read: readAll,
+                // Test-only integration seam: reuse the same strict transaction and abort handling.
+                ...(integration ? { atomicUpdate(update) {
+                    return transaction('readwrite', ({ objects, safe, setResult }) => {
+                        const records = {}; let remaining = stores.length;
+                        for (const store of stores) objects[store].get(key).onsuccess = safe(event => {
+                            records[store] = event.target.result ?? null;
+                            if (--remaining) return;
+                            const result = update(records);
+                            if (result?.then) fail('ASYNC_TRANSACTION_CALLBACK');
+                            fault('before-integration-write');
+                            for (const store of stores) {
+                                if (records[store] === null) objects[store].delete(key);
+                                else objects[store].put(records[store], key);
+                            }
+                            fault('after-integration-write');
+                            objects.metadata.get(key).onsuccess = safe(() => { fault('before-integration-commit'); setResult(result); });
+                        });
+                    });
+                } } : {}),
                 save: (library, expectedRevision) => commitLibrary(library, expectedRevision),
                 close() { closed = true; db.close(); },
                 async prepareTicket(ticket) {
                     const retained = structuredClone(ticket); // Freeze input before asynchronous hashing.
-                    const snapshot = await validateTicket(retained);
+                    const snapshot = await (integration?.validateTicket || validateTicket)(retained);
                     return transaction('readwrite', ({ objects, safe, setResult }) => {
                         objects.library.get(key).onsuccess = safe(event => {
                             const state = event.target.result;
@@ -130,11 +149,11 @@ export function openLocalStore({ name, factory = globalThis.indexedDB, fault = (
                     if (state.library) {
                         strictLibrary(state.library.library);
                         if (typeof state.library.libraryId !== 'string' || !Number.isSafeInteger(state.library.localRevision) || state.library.localRevision < 1 ||
-                            !state.metadata?.syncDirty || state.metadata.dirtyRevision !== state.library.localRevision) fail('CORRUPT_STATE');
+                            (integration ? typeof state.metadata?.syncDirty !== 'boolean' : !state.metadata?.syncDirty) || state.metadata.dirtyRevision !== state.library.localRevision) fail('CORRUPT_STATE');
                     }
                     if (state.outbox) {
-                        await validateTicket(state.outbox.ticket);
-                        if (state.outbox.stage !== 'prepared' || state.outbox.ticket.localRevision > state.library.localRevision || state.outbox.ticket.libraryId !== state.library.libraryId) fail('CORRUPT_STATE');
+                        await (integration?.validateTicket || validateTicket)(state.outbox.ticket);
+                        if (!(integration ? ['prepared', 'verified'] : ['prepared']).includes(state.outbox.stage) || state.outbox.ticket.localRevision > state.library.localRevision || state.outbox.ticket.libraryId !== state.library.libraryId) fail('CORRUPT_STATE');
                     }
                     return { ...state, needsTicket: Boolean(state.metadata?.syncDirty && !state.outbox),
                         newerDirtyRevision: Boolean(state.outbox && state.library.localRevision > state.outbox.ticket.localRevision) };

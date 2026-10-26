@@ -46,7 +46,7 @@ export function revisionHeads(nodes) {
     return [...ids.values()].filter(node => !parents.has(node.revisionId));
 }
 
-export function createPocClient({ fetchImpl = fetch, now = Date.now, evidence = () => {} } = {}) {
+export function createPocClient({ fetchImpl = fetch, now = Date.now, evidence = () => {}, timeoutMs = 15000 } = {}) {
     let token = null, expiresAt = 0, generation = 0, account = null;
     const pending = new Set();
     function disconnect() {
@@ -55,11 +55,11 @@ export function createPocClient({ fetchImpl = fetch, now = Date.now, evidence = 
         pending.clear();
     }
     function abort() { for (const controller of pending) controller.abort(); }
-    async function request(path, { method = 'GET', body, headers = {} } = {}) {
+    async function request(path, { method = 'GET', body, headers = {}, raw = false } = {}) {
         if (!token || now() >= expiresAt) { disconnect(); throw new Error('REAUTHORIZE'); }
         if (!/^\/(?:drive\/v3\/(?:about\?|files(?:\?|\/))|upload\/drive\/v3\/files(?:\?|\/))/.test(path)) throw new Error('INVALID_ENDPOINT');
         const epoch = generation, controller = new AbortController(); pending.add(controller);
-        const timeout = setTimeout(() => controller.abort(), 15000);
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
         try {
             const response = await fetchImpl(`https://www.googleapis.com${path}`, { method, body, headers: { ...headers, Authorization: `Bearer ${token}` },
                 signal: controller.signal, cache: 'no-store', credentials: 'omit', redirect: 'error' });
@@ -70,7 +70,7 @@ export function createPocClient({ fetchImpl = fetch, now = Date.now, evidence = 
             if (response.status === 401) { disconnect(); throw new Error('REAUTHORIZE'); }
             // Do not log raw Google responses, token responses, request headers or errors.
             if (!response.ok) throw new Error(`HTTP_${response.status}`);
-            const value = await response.json();
+            const value = raw ? new Uint8Array(await response.arrayBuffer()) : await response.json();
             if (epoch !== generation) throw new Error('DISCONNECTED');
             return { value, etag: response.headers.get('etag') };
         } catch (error) {
@@ -84,6 +84,26 @@ export function createPocClient({ fetchImpl = fetch, now = Date.now, evidence = 
         assertOwned(result.value, runId); return result;
     }
     return {
+        // Isolated integration capability; token remains in this closure and is never returned.
+        integrationSession() {
+            if (!token || now() >= expiresAt || !account) throw new Error('REAUTHORIZE');
+            const epoch = generation, identity = account;
+            return {
+                async accountKey() {
+                    if (epoch !== generation) throw new Error('DISCONNECTED');
+                    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity));
+                    if (epoch !== generation) throw new Error('DISCONNECTED');
+                    return 'sha256:' + [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+                },
+                assertCurrent() { if (epoch !== generation || !token || now() >= expiresAt) throw new Error('REAUTHORIZE'); },
+                request(path, options = {}) {
+                    if (epoch !== generation) throw new Error('DISCONNECTED');
+                    // C has no capability to PATCH or delete any remote object.
+                    if (options.method && options.method !== 'GET' && !(options.method === 'POST' && path.startsWith('/upload/drive/v3/files?'))) throw new Error('IMMUTABLE_ONLY');
+                    return request(path, options);
+                },
+            };
+        },
         snapshots: Object.fromEntries(['prepare', 'publish', 'verify', 'read', 'discover'].map(method => [method, (...args) => {
             const epoch = generation;
             return createSnapshotOperations((...requestArgs) => {
