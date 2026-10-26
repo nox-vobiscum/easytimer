@@ -33,7 +33,11 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | PLAN-001 | Insert a new phase directly at a chosen position | Candidate | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Someday | Presentation-only refinement |
 | DATA-001 | Rundown JSON export/import | Done / deployed | `9dcf75d`, `release/data-001-v35`; footer hotfix `409229a` |
-| SYNC-001 | Optional Google Drive template sync | Later / Spike | DATA-001; Google identity, OAuth, mobile PWA feasibility |
+| SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
+| SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
+| SYNC-003A | Optional Drive integration in the application | Local application integration implemented and owner-validated with real Google Drive. Production NO-GO. | [Owner acceptance and release blockers](SYNC-003A_LOCAL_APPLICATION.md); normal/private Firefox, no physical second-device or iOS acceptance |
+| SYNC-003B | Minimal explicit conflict resolution | Next proposed bounded increment; not authorized | Explicit A / B / Keep Both, verified immutable reconciliation; no version-history UI |
+| SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
 | ST-002 | Executable Session Timer | A and B deployed | B v28 production verified at ead2ad1; see ST-002B record |
 | UX-011 | Confirm actions that end an active Rundown | Candidate / owner-reported change request | Audit Quick Timer navigation and all run-ending actions; preserve run on Cancel |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
@@ -85,7 +89,23 @@ Add a compact row of text links at the very bottom of the universal menu: **Abou
 
 **Spike first:** Verify OAuth consent/scopes, app registration/verification requirements, iOS Safari and installed-PWA sign-in flows, token expiry, offline behavior, cross-device conflicts, data recovery, realistic free-tier limitations, and long-term maintenance costs. Do **not** assume that a fully browser-only solution or permanent zero cost is guaranteed. JSON export/import must remain useful without Google sign-in.
 
-**Status:** Later / architecture spike. Not a prerequisite for ST-002.
+**Status:** Immutable snapshots are the tested candidate; the rejected conditional-overwrite strategy is not a safe production basis. [SYNC-002C](SYNC-002C_ISOLATED_INTEGRATION.md) is an **isolated integration PoC validated with real Google Drive**. Owner-operated Firefox tests confirmed first sync with real HTTP 409 and subsequent GET 200, divergent branches in normal/private contexts (3 snapshots, 2 heads, concurrent-content conflict), reload recovery after a simulated lost acknowledgement using GET only, preservation of newer dirty edits and a real authorization-expiry/reconnect condition. The second context was private Firefox on the same device, not another physical device. Automated/mock evidence remains separate in the report.
+
+**SYNC-003A — Local application integration implemented and owner-validated with real Google Drive. Production NO-GO.** See [acceptance, migration boundaries and release blockers](SYNC-003A_LOCAL_APPLICATION.md). The owner created and backed up a real test Rundown, published from normal Firefox, explicitly adopted it in initially empty private Firefox, edited 05:00 to 07:00, synchronized back without conflict and loaded the actual Session Timer READY at 07:00. This is same-device independent-context evidence, not physical second-device, iOS or deployment acceptance. The informal approximately three-second publication observation is not a benchmark.
+
+**Production blockers:** replace the rejected technical migration confirmation with understandable DE/EN UX while retaining validation/readback/rollback safeguards; review safe production migration, packaging and public OAuth/privacy readiness. Actual iOS Safari/installed PWA, physical interruptions, real quota exhaustion and Opera GX rendering remain open. Future bounded identity UX should use official Google authorization, an actual account image when available and name/email in a compact account menu, with restrained header/mobile placement and a clear distinction between connected and synchronized. Evaluate `openid`, `profile`, `email` only under separate review; no additional scopes or account-data processing are approved here. Also review initial empty-library pending status and the connected-state Connect action. The initial false error is fixed; the zero-byte download remains unreproduced.
+
+**Next proposal — SYNC-003B:** minimal accessible DE/EN A / B / Keep Both decisions for two conflicting current Rundowns, no automatic winner; independent fresh Rundown/phase IDs and numbered copy names for Keep Both; complete validated immutable reconciliation and verified publication. Retain original conflicting snapshots and fail safely for stale or unsupported states, preserving drafts/pending work and independent changes. No version-history UI. The late-offline-edit-as-independent-copy rule is desired future behavior, not implemented or proven. Separate implementation approval remains required.
+
+The accepted transport remains append-only immutable snapshots without automatic cleanup. SYNC-002D1's replacement protocol is not adopted. DATA-001 and local-only operation remain independent.
+
+### SYNC-099 — Optional Snapshot Cleanup
+
+**Priority:** Someday / Maybe / Very Low. **Status:** Deferred — no implementation planned.
+
+Consider safe, criteria-based cleanup of obsolete Google Drive snapshots only if actual snapshot count, age, accumulated storage, API overhead or usability makes it necessary. Do not select fixed retention periods or thresholds now. Never delete snapshots merely because they are old or another file has a newer timestamp. Cleanup requires separately validated replacement, recovery and offline-device safety.
+
+The append-only immutable snapshot architecture remains the accepted approach. SYNC-002D1's checkpoint/receipt replacement protocol was evaluated but is **not adopted**. SYNC-003A contains no cleanup code or scheduling.
 
 ## Timer and workshop execution roadmap
 

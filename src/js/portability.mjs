@@ -1,4 +1,4 @@
-import { validateLibrary } from './templates.mjs?v=35';
+import { validateLibrary } from './templates.mjs?v=37';
 
 export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 const fail = code => { throw new Error(code); };

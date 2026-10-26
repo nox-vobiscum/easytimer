@@ -1,5 +1,5 @@
-import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=35';
-import { parseRundowns, independentCopies, rundownCollisions, downloadRundowns, exportFilename, MAX_IMPORT_BYTES } from './portability.mjs?v=35';
+import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=37';
+import { parseRundowns, independentCopies, rundownCollisions, downloadRundowns, exportFilename, MAX_IMPORT_BYTES } from './portability.mjs?v=37';
 
 const copy = {
     en: {
@@ -84,8 +84,16 @@ function element(tag, text, className) {
     return node;
 }
 
-export function createPlanner(root, onClose, initialLanguage) {
-    const store = createTemplateStore(() => localStorage);
+export function createPlanner(root, onClose, initialLanguage, services = null) {
+    const storeFactory = services ? services.createStore : () => createTemplateStore(() => localStorage);
+    const store = storeFactory();
+    let writing = false;
+    function io(method, data) {
+        const value = store[method](data);
+        if (!value?.then) return value;
+        writing = true; root.inert = true;
+        return value.finally(() => { writing = false; root.inert = false; });
+    }
     let library = { schemaVersion: 1, templates: [] };
     let draft = null;
     let original = '';
@@ -219,7 +227,7 @@ export function createPlanner(root, onClose, initialLanguage) {
     }
     function feedbackText(code) {
         const key = review ? ({ conflict: 'importConflict', storageWrite: 'importStorageWrite' }[code] || code) : code;
-        return t()[key] || '';
+        return t()[key] || services?.feedback?.(code, language) || '';
     }
     function feedback(code, isError = true, fieldId = null) {
         message = code;
@@ -237,14 +245,15 @@ export function createPlanner(root, onClose, initialLanguage) {
     function focusHeading() { root.querySelector('h1')?.focus(); }
     function canDiscard() { return !dirty() || window.confirm(t().discard); }
     function close() {
+        if (writing) return false;
         if (!canDiscard()) return false;
         fileReadId += 1; review = null;
         draft = null; active = false; feedback(''); closeReposition(); onClose();
         return true;
     }
-    function load() {
+    async function load() {
         fileReadId += 1;
-        try { library = store.load(); feedback('', false); }
+        try { let saved = io('load'); if (saved?.then) saved = await saved; library = saved; feedback('', false); }
         catch (e) { feedback(e.message); }
     }
     function begin(template, imported = false) {
@@ -290,12 +299,12 @@ export function createPlanner(root, onClose, initialLanguage) {
         try { output.textContent = `${t().total}: ${clock(totalDuration(materialize().phases))}`; }
         catch { output.textContent = `${t().total}: —`; }
     }
-    function save() {
+    async function save() {
         try {
             const valid = validateTemplate(materialize());
             const templates = library.templates.some(item => item.id === valid.id)
                 ? library.templates.map(item => item.id === valid.id ? valid : item) : [...library.templates, valid];
-            library = store.save({ schemaVersion: 1, templates });
+            let saved = io('save', { schemaVersion: 1, templates }); if (saved?.then) saved = await saved; library = saved;
             draft = null;
             feedback('saved', false);
             render(); focusHeading();
@@ -313,10 +322,10 @@ export function createPlanner(root, onClose, initialLanguage) {
             target?.focus();
         }
     }
-    function exportSaved(id) {
+    async function exportSaved(id) {
         try {
             // Export the current saved data without resetting this editor's optimistic snapshot.
-            const data = createTemplateStore(() => localStorage).load();
+            let data = storeFactory().load(); if (data?.then) data = await data;
             if (id) data.templates = data.templates.filter(item => item.id === id);
             if (id && !data.templates.length) throw new Error('exportMissing');
             downloadRundowns(data, id ? exportFilename(data.templates[0].name) : undefined);
@@ -341,12 +350,12 @@ export function createPlanner(root, onClose, initialLanguage) {
             root.querySelector('#planner-feedback').focus();
         }
     }
-    function confirmImport() {
+    async function confirmImport() {
         if (!review) return;
         try {
             const copies = independentCopies(review.data, library);
             if (copies.templates.length === 1) { begin(copies.templates[0], true); return; }
-            library = store.save({ schemaVersion: 1, templates: [...library.templates, ...copies.templates] });
+            let saved = io('save', { schemaVersion: 1, templates: [...library.templates, ...copies.templates] }); if (saved?.then) saved = await saved; library = saved;
             review = null; feedback('imported', false); render(); focusHeading();
         } catch (e) { feedback(e.message); root.querySelector('#planner-feedback').focus(); }
     }
@@ -367,8 +376,8 @@ export function createPlanner(root, onClose, initialLanguage) {
         const actions = element('div', undefined, 'planner-actions');
         const confirm = button(review.data.templates.length === 1 ? text.openImport : text.confirmImport, confirmImport, 'primary'); confirm.id = 'confirm-import';
         const cancel = button(text.cancel, () => { fileReadId += 1; review = null; feedback('', false); render(); root.querySelector('#rundown-import-file').focus(); }); cancel.id = 'cancel-import';
-        const refresh = button(text.refreshImport, () => {
-            try { library = store.load(); feedback('', false); render(); root.querySelector('#confirm-import').focus(); }
+        const refresh = button(text.refreshImport, async () => {
+            try { let saved = io('load'); if (saved?.then) saved = await saved; library = saved; feedback('', false); render(); root.querySelector('#confirm-import').focus(); }
             catch (e) { feedback(e.message); root.querySelector('#planner-feedback').focus(); }
         });
         refresh.id = 'refresh-import'; refresh.hidden = !['conflict', 'storageRead', 'storageBlocked', 'invalidData'].includes(message);
@@ -386,6 +395,7 @@ export function createPlanner(root, onClose, initialLanguage) {
         label.append(file);
         const all = button(text.exportAll, () => exportSaved()); all.id = 'export-all'; all.disabled = library.templates.length === 0;
         actions.append(label, all); section.append(heading, actions, element('p', text.localWarning)); root.append(section);
+        services?.renderBackup(section, { language, canChange: () => active && !draft && !review && !writing, refresh: async () => { await load(); render(); focusHeading(); } });
     }
     function render() {
         closeReposition();
@@ -405,7 +415,7 @@ export function createPlanner(root, onClose, initialLanguage) {
         if (review) { renderReview(); return; }
         if (!draft) {
             const actions = element('div', undefined, 'planner-actions');
-            actions.append(button(text.create, () => begin(), 'primary'), button(text.refreshLibrary, () => { load(); render(); focusHeading(); }));
+            actions.append(button(text.create, () => begin(), 'primary'), button(text.refreshLibrary, async () => { const loading = load(); if (services) await loading; render(); focusHeading(); }));
             root.append(actions);
             const list = element('ul', undefined, 'template-library');
             if (!library.templates.length) root.append(element('p', text.empty));
@@ -415,10 +425,10 @@ export function createPlanner(root, onClose, initialLanguage) {
                 info.append(element('h2', item.name), element('p', `${text.phaseCount(item.phases.length)} · ${clock(totalDuration(item.phases))}`));
                 const actions = element('div', undefined, 'planner-actions');
                 const edit = button(text.edit, () => begin(item)); edit.setAttribute('aria-label', `${text.edit}: ${item.name}`);
-                const remove = button(text.remove, () => {
+                const remove = button(text.remove, async () => {
                     if (!window.confirm(text.deleteConfirm(item.name))) return;
                     try {
-                        library = store.save({ schemaVersion: 1, templates: library.templates.filter(p => p.id !== item.id) });
+                        let saved = io('save', { schemaVersion: 1, templates: library.templates.filter(p => p.id !== item.id) }); if (saved?.then) saved = await saved; library = saved;
                         message = 'deleted'; error = false; render(); focusHeading();
                     } catch (e) { feedback(e.message); }
                 });
@@ -482,10 +492,10 @@ export function createPlanner(root, onClose, initialLanguage) {
         const total = element('p'); total.id = 'planner-total'; total.setAttribute('aria-live', 'polite'); form.append(total);
         const actions = element('div', undefined, 'planner-actions');
         const saveButton = element('button', text.save, 'primary'); saveButton.type = 'submit';
-        actions.append(saveButton, button(text.cancel, () => { if (canDiscard()) { draft = null; feedback(''); render(); focusHeading(); } }), button(text.reload, () => {
+        actions.append(saveButton, button(text.cancel, () => { if (canDiscard()) { draft = null; feedback(''); render(); focusHeading(); } }), button(text.reload, async () => {
             if (!canDiscard()) return;
             // Keep the draft if reading storage fails; successful reload is explicit discard.
-            try { const fresh = store.load(); library = fresh; draft = null; feedback('', false); render(); focusHeading(); }
+            try { let fresh = io('load'); if (fresh?.then) fresh = await fresh; library = fresh; draft = null; feedback('', false); render(); focusHeading(); }
             catch (e) { feedback(e.message); }
         }));
         form.append(actions); root.append(form); updateTotal();
@@ -494,13 +504,13 @@ export function createPlanner(root, onClose, initialLanguage) {
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
     return {
         close,
-        open({ newDraft = false } = {}) {
+        async open({ newDraft = false } = {}) {
             if (active) {
                 if (newDraft) { if (!canDiscard()) return; begin(); }
                 else focusHeading();
                 return;
             }
-            active = true; load();
+            active = true; const loading = load(); if (services) await loading;
             if (newDraft) begin();
             else { render(); focusHeading(); }
         },

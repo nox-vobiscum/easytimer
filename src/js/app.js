@@ -1,9 +1,9 @@
 import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=35';
-import { createPlanner } from './planner.js?v=35';
+import { createPlanner } from './planner.js?v=37';
 import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=35';
-import { createTemplateStore } from './templates.mjs?v=35';
+import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=35';
-import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=35';
+import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=37';
 
 const copy = {
     en: {
@@ -78,7 +78,8 @@ let quickDurationMs = timer.durationMs;
 let pickerOpen = false;
 let pickerTemplates = [];
 let pickerMessage = '';
-const templateStore = createTemplateStore(() => localStorage);
+const development = location.origin === 'http://localhost:8000' && globalThis.easyTimerDevelopment?.enabled === true ? globalThis.easyTimerDevelopment : null;
+const templateStore = development ? development.createStore() : createTemplateStore(() => localStorage);
 let limitExceeded = false;
 let expanded = false;
 let fullscreenRequested = false;
@@ -92,7 +93,7 @@ const planner = createPlanner($('planner'), () => {
     $('planner').hidden = true;
     updatePresentation();
     $('menu-toggle').focus({ preventScroll: true });
-}, language);
+}, language, development);
 const landscape = matchMedia('(orientation: landscape)');
 const coarsePointer = matchMedia('(any-pointer: coarse)');
 function isSmartphone() {
@@ -209,9 +210,10 @@ function renderPicker() {
     $('prepare-session').disabled = !pickerTemplates.some(item => item.id === select.value);
     $('session-feedback').textContent = t[pickerMessage] || '';
 }
-function loadTemplates() {
+async function loadTemplates() {
     try {
-        pickerTemplates = templateStore.load().templates;
+        let saved = templateStore.load(); if (saved?.then) saved = await saved;
+        pickerTemplates = saved.templates;
         pickerMessage = pickerTemplates.length ? '' : 'emptyTemplates';
     } catch { pickerTemplates = []; pickerMessage = 'loadTemplatesError'; }
 }
@@ -231,7 +233,7 @@ async function switchMode(nextMode) {
     mode = nextMode; run = null; limitExceeded = false;
     pickerOpen = nextMode === 'session';
     timer = pickerOpen ? null : createTimer(quickDurationMs);
-    if (pickerOpen) loadTemplates();
+    if (pickerOpen) { const loading = loadTemplates(); if (development) await loading; }
     setMenuOpen(false);
     const exiting = exitPresentationForWorkspace();
     if (exiting) await exiting;
@@ -401,7 +403,7 @@ $('menu-toggle').addEventListener('click', () => setMenuOpen(!menuOpen));
 $('open-session').addEventListener('click', () => switchMode('session'));
 $('open-quick').addEventListener('click', () => switchMode('quick'));
 $('picker-back').addEventListener('click', () => switchMode('quick'));
-$('reload-templates').addEventListener('click', () => { loadTemplates(); render(); });
+$('reload-templates').addEventListener('click', async () => { const loading = loadTemplates(); if (development) await loading; render(); });
 $('session-template').addEventListener('change', () => {
     $('prepare-session').disabled = !pickerTemplates.some(item => item.id === $('session-template').value);
 });
@@ -507,7 +509,7 @@ document.addEventListener('keydown', event => {
 });
 updatePresentation();
 
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && !development) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('service-worker.js').catch(() => {});
     });

@@ -61,7 +61,11 @@ export function createTemplateStore(getStorage) {
     let snapshot;
     let loaded = false;
     function read() {
-        try { return getStorage().getItem(STORAGE_KEY); } catch { fail('storageRead'); }
+        // Explicit localhost development activation must not fall back to a stale legacy writer.
+        try {
+            if (globalThis.location?.origin === 'http://localhost:8000' && getStorage().getItem('easyTimerDevelopmentSyncStorage') === 'active') fail('storageBlocked');
+            return getStorage().getItem(STORAGE_KEY);
+        } catch (error) { if (error.message === 'storageBlocked') throw error; fail('storageRead'); }
     }
     return {
         load() {
