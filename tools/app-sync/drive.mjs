@@ -16,6 +16,11 @@ export function applicationDrive(session) {
     }
     return {
         session,
+        async recover(ticket) {
+            check(await session.accountKey() === ticket.accountKey, 'accountMismatch');
+            try { const result = await read(ticket.fileId); check(result.text === ticket.snapshotBytes, 'READBACK_MISMATCH'); return result.snapshot; }
+            catch (e) { if (e.message === 'HTTP_404') return null; throw e; }
+        },
         async generateId() { const { value } = await request('/drive/v3/files/generateIds?space=appDataFolder&type=files&count=1'); check(value.ids?.length === 1, 'GENERATED_ID_INVALID'); fileId(value.ids[0]); return value.ids[0]; },
         async discover() {
             const files = new Map(), tokens = new Set(); let page = '';

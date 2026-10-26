@@ -17,9 +17,18 @@ export async function openApplicationStorage({ storage, factory, fault = () => {
     const account = (records, key) => check(records.bindings.accountKey === key, 'accountMismatch');
     return {
         close: () => raw.close(),
+        // Existing connection only: no open, schema upgrade, migration or recovery.
+        readDiagnosticRecords: () => raw.read(),
         async read({ recovery = false } = {}) {
             const records = await raw.recover();
             if (!recovery) guard(records);
+            if (records.bindings?.reconciliation) {
+                const intent = records.bindings.reconciliation;
+                check(records.outbox && same(records.outbox.ticket, intent.ticket), 'outboxFixed');
+                const snapshot = await validateTicket(intent.ticket);
+                strictLibrary(intent.anchor.library);
+                check(snapshot.parents.length === 2 && snapshot.parents.includes(intent.anchor.base) && intent.anchor.revision === intent.ticket.localRevision, 'outboxFixed');
+            }
             return records;
         },
         async activate() {
@@ -64,6 +73,33 @@ export async function openApplicationStorage({ storage, factory, fault = () => {
                 records.outbox = { ticket: retained, stage: 'prepared' };
             });
         },
+        async prepareBranch(ticket, expectedHeads, authGuard) {
+            const retained = structuredClone(ticket), snapshot = await validateTicket(retained), before = await this.read();
+            const graph = await buildGraph(before.bindings.history, { complete: true });
+            check(graph.status === 'validated' && expectedHeads.length === 1 && graph.heads.length === 1 && same(graph.heads, expectedHeads) &&
+                before.bindings.base && graph.ancestors(expectedHeads[0]).includes(before.bindings.base), 'reviewRequired');
+            await raw.atomicUpdate(records => {
+                guard(records); authGuard(); account(records, retained.accountKey);
+                check(!records.outbox && !records.bindings.reconciliation && same(records.bindings, before.bindings), 'outboxFixed');
+                check(records.metadata.syncDirty && records.library.localRevision === retained.localRevision && records.library.libraryId === retained.libraryId && same(records.library.library, snapshot.library), 'conflict');
+                check(snapshot.parents.length === 1 && snapshot.parents[0] === records.bindings.base && same(records.bindings.heads, expectedHeads), 'reviewRequired');
+                records.outbox = { ticket: retained, stage: 'prepared' };
+            });
+        },
+        async prepareResolution(ticket, anchor, authGuard) {
+            const retained = structuredClone(ticket), snapshot = await validateTicket(retained), before = await this.read();
+            const graph = await buildGraph([...before.bindings.history, snapshot], { complete: true });
+            check(graph.status === 'validated' && snapshot.parents.length === 2 && graph.heads.length === 1 && graph.heads[0] === snapshot.snapshotId, 'reviewRequired');
+            await raw.atomicUpdate(records => {
+                guard(records); authGuard(); account(records, retained.accountKey);
+                check(!records.outbox && !records.bindings.reconciliation, 'outboxFixed');
+                check(records.library.localRevision === anchor.revision && records.library.localRevision === retained.localRevision && records.library.libraryId === retained.libraryId &&
+                    same(records.library.library, anchor.library) && records.bindings.base === anchor.base && same(records.bindings.heads, snapshot.parents), 'staleReview');
+                check(snapshot.parents.includes(anchor.base) && same(records.library.library, before.bindings.history.find(n => n.snapshotId === anchor.base)?.library), 'unpublishedChanges');
+                records.bindings.reconciliation = { ticket: retained, anchor: structuredClone(anchor) };
+                records.outbox = { ticket: retained, stage: 'prepared' };
+            });
+        },
         async verified(ticket, authGuard) {
             await raw.atomicUpdate(records => { guard(records); authGuard(); account(records, ticket.accountKey); check(records.outbox && same(records.outbox.ticket, ticket), 'outboxFixed'); records.outbox.stage = 'verified'; });
         },
@@ -76,11 +112,28 @@ export async function openApplicationStorage({ storage, factory, fault = () => {
                 for (const [id, digest] of Object.entries(b.files)) check(retained.files[id] === digest, 'historyIncomplete');
                 for (const old of b.history) check(graph.get(old.snapshotId) && same(old, graph.get(old.snapshotId)), 'historyIncomplete');
                 b.history = graph.list(); b.files = retained.files; b.heads = [...graph.heads];
+                if (records.bindings.reconciliation) {
+                    const intent = records.bindings.reconciliation, ticket = intent.ticket;
+                    check(records.outbox && same(records.outbox.ticket, ticket), 'outboxFixed');
+                    if (records.outbox.stage === 'verified') {
+                        check(retained.files[ticket.fileId] === ticket.snapshotHash, 'historyIncomplete');
+                        if (graph.heads.length === 1 && graph.heads[0] === ticket.snapshotHash && records.library.localRevision === intent.anchor.revision && same(records.library.library, intent.anchor.library)) {
+                            const selected = graph.get(ticket.snapshotHash), revision = records.library.localRevision + 1;
+                            check(Number.isSafeInteger(revision), 'conflict');
+                            records.library = { libraryId: selected.libraryId, localRevision: revision, library: selected.library };
+                            records.metadata = { ...records.metadata, syncDirty: false, dirtyRevision: revision };
+                            b.base = ticket.snapshotHash; b.lastPublication = ticket; records.outbox = null; delete b.reconciliation;
+                        }
+                    }
+                    return { heads: [...graph.heads], adopt: false, conflict: Boolean(b.reconciliation) };
+                }
                 if (records.outbox?.stage === 'verified') {
                     const ticket = records.outbox.ticket;
                     check(retained.files[ticket.fileId] === ticket.snapshotHash, 'historyIncomplete');
                     b.base = ticket.snapshotHash; b.lastPublication = ticket; records.outbox = null;
-                    if (graph.heads.length === 1 && graph.heads[0] === b.base && records.library.localRevision === ticket.localRevision) records.metadata.syncDirty = false;
+                    // Verified publication acknowledges this revision even if another branch exists.
+                    // Conflict status is represented by heads, not by an unpublished local edit.
+                    if (records.library.localRevision === ticket.localRevision) records.metadata.syncDirty = false;
                 }
                 return { heads: [...graph.heads], adopt: !records.library.library.templates.length && !b.base && !records.outbox && graph.heads.length === 1,
                     conflict: graph.heads.length > 1 || (graph.heads.length === 1 && b.base !== graph.heads[0] && Boolean(records.library.library.templates.length)) };

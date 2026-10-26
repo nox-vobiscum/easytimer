@@ -80,7 +80,12 @@ export function normalizePayload(input) {
             exactKeys(decision, ['id', 'choice', 'copy']); validId(decision.id);
             requireThat(['left', 'right', 'both'].includes(decision.choice), 'INVALID_CHOICE');
             let copy = null;
-            if (decision.copy !== null) { exactKeys(decision.copy, ['id', 'phaseIds']); validId(decision.copy.id); requireThat(Array.isArray(decision.copy.phaseIds)); decision.copy.phaseIds.forEach(validId); copy = structuredClone(decision.copy); }
+            if (decision.copy !== null) {
+                exactKeys(decision.copy, Object.hasOwn(decision.copy, 'name') ? ['id', 'phaseIds', 'name'] : ['id', 'phaseIds']);
+                validId(decision.copy.id); requireThat(Array.isArray(decision.copy.phaseIds)); decision.copy.phaseIds.forEach(validId);
+                if (Object.hasOwn(decision.copy, 'name')) requireThat(typeof decision.copy.name === 'string' && decision.copy.name.trim() === decision.copy.name && decision.copy.name.length > 0 && decision.copy.name.length <= 120, 'INVALID_COPY_NAME');
+                copy = structuredClone(decision.copy);
+            }
             requireThat(decision.choice === 'both' ? copy !== null : copy === null, 'INVALID_COPY');
             return { id: decision.id, choice: decision.choice, copy };
         });

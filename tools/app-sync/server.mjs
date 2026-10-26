@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve, extname } from 'node:path';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const development = new Set([
-    ...['entry.mjs', 'controller.mjs', 'panel.mjs', 'storage.mjs', 'drive.mjs', 'experiments.mjs'].map(f => 'tools/app-sync/' + f),
+    ...['entry.mjs', 'controller.mjs', 'panel.mjs', 'storage.mjs', 'drive.mjs', 'experiments.mjs', 'conflict-panel.mjs', 'conflict-experiments.mjs', 'diagnostics.mjs', 'diagnostic-experiments.mjs'].map(f => 'tools/app-sync/' + f),
     'tools/local-store-poc/adapter.mjs', 'tools/sync-poc/core.mjs', 'tools/sync-poc/snapshots.mjs', 'tools/sync-integration/store.mjs',
     'tools/sync-integration/fake-drive.mjs',
     ...['canonical.mjs', 'graph.mjs', 'reconcile.mjs'].map(f => 'tools/sync-core/' + f),

@@ -12,6 +12,8 @@ The worktree already contained uncommitted SYNC-002A/001 experiments, owner hand
 
 ## Experimental version-1 envelope
 
+**SYNC-003B additive naming extension (local development only):** copy decisions may also contain a `name` beside `id` and `phaseIds`. When present, it must be the exact deterministic numbered name recomputed by `applyChoices`, considering all base/left/right names and earlier copies in stable conflict-ID order. Matching uses NFC plus lowercase; existing numeric suffixes are replaced, collisions increment the suffix and the stem is truncated at Unicode scalar boundaries to stay within the existing 120 UTF-16-unit limit. The name is hash-covered and semantic graph validation rejects arbitrary renaming even if the attacker recalculates the hash. Old copy decisions without `name` keep their original behavior and hashes; all other unknown fields still fail. Older pre-extension readers reject the new field rather than silently repairing it. This is not a public protocol rollout. See [SYNC-003B](SYNC-003B_CONFLICT_RESOLUTION.md).
+
 All fields below are required. Unknown fields are rejected, including transport metadata:
 
 ```json

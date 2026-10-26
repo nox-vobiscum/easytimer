@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { startServer } from './server.mjs';
 import { fakeDrive } from '../sync-integration/fake-drive.mjs';
 const drive = fakeDrive();
+let loseNextUploadAcknowledgement = false, blockResolutionReadback = false;
 const server = await startServer({port:0,enabled:true});
 const profile = await mkdtemp(join(tmpdir(), 'easytimer-application-sync-browser-'));
 const output = await mkdtemp(join(tmpdir(), 'easytimer-application-sync-shots-'));
@@ -49,7 +50,14 @@ try {
                     const script=`globalThis.google={accounts:{oauth2:{initTokenClient(config){return {requestAccessToken(){config.callback({access_token:'BROWSER_APPLICATION_FAKE_ONLY',expires_in:3600,scope:'https://www.googleapis.com/auth/drive.appdata'})}}}}}};`;
                     await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'text/javascript'}],body:Buffer.from(script).toString('base64')});
                 } else if(request.url.startsWith('https://www.googleapis.com/')) {
+                    if (blockResolutionReadback && new URL(request.url).pathname.startsWith('/drive/v3/files/')) {
+                        await send('Fetch.failRequest',{requestId,errorReason:'InternetDisconnected'});return;
+                    }
                     const response=request.method==='OPTIONS'?new Response(null,{status:204}):await drive.fetch(request.url,{method:request.method,body:request.postData});
+                    if (loseNextUploadAcknowledgement && request.method==='POST' && request.url.includes('/upload/')) {
+                        loseNextUploadAcknowledgement=false;blockResolutionReadback=true;
+                        await send('Fetch.failRequest',{requestId,errorReason:'InternetDisconnected'});return;
+                    }
                     await send('Fetch.fulfillRequest',{requestId,responseCode:response.status,responseHeaders:[{name:'Access-Control-Allow-Origin',value:'http://localhost:8000'},{name:'Access-Control-Allow-Methods',value:'GET,POST,OPTIONS'},{name:'Access-Control-Allow-Headers',value:'authorization,content-type'},{name:'Content-Type',value:'application/json'}],body:Buffer.from(await response.arrayBuffer()).toString('base64')});
                 } else await send('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'});
             })().catch(()=>send('Fetch.failRequest',{requestId,errorReason:'Failed'}).catch(()=>{}));
@@ -60,7 +68,7 @@ try {
     function cdp(method, params = {}, sessionId) {
         return new Promise((resolve, reject) => {
             const key = ++id, timeout = setTimeout(() => { pending.delete(key); reject(new Error(`CDP timeout: ${method}`)); }, 45000);
-            const targetSession = sessionId || (/^(Page|Runtime|Network|Fetch|Emulation)\./.test(method) ? mainSession : undefined);
+            const targetSession = sessionId || (/^(Page|Runtime|Network|Fetch|Emulation|Input)\./.test(method) ? mainSession : undefined);
             pending.set(key, { resolve, reject, timeout, method }); socket.send(JSON.stringify({ id: key, method, params, ...(targetSession ? { sessionId: targetSession } : {}) }));
         });
     }
@@ -78,12 +86,21 @@ try {
     assert.equal(external.length,0,'No unsolicited Google traffic');
     const report=await evaluate("import('/tools/app-sync/experiments.mjs').then(m=>m.runApplicationExperiments())");
     assert.equal(report.count,14);assert(report.checks.every(c=>c.result==='PASS'));
+    const conflicts=await evaluate("import('/tools/app-sync/conflict-experiments.mjs').then(m=>m.runConflictExperiments())");
+    assert.equal(conflicts.count,28);assert(conflicts.checks.every(c=>c.result==='PASS'));console.log(JSON.stringify(conflicts,null,2));
+    const diagnostics=await evaluate("import('/tools/app-sync/diagnostic-experiments.mjs').then(m=>m.runDiagnosticExperiments())");
+    assert.equal(diagnostics.count,4);assert(diagnostics.checks.every(c=>c.result==='PASS'));console.log(JSON.stringify(diagnostics,null,2));
     await writeFile(join(output,'results.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
     const fixture={schemaVersion:1,templates:[{id:'ui-stable-id',name:'UI workshop',transitionMode:'manual',phases:[{id:'ui-phase',title:'Opening',durationSeconds:600}]}]};
     await evaluate(`document.querySelector('[data-language="en"]').click();localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(fixture))});window.confirm=()=>true;document.getElementById('open-planner').click()`);
     await wait('Boolean(document.getElementById("drive-activate"))');
     assert.equal(await evaluate('document.querySelector(".planner-feedback").textContent'), '');
     assert.equal(await evaluate('document.getElementById("drive-disconnect").hidden'), true);
+    const noAuthTraffic=external.length;
+    await evaluate('document.getElementById("drive-diagnostics").click()');await wait('Boolean(document.getElementById("drive-diagnostic-text"))');
+    assert.equal(await evaluate('JSON.parse(document.getElementById("drive-diagnostic-text").value).storage.readState'),'no-existing-connection');
+    assert.equal(external.length,noAuthTraffic);assert.equal(await evaluate('document.getElementById("drive-diagnostic-text").readOnly'),true);
+    await evaluate('document.querySelector("#drive-diagnostic-output button").click()');
     await evaluate('document.getElementById("drive-activate").click()');
     await wait('localStorage.getItem("easyTimerDevelopmentSyncStorage")==="active" && !document.getElementById("drive-connect").disabled');
     await evaluate('document.getElementById("drive-connect").click()');await wait('Boolean(globalThis.google?.accounts?.oauth2)');
@@ -161,6 +178,89 @@ try {
     await waitSecond(`Boolean(document.querySelector('[aria-label="Edit: Second clean context"]'))`);
     await inSecond('document.getElementById("drive-sync").click()');await waitSecond('document.getElementById("drive-status").textContent==="Synced (last checked)"');
     await evaluate('document.getElementById("drive-sync").click()');await wait(`Boolean(document.querySelector('[aria-label="Edit: Second clean context"]'))`);
+    await evaluate(`document.querySelector('[aria-label="Edit: Second clean context"]').click();document.getElementById('template-name').value='Conflict first';document.getElementById('template-name').dispatchEvent(new Event('input'));document.querySelector('#planner form').requestSubmit()`);
+    await wait(`Boolean(document.querySelector('[aria-label="Edit: Conflict first"]'))`);
+    await inSecond(`document.querySelector('[aria-label="Edit: Second clean context"]').click();document.getElementById('template-name').value='Conflict second';document.getElementById('template-name').dispatchEvent(new Event('input'));document.querySelector('#planner form').requestSubmit()`);
+    await waitSecond(`Boolean(document.querySelector('[aria-label="Edit: Conflict second"]'))`);
+    await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
+    await inSecond('document.getElementById("drive-sync").click()');await waitSecond('!document.getElementById("drive-review").hidden');
+    await evaluate('document.getElementById("drive-sync").click()');await wait('!document.getElementById("drive-review").hidden');
+    for(const language of ['de','en'])for(const theme of ['light','dark','system']){
+        await evaluate(`document.querySelector('[data-language="${language}"]').click();document.querySelector('[data-theme="${theme}"]').click()`);
+        await cdp('Emulation.setDeviceMetricsOverride',{width:theme==='light'?1280:320,height:900,deviceScaleFactor:1,mobile:theme!=='light'});
+        await evaluate('document.getElementById("drive-review").click()');await wait('Boolean(document.getElementById("drive-conflict-review"))');
+        assert.equal(await evaluate('document.querySelectorAll("#drive-conflict-review input:checked").length'),0);
+        assert.equal(await evaluate('document.activeElement.id'),'drive-conflict-title');
+        assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+        await evaluate('document.querySelector("#drive-conflict-review input").focus()');
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
+        assert.equal(await evaluate('document.querySelector("#drive-conflict-review input:checked").value'),'right');
+        await evaluate('document.getElementById("drive-conflict-review").scrollIntoView()');
+        const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(output,'conflict-'+language+'-'+theme+'.png'),Buffer.from(shot.data,'base64'));
+    }
+    await evaluate('document.querySelector("#drive-conflict-review input[value=both]").click();document.getElementById("drive-preview-resolution").click()');
+    await wait('Boolean(document.getElementById("drive-confirm-resolution"))');
+    assert.equal(await evaluate('easyTimerDevelopment.createStore().load().then(d=>d.templates.length)'),1,'Preview must not mutate local library');
+    loseNextUploadAcknowledgement=true;
+    await evaluate('document.getElementById("drive-confirm-resolution").click()');await wait('document.getElementById("drive-status").textContent.startsWith("Synchronization failed")');
+    const pendingTraffic=external.length,pendingStatus=await evaluate('document.getElementById("drive-status").textContent');
+    await evaluate('document.getElementById("drive-diagnostics").click()');await wait('Boolean(document.getElementById("drive-diagnostic-text"))');
+    const pendingDiagnostic=await evaluate('JSON.parse(document.getElementById("drive-diagnostic-text").value)');
+    assert.equal(pendingDiagnostic.reconciliation.present,true);assert.equal(pendingDiagnostic.reconciliation.stage,'prepared');
+    assert.equal(pendingDiagnostic.reconciliation.acknowledgement,'not-locally-verified');
+    assert.equal(external.length,pendingTraffic);assert.equal(await evaluate('document.getElementById("drive-status").textContent'),pendingStatus);
+    const resolutionPosts=drive.calls.filter(c=>c.method==='POST').length;
+    await evaluate('globalThis.beforeRecoveryReload=true');await cdp('Page.reload');await wait('!globalThis.beforeRecoveryReload && document.getElementById("primary")?.title?.length>0');
+    blockResolutionReadback=false;
+    await evaluate('document.getElementById("open-planner").click()');await wait('Boolean(document.getElementById("drive-connect"))');
+    await evaluate('document.getElementById("drive-connect").click()');await wait('Boolean(globalThis.google?.accounts?.oauth2)');
+    await evaluate('document.getElementById("drive-connect").click()');await wait('!document.getElementById("drive-sync").disabled');
+    await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
+    assert.equal(drive.calls.filter(c=>c.method==='POST').length,resolutionPosts,'Page reload must recover the exact reconciliation using GET only');
+    const resolved=await evaluate('easyTimerDevelopment.createStore().load()');
+    assert.equal(resolved.templates.length,2);assert(resolved.templates[1].name.endsWith(' (1)'));
+    await inSecond('document.getElementById("drive-sync").click()');await waitSecond('document.getElementById("drive-status").textContent==="Synced (last checked)"');
+    assert.deepEqual(await inSecond('easyTimerDevelopment.createStore().load()'),resolved);
+    console.log('PASS: actual two-context conflict, no default, DE/EN Light/Dark/System desktop/320px, native radio keyboard, explicit preview/confirmation and clean peer adoption.');
+    const sameEdit=`[...document.querySelectorAll('#planner button')].find(b=>b.getAttribute('aria-label')===${JSON.stringify('Edit: '+resolved.templates[0].name)}).click();document.getElementById('template-name').value='Same content, new history';document.getElementById('template-name').dispatchEvent(new Event('input'));document.querySelector('#planner form').requestSubmit()`;
+    await evaluate(sameEdit);await wait(`Boolean(document.querySelector('[aria-label="Edit: Same content, new history"]'))`);
+    await inSecond(sameEdit);await waitSecond(`Boolean(document.querySelector('[aria-label="Edit: Same content, new history"]'))`);
+    await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
+    await inSecond('document.getElementById("drive-sync").click()');await waitSecond('!document.getElementById("drive-review").hidden');
+    await evaluate('document.getElementById("drive-sync").click()');await wait('!document.getElementById("drive-review").hidden');
+    const beforeFree=await evaluate('easyTimerDevelopment.createStore().load()'),beforeFreePosts=drive.calls.filter(c=>c.method==='POST').length;
+    for(const language of ['de','en'])for(const theme of ['light','dark','system']){
+        await evaluate(`document.querySelector('[data-language="${language}"]').click();document.querySelector('[data-theme="${theme}"]').click()`);
+        await cdp('Emulation.setDeviceMetricsOverride',{width:theme==='light'?1280:320,height:900,deviceScaleFactor:1,mobile:theme!=='light'});
+        await evaluate('document.getElementById("drive-review").click()');await wait('Boolean(document.getElementById("drive-confirm-resolution"))');
+        assert.equal(await evaluate('document.querySelectorAll("#drive-conflict-review input[type=radio]").length'),0);
+        assert.equal(await evaluate('document.getElementById("drive-conflict-title").textContent'),language==='de'?'Zusammenführung prüfen':'Review reconciliation');
+        assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+        for(const t of beforeFree.templates)assert(await evaluate(`document.getElementById('drive-conflict-review').textContent.includes(${JSON.stringify(t.name)})`));
+        assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'),beforeFree);
+        assert.equal(drive.calls.filter(c=>c.method==='POST').length,beforeFreePosts,'No automatic publication on review or theme changes');
+        await evaluate('document.getElementById("drive-confirm-resolution").focus()');assert.equal(await evaluate('document.activeElement.id'),'drive-confirm-resolution');
+        const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(output,'proposed-'+language+'-'+theme+'.png'),Buffer.from(shot.data,'base64'));
+    }
+    loseNextUploadAcknowledgement=true;
+    await cdp('Page.bringToFront');
+    await evaluate('document.getElementById("drive-confirm-resolution").focus()');
+    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    await wait('document.getElementById("drive-status").textContent.startsWith("Synchronization failed")');
+    const freePosts=drive.calls.filter(c=>c.method==='POST').length;
+    await evaluate('globalThis.beforeFreeReload=true');await cdp('Page.reload');await wait('!globalThis.beforeFreeReload && document.getElementById("primary")?.title?.length>0');
+    blockResolutionReadback=false;
+    await evaluate('document.getElementById("open-planner").click()');await wait('Boolean(document.getElementById("drive-connect"))');
+    await evaluate('document.getElementById("drive-connect").click()');await wait('Boolean(globalThis.google?.accounts?.oauth2)');
+    await evaluate('document.getElementById("drive-connect").click()');await wait('!document.getElementById("drive-sync").disabled');
+    await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
+    assert.equal(drive.calls.filter(c=>c.method==='POST').length,freePosts,'Conflict-free page reload recovers using GET only');
+    assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'),beforeFree);
+    await inSecond('document.getElementById("drive-sync").click()');await waitSecond('document.getElementById("drive-status").textContent==="Synced (last checked)"');
+    assert.deepEqual(await inSecond('easyTimerDevelopment.createStore().load()'),beforeFree);
+    console.log('PASS: conflict-free actual UI, complete preview/no choices, DE/EN/themes/320px, explicit keyboard confirmation, simulated lost acknowledgement and real page reload GET-only recovery.');
     await cdp('Target.disposeBrowserContext',{browserContextId});
     console.log('PASS: independent clean browser context explicitly adopts stable IDs, edits, publishes and fast-forwards a clean first client.');
     assert.deepEqual(errors,[]);console.log('PASS: actual Editor activation/upload/edit/export/draft guards, reload, DE/EN/themes/320px and focus. Evidence: '+output);

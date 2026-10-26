@@ -1,5 +1,6 @@
 import { downloadRundowns } from '../../src/js/portability.mjs';
 import { SCOPE } from '../sync-poc/core.mjs';
+import { renderConflictReview } from './conflict-panel.mjs';
 const CLIENT_ID = '896158829302-h2rlgdbilmek2b1lmkr65kealt2t5rr8.apps.googleusercontent.com';
 const copy = {
     en: {
@@ -26,7 +27,20 @@ const copy = {
     },
 };
 // An empty editor code clears feedback; actual unknown failures remain visible.
-export const syncFeedback = (code, language) => code ? copy[language][code] || copy[language].syncError : '';
+export const syncFeedback = (code, language) => {
+    const extra = language === 'de' ? {
+        staleReview: 'Die Daten haben sich geändert. Bitte den Konflikt erneut prüfen.',
+        unpublishedChanges: 'Neuere lokale Änderungen bleiben erhalten. Erst synchronisieren; diese Prüfung kann nicht angewendet werden.',
+        unsupportedConflict: 'Dieser Konflikt kann hier noch nicht sicher aufgelöst werden. Alle Fassungen bleiben erhalten.',
+        pendingUpload: 'Ein ausstehender Upload muss zuerst über Jetzt synchronisieren wiederaufgenommen werden.',
+    } : {
+        staleReview: 'The data changed. Review the conflict again.',
+        unpublishedChanges: 'Newer local changes are retained. Sync first; this review cannot be applied.',
+        unsupportedConflict: 'This conflict cannot yet be resolved safely here. All versions are retained.',
+        pendingUpload: 'Resume the pending upload with Sync now before reviewing a conflict.',
+    };
+    return code ? extra[code] || copy[language][code] || copy[language].syncError : '';
+};
 let gisPromise, authEpoch = 0;
 function loadGIS() {
     if (!gisPromise) gisPromise = new Promise((resolve, reject) => {
@@ -46,7 +60,9 @@ export function renderSyncPanel(parent, context, sync, panels) {
     const update = async () => {
         if (!section.isConnected) { panels.delete(update); return; }
         const id = ++updateId; let code; try { code = await sync.status(); } catch { code = 'syncError'; } if (id !== updateId) return;
-        status.textContent = text[code] || text.syncError;
+        status.textContent = text[code] || syncFeedback(code, context.language);
+        reviewButton.hidden = !['reviewRequired', 'staleReview', 'unpublishedChanges', 'unsupportedConflict', 'pendingUpload'].includes(code);
+        reviewButton.disabled = !sync.client.connected || sync.busy;
         activate.hidden = sync.active(); adopt.hidden = !sync.adoptionAvailable;
         connect.disabled = !sync.active() || sync.busy;
         syncButton.disabled = !sync.client.connected || sync.busy; adopt.disabled = !sync.client.connected || sync.busy;
@@ -71,10 +87,42 @@ export function renderSyncPanel(parent, context, sync, panels) {
         } catch { status.textContent = text.syncError; }
     });
     const syncButton = button('drive-sync', text.sync, () => execute(() => sync.sync()));
+    const reviewButton = button('drive-review', context.language === 'de' ? 'Konflikt prüfen' : 'Review conflict', async () => {
+        if (!context.canChange() || sync.busy) return;
+        try {
+            section.querySelector('#drive-conflict-review')?.remove();
+            const review = await sync.reviewConflict();
+            if (!section.isConnected || !context.canChange()) return;
+            renderConflictReview(section, review, sync, context, syncFeedback, () => reviewButton.focus());
+        } catch (e) { status.textContent = syncFeedback(e.message, context.language); }
+    });
     const adopt = button('drive-adopt', text.adopt, () => { if (window.confirm(text.adoptConfirm)) execute(() => sync.sync({ adopt: true })); });
     const disconnect = button('drive-disconnect', text.disconnect, () => { authEpoch++; sync.disconnect(); update(); });
     const backupError = context.language === 'de' ? 'Die Sicherung konnte nicht vorbereitet werden. Lokale Daten bleiben unverändert. Bitte erneut versuchen.' : 'The backup could not be prepared. Local data is unchanged. Please try again.';
     const backup = button('drive-backup', text.backup, async () => { try { downloadRundowns(await sync.backup()); } catch { status.textContent = backupError; } });
     const otherBackup = button('drive-legacy-backup', text.legacyBackup, () => { try { downloadRundowns(sync.legacyBackup(), 'easytimer-other-browser-copy.json'); } catch { status.textContent = backupError; } });
+    const diagnostic = button('drive-diagnostics', context.language === 'de' ? 'Sync-Diagnose anzeigen' : 'Show sync diagnostics', async () => {
+        // Deliberately not execute(): no refresh, sync, auth, adoption or state reset.
+        try {
+            const report = await sync.diagnosticReport();
+            if (!section.isConnected) return;
+            section.querySelector('#drive-diagnostic-output')?.remove();
+            const output = document.createElement('section'); output.id = 'drive-diagnostic-output';
+            const label = document.createElement('label'); label.htmlFor = 'drive-diagnostic-text';
+            label.textContent = context.language === 'de' ? 'Lokale Sync-Diagnose (nur lesend, manuell kopieren)' : 'Local sync diagnostics (read-only, copy manually)';
+            const area = document.createElement('textarea'); area.id = label.htmlFor; area.readOnly = true; area.rows = 16;
+            area.style.cssText = 'display:block;box-sizing:border-box;width:100%;max-width:100%;font:12px monospace';
+            area.value = JSON.stringify(report, null, 2);
+            const close = document.createElement('button'); close.type = 'button'; close.textContent = context.language === 'de' ? 'Schließen' : 'Close';
+            close.onclick = () => { output.remove(); diagnostic.focus(); };
+            output.append(label,area,close);section.append(output);area.focus();area.select();
+        } catch {
+            // Use a separate diagnostic notice; do not overwrite synchronization feedback.
+            section.querySelector('#drive-diagnostic-output')?.remove();
+            const notice = document.createElement('p'); notice.id = 'drive-diagnostic-output'; notice.setAttribute('role','status');
+            notice.textContent = context.language === 'de' ? 'Lokale Diagnose nicht verfügbar. Es wurden keine Sync-Aktionen ausgeführt.' : 'Local diagnostics unavailable. No sync actions were performed.';
+            section.append(notice);
+        }
+    });
     section.append(heading, note, status, actions); parent.append(section); panels.add(update); update();
 }

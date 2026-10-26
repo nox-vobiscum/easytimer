@@ -93,12 +93,12 @@ export function analyzeReconciliation(graph, first, second) {
     return { status: proposal.blocked ? 'blocked' : proposal.conflicts.length ? 'conflict' : 'proposed', reason: proposal.blocked,
         baseId: bases[0], leftId, rightId, proposal };
 }
-export async function createReconciliation(graph, a, b, { operationId, choices = {}, createId = () => crypto.randomUUID() } = {}) {
+export async function createReconciliation(graph, a, b, { operationId, choices = {}, createId = () => crypto.randomUUID(), numberedCopies = false } = {}) {
     const analysis = analyzeReconciliation(graph, a, b);
     requireThat(analysis.status !== 'blocked', analysis.reason);
     // A named parent must be an observed head; late heads may remain outside this decision.
     requireThat(graph.heads.includes(a) && graph.heads.includes(b), 'PARENTS_NOT_REVIEWED_HEADS');
-    const decisions = allocateChoices(analysis.proposal, choices, createId);
+    const decisions = allocateChoices(analysis.proposal, choices, createId, numberedCopies);
     const applied = applyChoices(analysis.proposal, decisions, analysis.proposal.conflicts.filter(row => row.conflict === 'restoration-review').map(row => row.id));
     return createSnapshot({ purpose: 'easytimer-sync-snapshot-v1', syncFormatVersion: 1,
         libraryId: graph.get(a).libraryId, operationId, parents: [a, b], ...applied,

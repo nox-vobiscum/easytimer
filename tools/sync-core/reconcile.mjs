@@ -2,6 +2,17 @@ import { canonicalJSON, normalizeState, requireThat, validId, fail } from './can
 
 const equal = (a, b) => canonicalJSON(a) === canonicalJSON(b);
 const absent = () => ({ kind: 'absent' });
+export function numberedCopyName(name, names) {
+    const used = new Set(names.map(value => value.normalize('NFC').toLowerCase()));
+    const stem = name.replace(/\s+\(\d+\)$/u, '');
+    for (let number = 1; number <= 100000; number++) {
+        const suffix = ` (${number})`; let prefix = '';
+        for (const point of stem) { if (prefix.length + point.length + suffix.length > 120) break; prefix += point; }
+        const candidate = prefix.trimEnd() + suffix;
+        if (!used.has(candidate.normalize('NFC').toLowerCase())) return candidate;
+    }
+    fail('COPY_NAME_LIMIT');
+}
 export function itemStates(input) {
     const state = normalizeState(input), map = new Map();
     for (const template of state.library.templates) map.set(template.id, { kind: 'live', template });
@@ -75,6 +86,7 @@ export function applyChoices(input, decisions = [], reviewedRestorations = []) {
         for (const t of state.library.templates) { used.add(t.id); for (const p of t.phases) used.add(p.id); }
     }
     const templates = new Map(), deleted = new Set(), copies = [];
+    const names = [proposal.base, proposal.left, proposal.right].flatMap(s => s.library.templates.map(t => t.name));
     for (const row of proposal.rows) {
         const decision = choices.get(row.id); let selected = row.proposed;
         if (decision) {
@@ -88,7 +100,9 @@ export function applyChoices(input, decisions = [], reviewedRestorations = []) {
                 const copy = decision.copy;
                 requireThat(copy && Array.isArray(copy.phaseIds) && copy.phaseIds.length === source.phases.length, 'INVALID_COPY');
                 for (const id of [copy.id, ...copy.phaseIds]) { validId(id); requireThat(!used.has(id), 'COPY_ID_COLLISION'); used.add(id); }
-                copies.push({ ...structuredClone(source), id: copy.id, phases: source.phases.map((p, i) => ({ ...p, id: copy.phaseIds[i] })) });
+                if (Object.hasOwn(copy, 'name')) requireThat(copy.name === numberedCopyName(source.name, names), 'INVALID_COPY_NAME');
+                const name = copy.name ?? source.name; names.push(name);
+                copies.push({ ...structuredClone(source), name, id: copy.id, phases: source.phases.map((p, i) => ({ ...p, id: copy.phaseIds[i] })) });
             }
         }
         requireThat(selected && selected.kind !== 'absent', 'MISSING_DECISION_DATA');
@@ -102,7 +116,7 @@ export function applyChoices(input, decisions = [], reviewedRestorations = []) {
     const restoredRundownIds = state.library.templates.filter(t => [proposal.left, proposal.right].some(s => s.deletedRundownIds.includes(t.id))).map(t => t.id).sort();
     return { ...state, restoredRundownIds };
 }
-export function allocateChoices(proposal, choices, createId) {
+export function allocateChoices(proposal, choices, createId, numberedCopies = false) {
     requireThat(typeof createId === 'function', 'ID_FACTORY_REQUIRED');
     canonicalJSON(choices);
     requireThat(choices && !Array.isArray(choices) && Object.keys(choices).every(id => proposal.conflicts.some(c => c.id === id)), 'UNEXPECTED_DECISION');
@@ -115,9 +129,12 @@ export function allocateChoices(proposal, choices, createId) {
         for (let i = 0; i < 100; i++) { const id = createId(); validId(id); if (!used.has(id)) { used.add(id); return id; } }
         fail('ID_FACTORY_COLLISION');
     };
+    const names = [proposal.base, proposal.left, proposal.right].flatMap(s => s.library.templates.map(t => t.name));
     return proposal.conflicts.map(conflict => {
         const choice = choices[conflict.id]; requireThat(['left', 'right', 'both'].includes(choice), 'UNRESOLVED_CONFLICT');
         const source = conflict.right.kind === 'live' ? conflict.right.template : conflict.left.template;
-        return { id: conflict.id, choice, copy: choice === 'both' ? { id: fresh(), phaseIds: source.phases.map(() => fresh()) } : null };
+        const copy = choice === 'both' ? { id: fresh(), phaseIds: source.phases.map(() => fresh()) } : null;
+        if (copy && numberedCopies) { copy.name = numberedCopyName(source.name, names); names.push(copy.name); }
+        return { id: conflict.id, choice, copy };
     });
 }

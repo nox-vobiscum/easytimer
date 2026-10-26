@@ -47,6 +47,7 @@ test('normal server exposes no Google tools; explicit development server changes
             const html = await (await fetch(url)).text();
             assert.equal(html.includes('/tools/app-sync/entry.mjs'), enabled);
             assert.equal((await fetch(url + '/tools/app-sync/panel.mjs')).status, enabled ? 200 : 404);
+            assert.equal((await fetch(url + '/tools/app-sync/diagnostics.mjs')).status, enabled ? 200 : 404);
             assert.equal((await fetch(url + '/service-worker.js')).status, enabled ? 404 : 200);
             assert.equal((await fetch(url + '/docs/backlog.md')).status, 404);
         } finally { await new Promise(done => server.close(done)); }
