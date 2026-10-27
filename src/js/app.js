@@ -1,5 +1,5 @@
 import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=35';
-import { createPlanner } from './planner.js?v=37';
+import { createPlanner } from './planner.js?v=38';
 import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=35';
 import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=35';
@@ -86,14 +86,16 @@ let fullscreenRequested = false;
 let fullscreenRequestId = 0;
 let menuOpen = false;
 let plannerOpen = false;
+let navigationRevision = 0;
 let clockOnly = false;
 const planner = createPlanner($('planner'), () => {
+    navigationRevision += 1;
     plannerOpen = false;
     document.body.classList.remove('planner-open');
     $('planner').hidden = true;
     updatePresentation();
     $('menu-toggle').focus({ preventScroll: true });
-}, language, development);
+}, language, development, id => loadSavedSession(id, true));
 const landscape = matchMedia('(orientation: landscape)');
 const coarsePointer = matchMedia('(any-pointer: coarse)');
 function isSmartphone() {
@@ -229,6 +231,7 @@ async function switchMode(nextMode) {
     const hasProgress = timer && (mode === 'session' ? hasSessionProgress(run, timer) : timer.status !== 'READY');
     if (hasProgress && !window.confirm(copy[language].switchConfirm)) { dispatch({ type: 'TICK' }); return; }
     if (plannerOpen && !planner.close()) { dispatch({ type: 'TICK' }); return; }
+    navigationRevision += 1;
     if (mode === 'quick') quickDurationMs = timer.durationMs;
     mode = nextMode; run = null; limitExceeded = false;
     pickerOpen = nextMode === 'session';
@@ -407,14 +410,30 @@ $('reload-templates').addEventListener('click', async () => { const loading = lo
 $('session-template').addEventListener('change', () => {
     $('prepare-session').disabled = !pickerTemplates.some(item => item.id === $('session-template').value);
 });
-$('prepare-session').addEventListener('click', () => {
+async function loadSavedSession(id, fromEditor = false) {
+    const navigation = navigationRevision;
+    const saved = await templateStore.load();
+    if (navigation !== navigationRevision || (fromEditor ? !plannerOpen : !pickerOpen || plannerOpen)) return;
+    const template = saved.templates.find(item => item.id === id);
+    if (!template) throw new Error('Missing saved Rundown');
+    const prepared = prepareSession(template);
+    dispatch({ type: 'TICK' });
+    const hasProgress = timer && (mode === 'session' ? hasSessionProgress(run, timer) : timer.status !== 'READY');
+    if (hasProgress && !window.confirm(copy[language].switchConfirm)) { dispatch({ type: 'TICK' }); return; }
+    if (fromEditor && !planner.close()) return;
+    if (mode === 'quick' && timer) quickDurationMs = timer.durationMs;
+    mode = 'session'; run = prepared.run; timer = prepared.clock;
+    pickerOpen = false; limitExceeded = false;
+    navigationRevision += 1;
+    setMenuOpen(false);
+    updatePresentation(); $('primary').focus({ preventScroll: true });
+}
+$('prepare-session').addEventListener('click', async () => {
     if (mode !== 'session' || !pickerOpen || plannerOpen) return;
-    const template = pickerTemplates.find(item => item.id === $('session-template').value);
-    if (!template) return;
+    const id = $('session-template').value;
+    if (!id) return;
     try {
-        const prepared = prepareSession(template);
-        run = prepared.run; timer = prepared.clock; pickerOpen = false;
-        updatePresentation(); $('primary').focus({ preventScroll: true });
+        await loadSavedSession(id);
     } catch { pickerMessage = 'loadTemplatesError'; render(); }
 });
 $('next').addEventListener('click', () => {
@@ -437,6 +456,7 @@ $('export-rundown').addEventListener('click', () => {
     }
 });
 async function openEditor(newDraft = false) {
+    navigationRevision += 1;
     setMenuOpen(false);
     // Navigation invalidates fullscreen requests; returning never restores them implicitly.
     plannerOpen = true;

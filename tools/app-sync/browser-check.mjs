@@ -261,6 +261,15 @@ try {
     await inSecond('document.getElementById("drive-sync").click()');await waitSecond('document.getElementById("drive-status").textContent==="Synced (last checked)"');
     assert.deepEqual(await inSecond('easyTimerDevelopment.createStore().load()'),beforeFree);
     console.log('PASS: conflict-free actual UI, complete preview/no choices, DE/EN/themes/320px, explicit keyboard confirmation, simulated lost acknowledgement and real page reload GET-only recovery.');
+    const beforeLaunchCalls = drive.calls.length;
+    await evaluate('document.querySelector(".rundown-launch").click()');
+    await wait('!document.body.classList.contains("planner-open") && document.getElementById("status").textContent==="Ready"');
+    assert.equal(await evaluate('document.activeElement.id'), 'primary');
+    assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'), beforeFree);
+    assert.equal(drive.calls.length, beforeLaunchCalls, 'Direct launch reads asynchronous local storage without Google requests');
+    await evaluate('document.getElementById("open-planner").click()');
+    await wait('Boolean(document.querySelector(".rundown-launch"))');
+    console.log('PASS: direct Session launch through asynchronous activated IndexedDB, READY/focus, saved library and remote transport unchanged.');
     await cdp('Target.disposeBrowserContext',{browserContextId});
     console.log('PASS: independent clean browser context explicitly adopts stable IDs, edits, publishes and fast-forwards a clean first client.');
     assert.deepEqual(errors,[]);console.log('PASS: actual Editor activation/upload/edit/export/draft guards, reload, DE/EN/themes/320px and focus. Evidence: '+output);

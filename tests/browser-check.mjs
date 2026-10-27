@@ -12,6 +12,7 @@ import { checkClockView } from './clock-view-browser.mjs';
 import { checkAutomaticSession } from './automatic-session-browser.mjs';
 import { checkMenuPolish } from './menu-browser.mjs';
 import { checkRundownEntry } from './rundown-entry-browser.mjs';
+import { checkDirectLaunch } from './direct-launch-browser.mjs';
 import { checkPortability } from './portability-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
@@ -158,8 +159,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=36'&&js==='js/app.js?v=37'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'36','app.js':'37','planner.js':'37','templates.mjs':'37','timer.mjs':'35','session.mjs':'35','time-visuals.mjs':'35','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=38'&&js==='js/app.js?v=38'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'38','app.js':'38','planner.js':'38','templates.mjs':'37','timer.mjs':'35','session.mjs':'35','time-visuals.mjs':'35','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -172,6 +173,7 @@ try {
     assert.equal(await text('#time'),'05:00'); await checkTitle('READY');
     await checkMenuPolish({evaluate,click,text,cdp});
     await checkRundownEntry({evaluate,click,text,cdp});
+    await checkDirectLaunch({evaluate,click,text,cdp});
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
     assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
     assert.equal(await evaluate(`document.querySelector('link[rel="manifest"]').getAttribute('href')`), 'manifest.webmanifest');

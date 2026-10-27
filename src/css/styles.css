@@ -311,6 +311,8 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
 .planner input[type="file"] { max-width:100%; font-size:.85rem; padding:.35rem; cursor:pointer; }
 .planner input[type="file"]::file-selector-button { min-height:36px; margin-right:.5rem; border:0; border-radius:.35rem; padding:.35rem .5rem; background:var(--selected); color:var(--text); font:inherit; cursor:pointer; }
 .planner .rundown-export { display:grid; place-items:center; min-width:44px; width:44px; padding:0; border-color:transparent; background:transparent; color:var(--muted); }
+.rundown-launch { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; min-height:44px; }
+.rundown-launch svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linejoin:round; flex-shrink:0; }
 .rundown-export svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .planner .rundown-export:hover { background:var(--selected); color:var(--text); }
 .import-review h3 { margin:.5rem 0; font-size:.95rem; overflow-wrap:anywhere; }

@@ -251,10 +251,10 @@ async function checkCompactPlanner({ evaluate, click, text, cdp }) {
         assert.equal(await evaluate(`document.querySelector('.phase-duration input').getAttribute('aria-describedby')`), 'planner-feedback');
         await click('[data-language="en"]'); await action('Cancel');
         assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`), original);
-        await click('.template-library li:nth-child(2) button:first-child');
+        await click('.template-library li:nth-child(2) button:not(.rundown-launch)');
         assert.equal(await evaluate(`document.querySelector('.phase-duration input').value`), '6000');
         assert.match(await text('#planner-total'), /100:00:00/);
-        await action('Cancel'); await click('.template-library li:nth-child(3) button:first-child');
+        await action('Cancel'); await click('.template-library li:nth-child(3) button:not(.rundown-launch)');
         assert.match(await text('#planner-total'), /1000:00:00/);
         await action('+ Add phase'); await field('.phase-list li:last-child .phase-title input','Over limit'); await action('Save');
         assert.match(await text('.planner-feedback'), /60,000/);
@@ -449,7 +449,7 @@ async function checkInitialPhase({ evaluate, click, text }) {
         const saved = await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates')).templates.at(-1)`);
         assert.deepEqual(saved.phases, [{id:persistedId,title:'Opening',durationSeconds:600}]);
         assert.deepEqual(await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates')).templates.slice(0,-1)`), JSON.parse(baseline).templates, 'Saving a new draft preserves all existing templates');
-        await click('.template-library li:last-child button:first-child');
+        await click('.template-library li:last-child button:not(.rundown-launch)');
         assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length`), 1, 'Editing does not add another phase');
         assert.equal(await phaseId(), persistedId);
         await action('Cancel'); assert.equal(await evaluate('window.initialPhasePrompts'), 3, 'An existing template also opens clean');
@@ -467,7 +467,7 @@ async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
     const field = (selector, value) => evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
     const open = async () => { await click('#menu-toggle'); await click('#open-planner'); };
-    const editFirst = () => click(`.template-library li:nth-child(${offset + 1}) button:first-child`);
+    const editFirst = () => click(`.template-library li:nth-child(${offset + 1}) button:not(.rundown-launch)`);
     const mockConfirmation = () => evaluate(`window.correctionConfirm=window.confirm;window.confirmMessages=[];window.acceptConfirm=true;window.confirm=message=>{window.confirmMessages.push(message);return window.acceptConfirm;};`);
     async function reload() {
         const previous = await evaluate('performance.timeOrigin');
@@ -550,7 +550,7 @@ async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
             await delay(50);
         }
         assert.equal(ready, true, 'The independent second tab initializes');
-        await evaluate(`(()=>{const w=window.correctionOther;w.document.querySelector('#menu-toggle').click();w.document.querySelector('#open-planner').click();w.document.querySelector('.template-library li:nth-child(${offset + 1}) button:first-child').click();const input=w.document.querySelector('#template-name');input.value='Remote saved revision';input.dispatchEvent(new w.Event('input',{bubbles:true}));Array.from(w.document.querySelectorAll('#planner button')).find(b=>b.textContent==='Save').click();})()`);
+        await evaluate(`(()=>{const w=window.correctionOther;w.document.querySelector('#menu-toggle').click();w.document.querySelector('#open-planner').click();w.document.querySelector('.template-library li:nth-child(${offset + 1}) button:not(.rundown-launch)').click();const input=w.document.querySelector('#template-name');input.value='Remote saved revision';input.dispatchEvent(new w.Event('input',{bubbles:true}));Array.from(w.document.querySelectorAll('#planner button')).find(b=>b.textContent==='Save').click();})()`);
         const remote = await stored();
         assert.equal(remote.templates[offset].name, 'Remote saved revision');
         let notified = false;

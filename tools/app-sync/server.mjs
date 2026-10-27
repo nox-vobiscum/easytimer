@@ -17,7 +17,7 @@ export async function startServer({ port = 8000, enabled = false } = {}) {
         if ((relative.startsWith('tools/') && (!enabled || !development.has(relative))) || !/^(src\/(?:index\.html|service-worker\.js|manifest\.webmanifest|js\/[a-z-]+\.(?:js|mjs)|css\/styles\.css|assets\/branding\/[a-zA-Z0-9_.-]+)|tools\/)/.test(relative) || relative.includes('..') || (enabled && relative === 'src/service-worker.js')) { res.writeHead(404); res.end(); return; }
         try {
             let body = await readFile(resolve(root, relative));
-            if (enabled && relative === 'src/index.html') body = body.toString().replace('js/app.js?v=37', '/tools/app-sync/entry.mjs');
+            if (enabled && relative === 'src/index.html') body = body.toString().replace('js/app.js?v=38', '/tools/app-sync/entry.mjs');
             const type = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' }[extname(relative)];
             res.writeHead(200, { 'Content-Type': type || 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
                 'Cross-Origin-Opener-Policy': 'same-origin-allow-popups', 'Referrer-Policy': 'no-referrer-when-downgrade' }); res.end(body);

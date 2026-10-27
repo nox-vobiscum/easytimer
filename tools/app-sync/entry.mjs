@@ -16,4 +16,4 @@ globalThis.easyTimerDevelopment = {
 window.addEventListener('storage', () => panels.forEach(update => update()));
 window.addEventListener('focus', () => panels.forEach(update => update()));
 window.addEventListener('pagehide', () => sync.disconnect());
-await import('/js/app.js?v=37');
+await import('/js/app.js?v=38');

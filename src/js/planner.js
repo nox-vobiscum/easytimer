@@ -38,6 +38,7 @@ const copy = {
     },
 };
 Object.assign(copy.en, {
+    launch: 'Launch session', launchFailed: 'This saved Rundown could not be loaded. Refresh the list and try again. Your current timer has not been replaced.',
     importConflict: 'Import blocked: Rundowns changed in another tab. Existing Rundowns remain unchanged; the import preview is retained.',
     importStorageWrite: 'Import failed: the data could not be saved. Existing Rundowns remain unchanged; the import preview is retained.',
     refreshLibrary: 'Refresh list',
@@ -56,6 +57,7 @@ Object.assign(copy.en, {
     exportStarted: 'Download requested. Keep the JSON file as your backup.',
 });
 Object.assign(copy.de, {
+    launch: 'Session starten', launchFailed: 'Dieser gespeicherte Rundown konnte nicht geladen werden. Bitte die Liste aktualisieren und erneut versuchen. Der bisherige Timer wurde nicht ersetzt.',
     importConflict: 'Import blockiert: Rundowns wurden in einem anderen Tab geändert. Bestehende Rundowns bleiben unverändert; die Importvorschau bleibt erhalten.',
     importStorageWrite: 'Import fehlgeschlagen: Die Daten konnten nicht gespeichert werden. Bestehende Rundowns bleiben unverändert; die Importvorschau bleibt erhalten.',
     refreshLibrary: 'Liste aktualisieren',
@@ -84,10 +86,11 @@ function element(tag, text, className) {
     return node;
 }
 
-export function createPlanner(root, onClose, initialLanguage, services = null) {
+export function createPlanner(root, onClose, initialLanguage, services = null, onLaunch = null) {
     const storeFactory = services ? services.createStore : () => createTemplateStore(() => localStorage);
     const store = storeFactory();
     let writing = false;
+    let launching = false;
     function io(method, data) {
         const value = store[method](data);
         if (!value?.then) return value;
@@ -435,6 +438,22 @@ export function createPlanner(root, onClose, initialLanguage, services = null) {
                 remove.setAttribute('aria-label', `${text.remove}: ${item.name}`);
                 const exportButton = phaseAction(text.exportOne(item.name), 'M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5', () => exportSaved(item.id));
                 exportButton.className = 'rundown-export';
+                if (onLaunch) {
+                    const launch = phaseAction(`${text.launch}: ${item.name}`, 'm8 5 11 7-11 7Z', async () => {
+                        if (writing || launching) return;
+                        launching = true; root.inert = true;
+                        try { await onLaunch(item.id); }
+                        catch { feedback('launchFailed'); }
+                        finally {
+                            launching = false; root.inert = false;
+                            if (active && launch.isConnected) launch.focus({ preventScroll: true });
+                        }
+                    });
+                    launch.className = 'rundown-launch';
+                    launch.dataset.rundownId = item.id;
+                    launch.append(element('span', text.launch));
+                    actions.append(launch);
+                }
                 actions.append(edit, exportButton, remove); row.append(info, actions); list.append(row);
             }
             root.append(list); renderBackup();

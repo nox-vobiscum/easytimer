@@ -40,6 +40,7 @@ The ST-001 density/reordering, initial-phase default and final repositioning-pop
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
 | ST-002 | Executable Session Timer | A and B deployed | B v28 production verified at ead2ad1; see ST-002B record |
 | UX-011 | Confirm actions that end an active Rundown | Candidate / owner-reported change request | Audit Quick Timer navigation and all run-ending actions; preserve run on Cancel |
+| UX-012 | Direct Session Launch | Locally functionally and visually accepted by the product owner | Saved Editor row loads a fresh Session Run READY; guarded replacement, no automatic start |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
 | ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
 | QT-002 | More flexible Quick Timer duration controls | Later | Preserve current one-timer simplicity |
@@ -118,6 +119,14 @@ The following packages are **already covered in more detail** by the ET-001 deci
 Implement a **Session Run** separate from reusable **Workshop Templates**. Use ordered named phases; manual/automatic phase transitions; large current countdown; subtle next-phase preview; calculated workshop time remaining; final completion and overtime. Define the relationship to the existing Quick Timer and mode switching deliberately. Preserve the single-clock/single-authoritative-state principle.
 
 **Status:** ST-002A and [ST-002B](ST-002B_AUTOMATIC_SESSION_TIMER.md) are deployed and verified at `ead2ad1` (v28), with UX-009/UX-010 and centering. ST-002B provides automatic templates, deadline-based multi-phase catch-up and automatic final overtime. Annotated `release/st-002b` remains at implementation `f6a55e8`; rollback is preserved. Live editing, statistics, reload recovery and active-run transition-mode switching remain future scope.
+
+### UX-012 — Direct Session Launch
+
+Each saved Rundown row offers **Session starten / Launch session** before Edit. The application reloads the current saved definition by ID through the existing local or development-only asynchronous adapter and reuses `prepareSession()` for a validated independent run. The existing picker uses the same helper. Phase 1 remains READY until the user presses Start; saved Rundowns are unchanged.
+
+Replacing a running, paused, overtime or otherwise progressed Quick/Session timer requires the existing localized confirmation after elapsed-time reconciliation. Untouched phase-1 READY can be replaced without confirmation. Cancel preserves the Editor and current run; missing data/read failures do not replace the timer. No action is added to drafts or import review. Existing editing, export, deletion and synchronization remain separate.
+
+**Status:** Locally functionally and visually accepted by the product owner. Manual acceptance confirmed direct launch, immediate Session Timer navigation, full-duration READY without automatic countdown, running-session replacement confirmation, cancellation preserving the previous running timer, and confirmed replacement directly in READY. Previously reported automated regressions passed. Real-device iOS/PWA and screen-reader validation remain outstanding. PWA shell/app/planner/CSS references use v38; unchanged modules retain their existing versions. No commit or deployment authorized. Production synchronization remains NO-GO. The broader run-ending action audit remains UX-011. Back navigation and Data & Backup polish are separate future work.
 
 ### UX-011 ? Confirm before ending an active Rundown
 
