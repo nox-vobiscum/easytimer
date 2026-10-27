@@ -6,6 +6,12 @@ remains NO-GO; this acceptance does not authorize staging, commit or release.
 Session recovery (REL-001B), the final-workshop four-hour flow (REL-001C),
 navigation persistence (UX-014) and editor-draft persistence are not implemented.
 
+This document records the accepted REL-001A/v45 slice. The subsequent local
+[REL-001B implementation](REL-001B_SESSION_RECOVERY.md) extends its existing
+mechanism to Session Runs under shell v46; that increment passed local Firefox owner acceptance. Real iOS/PWA and screen-reader checks remain outstanding.
+The original Session limitations below describe REL-001A, not the current REL-001B
+working tree. Shared storage/clock/platform limitations still apply.
+
 ## Runtime and ownership
 
 One versioned JSON record per context lives under `easyTimerRuntime.v1.*` in

@@ -10,7 +10,13 @@ import { startServer } from './server.mjs';
 import { fakeDrive } from '../sync-integration/fake-drive.mjs';
 const drive = fakeDrive();
 let loseNextUploadAcknowledgement = false, blockResolutionReadback = false;
-const server = await startServer({port:0,enabled:true});
+let changedHtmlVersion = false;
+const server = await startServer({ port: 0, enabled: true, read: async file => {
+    const body = await readFile(file);
+    // Simulate updated HTML without restarting this already-running server.
+    return changedHtmlVersion && basename(file) === 'index.html'
+        ? Buffer.from(body.toString().replace(/js\/app\.js\?v=\d+/g, 'js/app.js?v=999')) : body;
+} });
 const profile = await mkdtemp(join(tmpdir(), 'easytimer-application-sync-browser-'));
 const output = await mkdtemp(join(tmpdir(), 'easytimer-application-sync-shots-'));
 const browser = spawn(process.env.EASYTIMER_BROWSER || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -145,7 +151,9 @@ try {
         await evaluate('document.getElementById("drive-connect").focus()');assert.equal(await evaluate('document.activeElement.id'),'drive-connect');
         const screenshot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(output,language+'-'+theme+'-320.png'),Buffer.from(screenshot.data,'base64'));
     }
+    changedHtmlVersion = true;
     await cdp('Page.reload');await wait('Boolean(globalThis.easyTimerDevelopment)');await wait('document.getElementById("primary")?.title?.length > 0');
+    assert.equal(await evaluate('document.querySelector("script[type=module]").getAttribute("src")'), '/tools/app-sync/entry.mjs', 'A live server must retain the correct storage entry after a shell-version change');
     await evaluate('document.getElementById("open-planner").click()');await wait(`Boolean(document.querySelector('[aria-label="Edit: IDB workshop"]'))`);
     await wait('document.getElementById("drive-status").textContent==="Google Drive not connected. Reconnect if needed."');
     assert.equal(await evaluate('document.querySelector(".backup-status-hint").dataset.tone'), 'neutral', 'Missing memory-only authorization is not a sync error');
@@ -320,6 +328,39 @@ try {
     console.log('PASS: direct Session launch through asynchronous activated IndexedDB, READY/focus, saved library and remote transport unchanged.');
     await cdp('Target.disposeBrowserContext',{browserContextId});
     console.log('PASS: independent clean browser context explicitly adopts stable IDs, edits, publishes and fast-forwards a clean first client.');
+    await evaluate('document.querySelector(".planner-back").click();document.getElementById("primary").click()');
+    const runtimeBeforeCreate = await evaluate("JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1')))");
+    assert.equal(runtimeBeforeCreate.mode, 'session'); assert.equal(runtimeBeforeCreate.clock.status, 'RUNNING');
+    await evaluate('globalThis.beforeCreateReload=true'); await cdp('Page.reload');
+    await wait('!globalThis.beforeCreateReload && Boolean(globalThis.easyTimerDevelopment) && document.getElementById("primary")?.title?.length>0');
+    const restoredForCreate = await evaluate("JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1')))");
+    assert.equal(restoredForCreate.run.runId, runtimeBeforeCreate.run.runId);
+    assert.equal(restoredForCreate.clock.deadlineMs, runtimeBeforeCreate.clock.deadlineMs);
+    const libraryBeforeCreate = await evaluate('easyTimerDevelopment.createStore().load()');
+    const legacyBeforeCreate = await evaluate('localStorage.getItem("easyTimerTemplates")');
+    const callsBeforeCreate = drive.calls.length;
+    await evaluate('document.getElementById("open-planner").click()');
+    await wait('Boolean(document.getElementById("data-backup"))');
+    assert.equal(await evaluate('document.querySelector(".planner-feedback").textContent'), '');
+    await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create Rundown").click()');
+    const enter = (selector, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+    await enter('#template-name', 'REL-001B acceptance fixture');
+    for (let i = 0; i < 3; i++) {
+        if (i) await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="+ Add phase").click()');
+        await enter(`.phase-list li:nth-child(${i + 1}) .phase-title input`, `Phase ${String(i + 1).padStart(2, '0')}`);
+        await enter(`.phase-list li:nth-child(${i + 1}) .phase-duration input`, String([5, 10, 5][i]));
+    }
+    await evaluate('document.querySelector("#planner form").requestSubmit()');
+    await wait('!document.getElementById("template-name") && document.querySelector(".planner-feedback").textContent==="Template saved."');
+    const libraryAfterCreate = await evaluate('easyTimerDevelopment.createStore().load()');
+    assert.deepEqual(libraryAfterCreate.templates.filter(t=>t.name!=='REL-001B acceptance fixture'), libraryBeforeCreate.templates);
+    assert.deepEqual(libraryAfterCreate.templates.find(t=>t.name==='REL-001B acceptance fixture').phases.map(p=>p.durationSeconds), [300,600,300]);
+    assert.equal(await evaluate('localStorage.getItem("easyTimerTemplates")'), legacyBeforeCreate);
+    const runtimeAfterCreate = await evaluate("JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1')))");
+    assert.equal(runtimeAfterCreate.run.runId, runtimeBeforeCreate.run.runId);
+    assert.equal(runtimeAfterCreate.clock.deadlineMs, runtimeBeforeCreate.clock.deadlineMs);
+    assert.equal(drive.calls.length, callsBeforeCreate, 'Local creation after recovery makes no Google calls');
+    console.log('PASS: changed shell on a live server retains development entry; after Session recovery, a new manual 5/10/5-minute Rundown saves to real IndexedDB while existing definitions, legacy storage and active Run remain intact.');
     assert.deepEqual(errors,[]);console.log('PASS: actual Editor activation/upload/edit/export/draft guards, reload, DE/EN/themes/320px and focus. Evidence: '+output);
     await cdp('Browser.close');
 } finally {

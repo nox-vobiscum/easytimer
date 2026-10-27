@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createTemplateStore } from '../../src/js/templates.mjs';
-import { startServer } from './server.mjs';
+import { startServer, developmentEntry } from './server.mjs';
 import { syncFeedback } from './panel.mjs';
 import { serializeRundowns, parseRundowns } from '../../src/js/portability.mjs';
 
@@ -56,4 +56,43 @@ test('normal server exposes no Google tools; explicit development server changes
         const source = await readFile(new URL(path, import.meta.url), 'utf8');
         assert(!source.includes('apps.googleusercontent.com') && !source.includes('accounts.google.com/gsi/client'));
     }
+});
+
+test('a running development server follows changed HTML versions and fails closed if the entry is missing or ambiguous', async () => {
+    let html = '<script type="module" src="js/app.js?v=46"></script>';
+    const server = await startServer({ port: 0, enabled: true, read: async () => Buffer.from(html) });
+    try {
+        const url = 'http://127.0.0.1:' + server.address().port;
+        for (const version of [46, 47, 999]) {
+            html = `<script type="module" src="js/app.js?v=${version}"></script>`;
+            const response = await fetch(url);
+            assert.equal(response.status, 200);
+            const body = await response.text();
+            assert.ok(body.includes('src="/tools/app-sync/entry.mjs"'));
+            assert.ok(!body.includes('js/app.js?v='));
+        }
+        for (const invalid of ['<main>No entry</main>', html + html]) {
+            assert.throws(() => developmentEntry(invalid), /DEVELOPMENT_ENTRY_MISMATCH/);
+            html = invalid;
+            const response = await fetch(url);
+            assert.equal(response.status, 503, 'Never silently fall back to the normal localStorage app');
+            assert.ok(!(await response.text()).includes('js/app.js?v='));
+        }
+    } finally { await new Promise(done => server.close(done)); }
+});
+
+test('wrong normal entry with an activated development store blocks a valid draft without replacing stored data', () => {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+    const legacy = JSON.stringify({ schemaVersion: 1, templates: [{ id: 'retained', name: 'Retained fixture', transitionMode: 'manual', phases: [{ id: 'kept', title: 'Kept', durationSeconds: 60 }] }] });
+    const data = new Map([['easyTimerDevelopmentSyncStorage', 'active'], ['easyTimerTemplates', legacy]]);
+    let writes = 0;
+    try {
+        Object.defineProperty(globalThis, 'location', { configurable: true, value: { origin: 'http://localhost:8000' } });
+        const store = createTemplateStore(() => ({ getItem: key => data.get(key) ?? null, setItem: () => { writes += 1; } }));
+        assert.throws(() => store.load(), /storageBlocked/);
+        const draft = { id: 'new-fixture', name: 'REL-001B acceptance fixture', transitionMode: 'manual',
+            phases: [5, 10, 5].map((minutes, i) => ({ id: 'phase-' + i, title: 'Phase ' + (i + 1), durationSeconds: minutes * 60 })) };
+        assert.throws(() => store.save({ schemaVersion: 1, templates: [draft] }), /storageBlocked/);
+        assert.equal(writes, 0); assert.equal(data.get('easyTimerTemplates'), legacy);
+    } finally { if (previous) Object.defineProperty(globalThis, 'location', previous); else delete globalThis.location; }
 });

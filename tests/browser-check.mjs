@@ -14,6 +14,7 @@ import { checkMenuPolish } from './menu-browser.mjs';
 import { checkRundownEntry } from './rundown-entry-browser.mjs';
 import { checkDirectLaunch } from './direct-launch-browser.mjs';
 import { checkRecovery, checkRecoveryCorrections } from './recovery-browser.mjs';
+import { checkSessionRecovery } from './session-recovery-browser.mjs';
 import { checkPortability } from './portability-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
@@ -80,14 +81,14 @@ try {
     }
     const click = selector => evaluate(`(()=>{const target=document.querySelector(${JSON.stringify(selector)});const preference=target.closest('#preferences');const wasHidden=preference?.hidden;if(wasHidden)document.querySelector('#menu-toggle').click();target.click();if(wasHidden)document.querySelector('#menu-toggle').click();})()`);
     const text = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent`);
-    async function reloadReady() {
+    async function reloadReady(expectedMode = 'quick') {
         const origin = await evaluate('performance.timeOrigin');
         await cdp('Page.reload');
         for (let i = 0; i < 100; i++) {
-            if (await evaluate(`performance.timeOrigin !== ${origin} && document.body?.dataset.mode === 'quick' && Boolean(document.querySelector('#primary')?.title)`)) return;
+            if (await evaluate(`performance.timeOrigin !== ${origin} && document.body?.dataset.mode === ${JSON.stringify(expectedMode)} && Boolean(document.querySelector('#primary')?.title)`)) return;
             await delay(50);
         }
-        assert.fail('Reloaded application did not initialize in Quick READY');
+        assert.fail('Reloaded application did not initialize in expected mode: ' + expectedMode);
     }
     async function checkTitle(state) {
         const { title, time, overtime } = await evaluate(`({title:document.title,time:document.querySelector('#time').textContent,overtime:document.querySelector('#time').textContent})`);
@@ -158,12 +159,13 @@ try {
     assert.equal(await text('#time'), '05:00');
     await checkRecovery({ evaluate, click, text, cdp, configure });
     await checkRecoveryCorrections({ evaluate, click, text, cdp, configure });
+    await checkSessionRecovery({ evaluate, click, text, cdp });
     await checkTitle('READY');
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=45'&&js==='js/app.js?v=45'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'45','app.js':'45','recovery.mjs':'45','planner.js':'43','templates.mjs':'37','timer.mjs':'35','session.mjs':'35','time-visuals.mjs':'35','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including recovery, the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=46'&&js==='js/app.js?v=46'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'46','app.js':'46','recovery.mjs':'46','planner.js':'43','templates.mjs':'37','timer.mjs':'35','session.mjs':'35','time-visuals.mjs':'35','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including recovery, the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -851,9 +853,11 @@ try {
     await click('#prepare-session');
     assert.equal(await text('#status'), 'Ready', 'A saved Session template prepares offline using cached engine/modules');
     await click('#primary');
-    await reloadReady();
-    assert.equal(await evaluate('document.body.dataset.mode'), 'quick', 'Session runtime is not restored after reload');
-    assert.equal(await text('#time'), '05:00');
+    const offlineRunId = await evaluate(`JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1'))).run.runId`);
+    await reloadReady('session');
+    assert.equal(await evaluate('document.body.dataset.mode'), 'session', 'Session runtime is restored during offline PWA reload');
+    assert.equal(await evaluate(`JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1'))).run.runId`), offlineRunId);
+    assert.equal(await text('#status'), 'Running');
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');

@@ -4,7 +4,7 @@ import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress
 import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=35';
 import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=37';
-import { createRecovery } from './recovery.mjs?v=45';
+import { createRecovery } from './recovery.mjs?v=46';
 
 const copy = {
     en: {
@@ -14,7 +14,7 @@ const copy = {
         workshopTemplate: 'Rundown', createRundown: 'Open Session Editor', pickerContext: 'Choose a saved rundown for the Session Timer.', pickerEditorSubtitle: 'Create & edit rundowns',
         manual: 'Manual', automatic: 'Automatic', endsAutomatically: 'Workshop ends automatically',
         runNote: 'Saved sequences stay unchanged.',
-        pageReloadNote: 'Reloading this page discards the current run.',
+        pageReloadNote: 'This run is saved locally for recovery after reload. Unsaved editor changes are not restored.',
         prepare: 'Load', reloadTemplates: 'Refresh list', chooseTemplate: 'Select …',
         emptyTemplates: 'No Rundowns saved yet. Create a new Rundown below.', loadTemplatesError: 'Rundowns could not be loaded. Saved data has not been changed. Try reloading Rundowns.',
         next: 'Next phase', complete: 'Complete workshop',
@@ -41,7 +41,7 @@ const copy = {
         workshopTemplate: 'Rundown', createRundown: 'Session-Editor öffnen', pickerContext: 'Wähle einen gespeicherten Rundown für den Session-Timer.', pickerEditorSubtitle: 'Rundowns erstellen & bearbeiten',
         manual: 'Manuell', automatic: 'Automatisch', endsAutomatically: 'Workshop endet automatisch',
         runNote: 'Gespeicherte Abläufe bleiben unverändert.',
-        pageReloadNote: 'Beim Neuladen dieser Seite geht der aktuelle Durchlauf verloren.',
+        pageReloadNote: 'Dieser Durchlauf wird lokal zur Wiederherstellung nach dem Neuladen gespeichert. Ungespeicherte Editor-Änderungen werden nicht wiederhergestellt.',
         prepare: 'Laden', reloadTemplates: 'Liste aktualisieren', chooseTemplate: 'Auswählen …',
         emptyTemplates: 'Noch keine Rundowns gespeichert. Unten kannst du einen neuen Rundown erstellen.', loadTemplatesError: 'Rundowns konnten nicht geladen werden. Gespeicherte Daten bleiben unverändert. Bitte Rundowns neu laden.',
         next: 'Nächste Phase', complete: 'Workshop abschließen',
@@ -86,7 +86,18 @@ const recovery = await createRecovery({
     tabs: { getItem: key => sessionStorage.getItem(key), setItem: (key, value) => sessionStorage.setItem(key, value), removeItem: key => sessionStorage.removeItem(key) },
     locks: navigator.locks,
 });
-if (recovery.restored) { timer = transition(recovery.restored, { type: 'TICK' }, Date.now()); quickDurationMs = timer.durationMs; }
+function adoptRecovered(restored) {
+    if (restored.run) {
+        const current = transitionSession(restored.run, restored.clock, { type: 'TICK' }, Date.now());
+        mode = 'session'; run = current.run; timer = current.clock;
+        quickDurationMs = restored.quickDurationMs;
+    } else {
+        mode = 'quick'; run = null; timer = transition(restored, { type: 'TICK' }, Date.now());
+        quickDurationMs = timer.durationMs;
+    }
+    pickerOpen = false;
+}
+if (recovery.restored) adoptRecovered(recovery.restored);
 let recoveryFeedback = '';
 const templateStore = development ? development.createStore() : createTemplateStore(() => localStorage);
 let limitExceeded = false;
@@ -98,15 +109,15 @@ let plannerOpen = false;
 let navigationRevision = 0;
 let clockOnly = false;
 const recoveryCopy = {
-    en: { heading: 'Timer recovery', choose: 'A saved Quick Timer is available. Choose which timer to restore.',
-        chooseMany: 'Saved Quick Timers are available. Choose which timer to restore.',
+    en: { heading: 'Timer recovery', choose: 'A saved timer is available. Choose which timer to restore.',
+        chooseMany: 'Saved timers are available. Choose which timer to restore.',
         label: 'Saved timer', placeholder: 'Select a timer', restore: 'Restore timer', dismiss: 'Use current timer',
         timer: 'Timer', start: 'Start', total: 'Total budget', notStarted: 'Not started', unknownStart: 'Start time not recorded', saved: 'Saved', elsewhere: 'In use in another tab',
         error: 'Timer recovery is unavailable or saved data could not be trusted. You can keep using the timer; do not rely on recovery.',
         active: 'This timer is already in use in another tab. Switch to that tab or start a new timer here.',
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: 'Overtime' },
-    de: { heading: 'Timer wiederherstellen', choose: 'Ein gespeicherter Quick-Timer ist verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
-        chooseMany: 'Gespeicherte Quick-Timer sind verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
+    de: { heading: 'Timer wiederherstellen', choose: 'Ein gespeicherter Timer ist verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
+        chooseMany: 'Gespeicherte Timer sind verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
         label: 'Gespeicherter Timer', placeholder: 'Timer auswählen', restore: 'Timer wiederherstellen', dismiss: 'Aktuellen Timer verwenden',
         timer: 'Timer', start: 'Start', total: 'Gesamtzeit', notStarted: 'Noch nicht gestartet', unknownStart: 'Startzeit nicht erfasst', saved: 'Gespeichert', elsewhere: 'In anderem Tab aktiv',
         error: 'Die Timer-Wiederherstellung ist nicht verfügbar oder gespeicherte Daten sind nicht verlässlich. Du kannst den Timer weiter nutzen; verlasse dich nicht auf die Wiederherstellung.',
@@ -116,10 +127,12 @@ const recoveryCopy = {
 let recoverySignature = '';
 function recoveryDescription(record, index) {
     const t = recoveryCopy[language];
+    const ready = record.clock.status === 'READY' && (!record.run || record.run.currentIndex === 0);
     const start = record.startedAt == null
-        ? `${record.clock.status === 'READY' ? t.notStarted : t.unknownStart} · ${t.saved} ${new Date(record.savedAt).toLocaleString(language)}`
+        ? `${ready ? t.notStarted : t.unknownStart} · ${t.saved} ${new Date(record.savedAt).toLocaleString(language)}`
         : `${t.start} ${new Date(record.startedAt).toLocaleString(language)}`;
-    return `${t.timer} ${index + 1} · ${start} · ${t.total} ${formatTime(record.clock.durationMs + record.clock.adjustmentMs)}${record.activeElsewhere ? ` · ${t.elsewhere}` : ''}`;
+    const budget = record.run ? record.run.phases.reduce((sum, phase) => sum + phase.durationSeconds * 1000, 0) : record.clock.durationMs + record.clock.adjustmentMs;
+    return `${t.timer} ${index + 1} · ${copy[language][record.mode]}${record.run ? ` · ${record.run.name}` : ''} · ${start} · ${t.total} ${formatTime(budget)}${record.activeElsewhere ? ` · ${t.elsewhere}` : ''}`;
 }
 function renderRecoveryDetail() {
     const candidates = recovery.candidates;
@@ -133,11 +146,11 @@ function renderRecovery() {
     if (signature === recoverySignature) return;
     recoverySignature = signature;
     const t = recoveryCopy[language];
-    $('runtime-recovery').hidden = mode !== 'quick' || (!recovery.error && !recoveryFeedback && !candidates.length);
+    $('runtime-recovery').hidden = !recovery.error && !recoveryFeedback && (mode !== 'quick' || !candidates.length);
     $('recovery-heading').textContent = t.heading;
     const feedback = recoveryFeedback === 'CONTEXT_ACTIVE' ? t.active : recoveryFeedback || recovery.error ? t.error : candidates.length > 1 ? t.chooseMany : t.choose;
     if ($('recovery-feedback').textContent !== feedback) $('recovery-feedback').textContent = feedback;
-    $('recovery-choices').hidden = !candidates.length;
+    $('recovery-choices').hidden = mode !== 'quick' || !candidates.length;
     $('recovery-label').textContent = t.label;
     const selected = $('recovery-select').value;
     $('recovery-select').replaceChildren(new Option(t.placeholder, ''));
@@ -166,13 +179,13 @@ $('recovery-restore').addEventListener('click', async () => {
     try {
         const restored = await recovery.recover($('recovery-select').value, () =>
             baseline === JSON.stringify([mode, timer.status, timer.deadlineMs, timer.durationMs, timer.adjustmentMs, navigationRevision]));
-        timer = restored; quickDurationMs = timer.durationMs; recoveryFeedback = '';
+        adoptRecovered(restored); recoveryFeedback = ''; navigationRevision += 1;
     } catch (cause) { recoveryFeedback = cause.message; }
     render();
     if (recoveryFeedback && mode === 'quick') {
         $('recovery-feedback').focus({ preventScroll: true });
         $('recovery-feedback').scrollIntoView({ block: 'nearest' });
-    } else $('primary').focus({ preventScroll: true });
+    } else (timer.status === 'OVERTIME_STOPPED' ? $('stop') : $('primary')).focus({ preventScroll: true });
 });
 const planner = createPlanner($('planner'), () => {
     navigationRevision += 1;
@@ -278,6 +291,7 @@ function dispatch(action) {
     if (mode === 'session' && run) {
         const next = transitionSession(run, timer, action, Date.now());
         run = next.run; timer = next.clock;
+        recovery.save(timer, action.type, run, quickDurationMs);
     } else if (timer) {
         timer = transition(timer, action, Date.now());
         recovery.save(timer, action.type);
@@ -334,7 +348,7 @@ async function switchMode(nextMode) {
     (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll: true });
 }
 function render() {
-    recovery.save(mode === 'quick' ? timer : null);
+    recovery.save(timer, null, mode === 'session' ? run : null, quickDurationMs);
     renderRecovery();
     const t = copy[language];
     const session = mode === 'session' && run;

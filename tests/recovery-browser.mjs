@@ -103,7 +103,7 @@ export async function checkRecoveryCorrections({ evaluate, click, text, cdp, con
         const readOwners = () => evaluate(`(${JSON.stringify(Object.values(ownerIds))}).map(id=>JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+id)).clock.deadlineMs)`);
         const deadlines = await readOwners();
         assert.equal(await evaluate(`recoveryC.document.querySelector('#recovery-select').value`), '');
-        assert.match(await evaluate(`recoveryC.document.querySelector('#recovery-feedback').textContent`), /Timers are available/);
+        assert.match(await evaluate(`recoveryC.document.querySelector('#recovery-feedback').textContent`), /timers are available/);
         const labels = await evaluate(`Array.from(recoveryC.document.querySelector('#recovery-select').options).slice(1).map(o=>o.textContent)`);
         assert.equal(labels.length, 2); assert.ok(labels.every(label => label.includes('Start ') && label.includes('In use in another tab') && !label.includes('Overtime')));
         assert.ok(labels.some(label => label.includes('Total budget 01:30')));

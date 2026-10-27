@@ -51,7 +51,8 @@ The countdown is the dominant element. UX-007 uses two layout families sharing o
 - Adding time in overtime shifts the existing deadline: smaller additions reduce overtime, an exact compensation stays at zero, and larger additions return to countdown. This explicitly supersedes ET-001 decision 37.
 - Remaining time and overtime are derived from the deadline. Delayed callbacks and background-tab throttling do not accumulate timer drift.
 - A theme, language, orientation, viewport, or presentation change never resets the timer.
-- Local REL-001A restores validated Quick Timer runtime after same-tab reload; deadline-based elapsed time, frozen pause, configuration and extensions are preserved. Restart without a reliable context association requires explicit recovery selection. Session runtime is not restored. See [scope and limitations](REL-001A_QUICK_RECOVERY.md). Locally functionally and visually accepted by the product owner in desktop browsers; real iOS/PWA and screen-reader acceptance remain outstanding. This is local development, not a production release; production remains NO-GO.
+- Local REL-001A restores validated Quick Timer runtime after same-tab reload; deadline-based elapsed time, frozen pause, configuration and extensions are preserved. Restart without a reliable context association requires explicit recovery selection. Session recovery was outside that slice. See [scope and limitations](REL-001A_QUICK_RECOVERY.md). Locally functionally and visually accepted by the product owner in desktop browsers; real iOS/PWA and screen-reader acceptance remain outstanding. This is local development, not a production release; production remains NO-GO.
+- Local [REL-001B](REL-001B_SESSION_RECOVERY.md) now extends the same store/ownership mechanism to Session Runs and supersedes REL-001A's Session-reload limitation. Original run identity/snapshot, progression mode, current phase, settled overtimes and paused/terminal states are preserved. Automatic reconstruction uses scheduled deadlines in the existing coordinator. Restoration selects the runtime's Quick/Session mode without restoring Editor/navigation/presentation state. Shell v46; local Firefox owner acceptance passed, including ownership refusal/takeover and continued final overtime. Real iOS/PWA and screen-reader acceptance remain outstanding. No production release, four-hour recovery UI or draft persistence.
 
 ## 3. Interface and responsive behavior
 
@@ -80,7 +81,7 @@ easyTimer is installable from supported browsers through `src/manifest.webmanife
 
 `src/service-worker.js` precaches the same-origin app shell after the first successful online visit. Navigation falls back to the cached index while offline. The cache name is versioned; activating a new version removes older `easytimer-` caches. Service workers require HTTPS or localhost.
 
-Offline reload can restore Quick runtime when the shell is cached and local persistence/context isolation are available. Session runtime recovery remains outside this slice. Storage failures disable reliable recovery visibly without blocking ordinary timer use.
+Offline reload can restore Quick or Session runtime when the shell is cached and local persistence/context isolation are available. Storage failures disable reliable recovery visibly without blocking ordinary timer use. REL-001B does not modify saved Rundowns, DATA-001 or Google Drive synchronization.
 
 ## 5. Architecture
 
