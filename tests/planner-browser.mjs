@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     const field = (selector, value) => evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.value=${JSON.stringify(value)};el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    const action = (label) => evaluate(`(()=>{const el=Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)});if(!el)throw new Error('Missing planner action');el.click();})()`);
+    const action = (label) => evaluate(`(()=>{const el=Array.from(document.querySelectorAll('#planner button')).find(b=>(b.textContent===${JSON.stringify(label)}||b.getAttribute('aria-label')?.startsWith(${JSON.stringify(label)}+': ')));if(!el)throw new Error('Missing planner action');el.click();})()`);
     const open = async () => {
         await click('#menu-toggle'); await click('#open-planner');
         for (let i = 0; i < 30; i++) { if (await evaluate(`document.activeElement===document.querySelector('#planner h1')`)) return; await delay(50); }
@@ -178,7 +178,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
 async function checkCompactPlanner({ evaluate, click, text, cdp }) {
     const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     const field = (selector, value) => evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>(b.textContent===${JSON.stringify(label)}||b.getAttribute('aria-label')?.startsWith(${JSON.stringify(label)}+': '))).click()`);
     await evaluate(`localStorage.setItem('easyTimerTemplates',JSON.stringify({schemaVersion:1,templates:[
         {id:'compact',name:'W'.repeat(120),transitionMode:'manual',phases:Array.from({length:12},(_,i)=>({id:'compact-'+i,title:'Phase '+(i+1)+' '+ 'T'.repeat(110),durationSeconds:900}))},
         {id:'hundred',name:'100 hours',transitionMode:'manual',phases:[{id:'hundred-phase',title:'Long phase',durationSeconds:360000}]},
@@ -272,7 +272,7 @@ async function checkRepositioning({ evaluate, click, text, cdp }) {
     const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     const phases = Array.from({ length: 20 }, (_, i) => ({ id:`order-${i}`, title:(`Phase ${i + 1} ` + 'Long title '.repeat(10)).trim(), durationSeconds:(i + 1) * 60 }));
     const library = { schemaVersion:1, templates:[{ id:'order-workshop', name:'Reordering', transitionMode:'automatic', phases }] };
-    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>(b.textContent===${JSON.stringify(label)}||b.getAttribute('aria-label')?.startsWith(${JSON.stringify(label)}+': '))).click()`);
     const trigger = id => `#reposition-${id}`;
     const order = () => evaluate(`Array.from(document.querySelectorAll('.phase-list li')).map(el=>el.dataset.phaseId)`);
     const hidden = () => evaluate(`document.querySelector('#phase-reposition-popover').hidden`);
@@ -393,7 +393,7 @@ async function checkRepositioning({ evaluate, click, text, cdp }) {
 async function checkInitialPhase({ evaluate, click, text }) {
     const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     const field = (selector, value) => evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>(b.textContent===${JSON.stringify(label)}||b.getAttribute('aria-label')?.startsWith(${JSON.stringify(label)}+': '))).click()`);
     const phaseId = () => evaluate(`document.querySelector('.phase-list li').dataset.phaseId`);
     const raw = () => evaluate(`localStorage.getItem('easyTimerTemplates')`);
     await evaluate(`window.initialPhaseConfirm=window.confirm;window.initialPhasePrompts=0;window.confirm=()=>{window.initialPhasePrompts++;return true;};`);
@@ -465,7 +465,7 @@ async function checkPlannerCorrections({ evaluate, click, text, cdp }) {
     const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     const offset = (await stored()).templates.length;
     const field = (selector, value) => evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>(b.textContent===${JSON.stringify(label)}||b.getAttribute('aria-label')?.startsWith(${JSON.stringify(label)}+': '))).click()`);
     const open = async () => { await click('#menu-toggle'); await click('#open-planner'); };
     const editFirst = () => click(`.template-library li:nth-child(${offset + 1}) button:not(.rundown-launch)`);
     const mockConfirmation = () => evaluate(`window.correctionConfirm=window.confirm;window.confirmMessages=[];window.acceptConfirm=true;window.confirm=message=>{window.confirmMessages.push(message);return window.acceptConfirm;};`);

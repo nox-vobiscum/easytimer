@@ -71,7 +71,7 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
         await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(saved)})`);
 
         await prepare();await click('#primary');await menu('#open-planner');
-        await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent==='Edit').click();const input=document.querySelector('#template-name');input.focus();input.value='Unsaved automatic draft';input.dispatchEvent(new Event('input',{bubbles:true}));`);
+        await evaluate(`document.querySelector('.rundown-edit').click();const input=document.querySelector('#template-name');input.focus();input.value='Unsaved automatic draft';input.dispatchEvent(new Event('input',{bubbles:true}));`);
         await clock.advance('200s');
         assert.equal(await evaluate(`document.querySelector('#template-name').value`),'Unsaved automatic draft');
         assert.equal(await evaluate('document.activeElement.id'),'template-name','Automatic catch-up cannot steal Planner focus');

@@ -15,10 +15,11 @@ export async function checkPortability({evaluate,click,text,cdp,configure}) {
     const raw=()=>evaluate(`localStorage.getItem('easyTimerTemplates')`);
     const menu=async selector=>{if(await evaluate(`document.querySelector('#preferences').hidden`))await click('#menu-toggle');await click(selector);};
     const open=()=>menu('#open-planner');
-    const action=label=>evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+    const action=label=>evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>(b.textContent===${JSON.stringify(label)}||b.getAttribute('aria-label')?.startsWith(${JSON.stringify(label)}+': '))).click()`);
     const field=(selector,value)=>evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     const wait=async expression=>{for(let i=0;i<100;i++){if(await evaluate(expression))return;await delay(25);}assert.fail('Timed out: '+expression);};
     const upload=async(value,name='rundowns.json')=>{
+        await evaluate("if(document.getElementById('data-backup'))document.getElementById('data-backup').open=true");
         const content=typeof value==='string'?value:JSON.stringify(value);
         await evaluate(`(()=>{const transfer=new DataTransfer();transfer.items.add(new File([${JSON.stringify(content)}],${JSON.stringify(name)},{type:'application/json'}));const input=document.querySelector('#rundown-import-file');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         await wait(`Boolean(document.querySelector('#import-heading'))||Boolean(document.querySelector('#planner-feedback')?.textContent)`);
@@ -43,6 +44,7 @@ export async function checkPortability({evaluate,click,text,cdp,configure}) {
         const activeTime=await text('#time'),initial=await raw();
         assert.equal(await text('#export-all'),'Export all as JSON');
         await click('[data-language="de"]');assert.equal(await text('#export-all'),'Alle als JSON exportieren');await click('[data-language="en"]');
+        await click('#backup-summary');
         assert.equal(await evaluate(`document.querySelector('#rundown-import-file').type==='file'&&document.querySelector('#rundown-import-file').accept.includes('.json')&&document.querySelector('#rundown-import-file').getBoundingClientRect().height>=44`),true,'Import uses a visible labelled native file control');
         assert.deepEqual(await download('.template-library li:first-child .rundown-export',exportFilename(one.name)),single);
         assert.deepEqual(await download('#export-all','easytimer-rundowns.json'),library);

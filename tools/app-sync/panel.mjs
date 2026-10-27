@@ -4,7 +4,7 @@ import { renderConflictReview } from './conflict-panel.mjs';
 const CLIENT_ID = '896158829302-h2rlgdbilmek2b1lmkr65kealt2t5rr8.apps.googleusercontent.com';
 const copy = {
     en: {
-        localOnly: 'Local only', pending: 'Changes pending', lastChecked: 'Synced (last checked)', reconnect: 'Reconnect required', busy: 'Working…',
+        localOnly: 'Local only', pending: 'Changes pending', lastChecked: 'Synced (last checked)', reconnect: 'Google Drive not connected. Reconnect if needed.', cachedReview: 'A locally known conflict or pending reconciliation still needs review.', busy: 'Working…',
         reviewRequired: 'Conflict – review required. No version was overwritten.', accountMismatch: 'Reconnect the original Google account. Local data and pending work are retained.',
         syncError: 'Synchronization failed. Local data and pending uploads are retained. Try again explicitly.', legacyConflict: 'Another browser view changed the old library. Saving and sync are blocked; both libraries are retained. Download backups before resolving this.',
         adoptAvailable: 'Saved Rundowns are available. Confirm adoption into this empty library.',
@@ -15,7 +15,7 @@ const copy = {
         connectAgain: 'Google authorization is ready. Click Connect Google Drive again to sign in.', backup: 'Download local backup', legacyBackup: 'Download other browser copy',
     },
     de: {
-        localOnly: 'Nur lokal', pending: 'Nicht synchronisierte Änderungen', lastChecked: 'Synchronisiert (zuletzt geprüft)', reconnect: 'Anmeldung erforderlich', busy: 'Wird bearbeitet…',
+        localOnly: 'Nur lokal', pending: 'Nicht synchronisierte Änderungen', lastChecked: 'Synchronisiert (zuletzt geprüft)', reconnect: 'Google Drive nicht verbunden. Bei Bedarf erneut verbinden.', cachedReview: 'Ein lokal bekannter Konflikt oder eine ausstehende Zusammenführung muss noch geprüft werden.', busy: 'Wird bearbeitet…',
         reviewRequired: 'Konflikt – Überprüfung erforderlich. Keine Version wurde überschrieben.', accountMismatch: 'Bitte das ursprüngliche Google-Konto verbinden. Lokale Daten und ausstehende Arbeit bleiben erhalten.',
         syncError: 'Synchronisierung fehlgeschlagen. Lokale Daten und ausstehende Uploads bleiben erhalten. Bitte ausdrücklich erneut versuchen.', legacyConflict: 'Eine andere Browseransicht hat die alte Bibliothek geändert. Speichern und Sync sind gesperrt; beide Bibliotheken bleiben erhalten. Vor der Klärung Sicherungen herunterladen.',
         adoptAvailable: 'Gespeicherte Rundowns sind verfügbar. Übernahme in diese leere Bibliothek bestätigen.',
@@ -53,14 +53,27 @@ export function renderSyncPanel(parent, context, sync, panels) {
     const text = copy[context.language], section = document.createElement('section'); section.className = 'development-sync';
     const heading = document.createElement('h3'); heading.textContent = 'Google Drive';
     const status = document.createElement('p'); status.id = 'drive-status'; status.setAttribute('role', 'status');
+    const showStatus = (code, message = text[code] || syncFeedback(code, context.language), summaryCode = code) => {
+        status.textContent = message;
+        context.backupStatus?.(summaryCode, message);
+    };
     const note = document.createElement('p'); note.textContent = text.explanation;
     const actions = document.createElement('div'); actions.className = 'backup-actions';
     const button = (id, label, handler) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.textContent = label; b.onclick = handler; actions.append(b); return b; };
     let updateId = 0;
     const update = async () => {
         if (!section.isConnected) { panels.delete(update); return; }
-        const id = ++updateId; let code; try { code = await sync.status(); } catch { code = 'syncError'; } if (id !== updateId) return;
-        status.textContent = text[code] || syncFeedback(code, context.language);
+        const id = ++updateId; let code; try { code = await sync.status(); } catch { code = 'syncError'; }
+        let knownReview = false;
+        if (code === 'reconnect') {
+            // Existing local metadata only: no auth, Drive discovery or storage mutation.
+            try {
+                const report = await sync.diagnosticReport();
+                knownReview = report.storage.knownHeadCount > 1 || report.reconciliation.present;
+            } catch { /* Unavailable metadata is not evidence of a conflict. */ }
+        }
+        if (id !== updateId) return;
+        showStatus(code, knownReview ? `${text.reconnect} ${text.cachedReview}` : undefined, knownReview ? 'reviewRequired' : code);
         reviewButton.hidden = !['reviewRequired', 'staleReview', 'unpublishedChanges', 'unsupportedConflict', 'pendingUpload'].includes(code);
         reviewButton.disabled = !sync.client.connected || sync.busy;
         activate.hidden = sync.active(); adopt.hidden = !sync.adoptionAvailable;
@@ -77,14 +90,14 @@ export function renderSyncPanel(parent, context, sync, panels) {
     const activate = button('drive-activate', text.activate, () => { if (window.confirm(text.activateConfirm)) execute(() => sync.activate()); });
     const connect = button('drive-connect', text.connect, () => {
         if (!context.canChange() || sync.busy) return;
-        if (!globalThis.google?.accounts?.oauth2) { loadGIS().then(() => { if (section.isConnected) status.textContent = text.connectAgain; }).catch(() => { status.textContent = text.syncError; }); return; }
+        if (!globalThis.google?.accounts?.oauth2) { loadGIS().then(() => { if (section.isConnected) showStatus('connectAgain'); }).catch(() => { showStatus('syncError'); }); return; }
         const epoch = ++authEpoch;
         try {
             google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, include_granted_scopes: false, prompt: 'select_account',
-                callback: response => { if (epoch === authEpoch) { if (response.error) status.textContent = text.reconnect; else execute(() => sync.authorize(response)); } },
-                error_callback: () => { if (epoch === authEpoch) status.textContent = text.reconnect; },
+                callback: response => { if (epoch === authEpoch) { if (response.error) showStatus('reconnect'); else execute(() => sync.authorize(response)); } },
+                error_callback: () => { if (epoch === authEpoch) showStatus('reconnect'); },
             }).requestAccessToken();
-        } catch { status.textContent = text.syncError; }
+        } catch { showStatus('syncError'); }
     });
     const syncButton = button('drive-sync', text.sync, () => execute(() => sync.sync()));
     const reviewButton = button('drive-review', context.language === 'de' ? 'Konflikt prüfen' : 'Review conflict', async () => {
@@ -93,14 +106,15 @@ export function renderSyncPanel(parent, context, sync, panels) {
             section.querySelector('#drive-conflict-review')?.remove();
             const review = await sync.reviewConflict();
             if (!section.isConnected || !context.canChange()) return;
+            context.keepBackupOpen?.();
             renderConflictReview(section, review, sync, context, syncFeedback, () => reviewButton.focus());
-        } catch (e) { status.textContent = syncFeedback(e.message, context.language); }
+        } catch (e) { showStatus(e.message, syncFeedback(e.message, context.language)); }
     });
     const adopt = button('drive-adopt', text.adopt, () => { if (window.confirm(text.adoptConfirm)) execute(() => sync.sync({ adopt: true })); });
     const disconnect = button('drive-disconnect', text.disconnect, () => { authEpoch++; sync.disconnect(); update(); });
     const backupError = context.language === 'de' ? 'Die Sicherung konnte nicht vorbereitet werden. Lokale Daten bleiben unverändert. Bitte erneut versuchen.' : 'The backup could not be prepared. Local data is unchanged. Please try again.';
-    const backup = button('drive-backup', text.backup, async () => { try { downloadRundowns(await sync.backup()); } catch { status.textContent = backupError; } });
-    const otherBackup = button('drive-legacy-backup', text.legacyBackup, () => { try { downloadRundowns(sync.legacyBackup(), 'easytimer-other-browser-copy.json'); } catch { status.textContent = backupError; } });
+    const backup = button('drive-backup', text.backup, async () => { try { downloadRundowns(await sync.backup()); } catch { showStatus('syncError', backupError); } });
+    const otherBackup = button('drive-legacy-backup', text.legacyBackup, () => { try { downloadRundowns(sync.legacyBackup(), 'easytimer-other-browser-copy.json'); } catch { showStatus('syncError', backupError); } });
     const diagnostic = button('drive-diagnostics', context.language === 'de' ? 'Sync-Diagnose anzeigen' : 'Show sync diagnostics', async () => {
         // Deliberately not execute(): no refresh, sync, auth, adoption or state reset.
         try {

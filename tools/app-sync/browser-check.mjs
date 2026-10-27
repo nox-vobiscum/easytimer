@@ -94,6 +94,16 @@ try {
     const fixture={schemaVersion:1,templates:[{id:'ui-stable-id',name:'UI workshop',transitionMode:'manual',phases:[{id:'ui-phase',title:'Opening',durationSeconds:600}]}]};
     await evaluate(`document.querySelector('[data-language="en"]').click();localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(fixture))});window.confirm=()=>true;document.getElementById('open-planner').click()`);
     await wait('Boolean(document.getElementById("drive-activate"))');
+    await wait('document.getElementById("drive-status").textContent==="Local only"');
+    assert.equal(await evaluate('document.getElementById("data-backup").open'), false);
+    assert.equal(await evaluate('document.querySelector(".backup-status-hint").hidden'), true, 'Optional disconnection is not an error');
+    const disclosureTraffic = external.length;
+    const disclosureLibrary = await evaluate('localStorage.getItem("easyTimerTemplates")');
+    await evaluate('document.getElementById("backup-summary").click()');
+    await evaluate('document.getElementById("backup-summary").click()');
+    await evaluate('document.getElementById("backup-summary").click()');
+    assert.equal(external.length, disclosureTraffic, 'Disclosure does not initiate Google traffic');
+    assert.equal(await evaluate('localStorage.getItem("easyTimerTemplates")'), disclosureLibrary);
     assert.equal(await evaluate('document.querySelector(".planner-feedback").textContent'), '');
     assert.equal(await evaluate('document.getElementById("drive-disconnect").hidden'), true);
     const noAuthTraffic=external.length;
@@ -107,6 +117,14 @@ try {
     await evaluate('document.getElementById("drive-connect").click()');await wait('!document.getElementById("drive-sync").disabled');
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
     assert.equal(drive.files.size,1);
+    const activeToggleTraffic = external.length;
+    const activeLibrary = await evaluate('easyTimerDevelopment.createStore().load()');
+    await evaluate('globalThis.backupTransaction=IDBDatabase.prototype.transaction;globalThis.backupWrites=0;IDBDatabase.prototype.transaction=function(...a){if(a[1]&&a[1]!=="readonly")backupWrites++;return backupTransaction.apply(this,a)};document.getElementById("backup-summary").click()');
+    await evaluate('document.getElementById("backup-summary").click()');
+    assert.equal(await evaluate('globalThis.backupWrites'), 0, 'Activated disclosure never opens a write transaction');
+    await evaluate('IDBDatabase.prototype.transaction=globalThis.backupTransaction');
+    assert.equal(external.length, activeToggleTraffic);
+    assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'), activeLibrary);
     await evaluate(`document.querySelector('[aria-label="Edit: UI workshop"]').click();document.getElementById("template-name").value="IDB workshop";document.getElementById("template-name").dispatchEvent(new Event("input"));document.querySelector("#planner form").requestSubmit()`);
     await wait(`Boolean(document.querySelector('[aria-label="Edit: IDB workshop"]'))`);
     assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerTemplates")).templates[0].name'),'UI workshop');
@@ -129,7 +147,19 @@ try {
     }
     await cdp('Page.reload');await wait('Boolean(globalThis.easyTimerDevelopment)');await wait('document.getElementById("primary")?.title?.length > 0');
     await evaluate('document.getElementById("open-planner").click()');await wait(`Boolean(document.querySelector('[aria-label="Edit: IDB workshop"]'))`);
-    assert.equal(await evaluate('document.getElementById("drive-status").textContent'),'Reconnect required');
+    await wait('document.getElementById("drive-status").textContent==="Google Drive not connected. Reconnect if needed."');
+    assert.equal(await evaluate('document.querySelector(".backup-status-hint").dataset.tone'), 'neutral', 'Missing memory-only authorization is not a sync error');
+    assert.equal(await evaluate('document.querySelector(".backup-status-hint").textContent'), 'Google Drive not connected');
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".backup-status-hint")).color===getComputedStyle(document.querySelector(".backup-subtitle")).color'), true);
+    const signedOutTraffic = external.length;
+    await evaluate('document.getElementById("backup-summary").click()');
+    await evaluate('document.getElementById("backup-summary").click()');
+    assert.equal(external.length, signedOutTraffic);
+    await evaluate('document.querySelector("[data-language=de]").click()');
+    await wait('document.querySelector(".backup-status-hint").textContent==="Google Drive nicht verbunden"');
+    assert.equal(await evaluate('document.querySelector(".backup-status-hint").dataset.tone'), 'neutral');
+    await evaluate('document.querySelector("[data-language=en]").click()');
+    await wait('document.querySelector(".backup-status-hint").textContent==="Google Drive not connected"');
     await evaluate('document.getElementById("drive-connect").click()');await wait('Boolean(globalThis.google?.accounts?.oauth2)');
     await evaluate('document.getElementById("drive-connect").click()');await wait('!document.getElementById("drive-sync").disabled');
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
@@ -164,6 +194,9 @@ try {
     assert.equal(Buffer.byteLength(emptyBackup),44);assert.deepEqual(JSON.parse(emptyBackup),{schemaVersion:1,templates:[]});
     await inSecond('globalThis.originalCreateObjectURL=URL.createObjectURL;URL.createObjectURL=()=>{throw Error("INJECTED_DOWNLOAD_FAILURE")};document.getElementById("drive-backup").click()');
     await waitSecond('document.getElementById("drive-status").textContent.startsWith("The backup could not be prepared")');
+    await inSecond('document.getElementById("data-backup").open=false');
+    assert.equal(await inSecond('document.querySelector(".backup-status-hint").hidden'), false, 'Backup error remains discoverable while collapsed');
+    await inSecond('document.getElementById("data-backup").open=true');
     assert.deepEqual(await readdir(emptyDownloads), ['easytimer-rundowns.json']);
     assert.equal((await readFile(join(emptyDownloads,'easytimer-rundowns.json'))).length,44);
     await inSecond('URL.createObjectURL=globalThis.originalCreateObjectURL');
@@ -185,6 +218,15 @@ try {
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
     await inSecond('document.getElementById("drive-sync").click()');await waitSecond('!document.getElementById("drive-review").hidden');
     await evaluate('document.getElementById("drive-sync").click()');await wait('!document.getElementById("drive-review").hidden');
+    const conflictLibrary = await evaluate('easyTimerDevelopment.createStore().load()');
+    await evaluate('document.getElementById("drive-disconnect").click()');
+    await wait('document.getElementById("drive-status").textContent.includes("locally known conflict")');
+    assert.equal(await evaluate('document.querySelector(".backup-status-hint").dataset.tone'), 'attention', 'Known local conflicts remain discoverable without authorization');
+    await evaluate('document.getElementById("data-backup").open=false');
+    assert.equal(await evaluate('document.querySelector(".backup-status-hint").hidden'), false);
+    assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'), conflictLibrary);
+    await evaluate('document.getElementById("data-backup").open=true;document.getElementById("drive-connect").click()');
+    await wait('!document.getElementById("drive-review").disabled');
     for(const language of ['de','en'])for(const theme of ['light','dark','system']){
         await evaluate(`document.querySelector('[data-language="${language}"]').click();document.querySelector('[data-theme="${theme}"]').click()`);
         await cdp('Emulation.setDeviceMetricsOverride',{width:theme==='light'?1280:320,height:900,deviceScaleFactor:1,mobile:theme!=='light'});
@@ -196,6 +238,11 @@ try {
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
         assert.equal(await evaluate('document.querySelector("#drive-conflict-review input:checked").value'),'right');
+        const reviewTraffic = external.length;
+        await evaluate('document.getElementById("data-backup").open=false');
+        await wait('document.getElementById("data-backup").open');
+        assert.equal(await evaluate('document.querySelector("#drive-conflict-review input:checked").value'), 'right', 'Collapse cannot hide or discard an active review');
+        assert.equal(external.length, reviewTraffic);
         await evaluate('document.getElementById("drive-conflict-review").scrollIntoView()');
         const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(output,'conflict-'+language+'-'+theme+'.png'),Buffer.from(shot.data,'base64'));
     }
@@ -214,6 +261,7 @@ try {
     await evaluate('globalThis.beforeRecoveryReload=true');await cdp('Page.reload');await wait('!globalThis.beforeRecoveryReload && document.getElementById("primary")?.title?.length>0');
     blockResolutionReadback=false;
     await evaluate('document.getElementById("open-planner").click()');await wait('Boolean(document.getElementById("drive-connect"))');
+    await wait('document.querySelector(".backup-status-hint").dataset.tone==="attention"');
     await evaluate('document.getElementById("drive-connect").click()');await wait('Boolean(globalThis.google?.accounts?.oauth2)');
     await evaluate('document.getElementById("drive-connect").click()');await wait('!document.getElementById("drive-sync").disabled');
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');

@@ -23,7 +23,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         await click('#prepare-session');
         assert.equal(await evaluate(`document.querySelector('#open-session').getAttribute('aria-pressed')==='true'&&document.querySelector('#open-quick').getAttribute('aria-pressed')==='false'`),true,'Prepared Session retains its active menu tile');
     };
-    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent===${JSON.stringify(label)}).click()`);
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>(button.textContent===${JSON.stringify(label)}||button.getAttribute('aria-label')?.startsWith(${JSON.stringify(label)}+': '))).click()`);
     const key = async (key,code,number) => {
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode:number,...(key==='Enter'?{text:'\r'}:{})});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:number});

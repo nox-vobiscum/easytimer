@@ -38,6 +38,9 @@ const copy = {
     },
 };
 Object.assign(copy.en, {
+    launchShort: 'Launch',
+    myRundowns: 'My Rundowns',
+    backupSubtitle: 'Import, export and optional Google Drive', backupAttention: 'Attention needed', backupDisconnected: 'Google Drive not connected',
     launch: 'Launch session', launchFailed: 'This saved Rundown could not be loaded. Refresh the list and try again. Your current timer has not been replaced.',
     importConflict: 'Import blocked: Rundowns changed in another tab. Existing Rundowns remain unchanged; the import preview is retained.',
     importStorageWrite: 'Import failed: the data could not be saved. Existing Rundowns remain unchanged; the import preview is retained.',
@@ -57,6 +60,9 @@ Object.assign(copy.en, {
     exportStarted: 'Download requested. Keep the JSON file as your backup.',
 });
 Object.assign(copy.de, {
+    launchShort: 'Starten',
+    myRundowns: 'Meine Rundowns',
+    backupSubtitle: 'Import, Export und optional Google Drive', backupAttention: 'Prüfung erforderlich', backupDisconnected: 'Google Drive nicht verbunden',
     launch: 'Session starten', launchFailed: 'Dieser gespeicherte Rundown konnte nicht geladen werden. Bitte die Liste aktualisieren und erneut versuchen. Der bisherige Timer wurde nicht ersetzt.',
     importConflict: 'Import blockiert: Rundowns wurden in einem anderen Tab geändert. Bestehende Rundowns bleiben unverändert; die Importvorschau bleibt erhalten.',
     importStorageWrite: 'Import fehlgeschlagen: Die Daten konnten nicht gespeichert werden. Bestehende Rundowns bleiben unverändert; die Importvorschau bleibt erhalten.',
@@ -91,6 +97,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
     const store = storeFactory();
     let writing = false;
     let launching = false;
+    let backupOpen = false;
     function io(method, data) {
         const value = store[method](data);
         if (!value?.then) return value;
@@ -378,7 +385,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
         });
         const actions = element('div', undefined, 'planner-actions');
         const confirm = button(review.data.templates.length === 1 ? text.openImport : text.confirmImport, confirmImport, 'primary'); confirm.id = 'confirm-import';
-        const cancel = button(text.cancel, () => { fileReadId += 1; review = null; feedback('', false); render(); root.querySelector('#rundown-import-file').focus(); }); cancel.id = 'cancel-import';
+        const cancel = button(text.cancel, () => { fileReadId += 1; review = null; backupOpen = true; feedback('', false); render(); root.querySelector('#rundown-import-file').focus(); }); cancel.id = 'cancel-import';
         const refresh = button(text.refreshImport, async () => {
             try { let saved = io('load'); if (saved?.then) saved = await saved; library = saved; feedback('', false); render(); root.querySelector('#confirm-import').focus(); }
             catch (e) { feedback(e.message); root.querySelector('#planner-feedback').focus(); }
@@ -387,9 +394,24 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
         actions.append(confirm, cancel, refresh); section.append(list, actions); root.append(section);
     }
     function renderBackup() {
-        const text = t(), section = element('section', undefined, 'data-backup');
+        const text = t(), section = element('details', undefined, 'data-backup');
+        section.id = 'data-backup'; section.open = backupOpen;
         section.setAttribute('aria-labelledby', 'backup-heading');
-        const heading = element('h2', text.dataBackup); heading.id = 'backup-heading';
+        const summary = element('summary'); summary.id = 'backup-summary';
+        const labels = element('span', undefined, 'backup-summary-text');
+        const heading = element('span', text.dataBackup, 'section-label'); heading.id = 'backup-heading';
+        const hint = element('span', '', 'backup-status-hint'); hint.hidden = true; hint.setAttribute('role', 'status');
+        labels.append(heading, element('span', text.backupSubtitle, 'backup-subtitle'), hint);
+        const chevron = element('span', '⌄', 'backup-chevron'); chevron.setAttribute('aria-hidden', 'true');
+        summary.append(labels, chevron);
+        const body = element('div', undefined, 'backup-body');
+        section.append(summary, body);
+        section.addEventListener('toggle', () => {
+            if (!section.isConnected) return;
+            // A retained conflict review must remain visible; toggling never resets it.
+            if (!section.open && section.querySelector('#drive-conflict-review')) section.open = true;
+            backupOpen = section.open;
+        });
         const actions = element('div', undefined, 'backup-actions');
         const label = element('label', text.importJSON);
         const file = element('input'); file.type = 'file'; file.id = 'rundown-import-file'; file.accept = '.json,application/json';
@@ -397,8 +419,18 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
         file.addEventListener('change', () => { const selected = file.files[0]; file.value = ''; readImport(selected); });
         label.append(file);
         const all = button(text.exportAll, () => exportSaved()); all.id = 'export-all'; all.disabled = library.templates.length === 0;
-        actions.append(label, all); section.append(heading, actions, element('p', text.localWarning)); root.append(section);
-        services?.renderBackup(section, { language, canChange: () => active && !draft && !review && !writing, refresh: async () => { await load(); render(); focusHeading(); } });
+        actions.append(label, all); body.append(actions, element('p', text.localWarning)); root.append(section);
+        services?.renderBackup(body, {
+            language, canChange: () => active && !draft && !review && !writing,
+            refresh: async () => { await load(); render(); focusHeading(); },
+            keepBackupOpen: () => { section.open = true; backupOpen = true; },
+            backupStatus: (code, statusText) => {
+                hint.hidden = ['localOnly', 'pending', 'lastChecked', 'busy', 'connectAgain'].includes(code);
+                hint.dataset.tone = code === 'reconnect' ? 'neutral' : 'attention';
+                hint.textContent = hint.hidden ? '' : code === 'reconnect' ? text.backupDisconnected : text.backupAttention;
+                hint.title = statusText;
+            },
+        });
     }
     function render() {
         closeReposition();
@@ -420,24 +452,28 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
             const actions = element('div', undefined, 'planner-actions');
             actions.append(button(text.create, () => begin(), 'primary'), button(text.refreshLibrary, async () => { const loading = load(); if (services) await loading; render(); focusHeading(); }));
             root.append(actions);
+            const listHeading = element('h2', text.myRundowns, 'section-label rundown-list-heading');
+            listHeading.id = 'rundown-list-heading'; root.append(listHeading);
             const list = element('ul', undefined, 'template-library');
+            list.setAttribute('aria-labelledby', listHeading.id);
             if (!library.templates.length) root.append(element('p', text.empty));
             for (const item of library.templates) {
                 const row = element('li');
                 const info = element('div');
-                info.append(element('h2', item.name), element('p', `${text.phaseCount(item.phases.length)} · ${clock(totalDuration(item.phases))}`));
-                const actions = element('div', undefined, 'planner-actions');
-                const edit = button(text.edit, () => begin(item)); edit.setAttribute('aria-label', `${text.edit}: ${item.name}`);
-                const remove = button(text.remove, async () => {
+                info.append(element('h3', item.name), element('p', `${text.phaseCount(item.phases.length)} · ${clock(totalDuration(item.phases))}`));
+                const actions = element('div', undefined, 'planner-actions rundown-actions');
+                const edit = phaseAction(`${text.edit}: ${item.name}`, 'm16 3 5 5-12 12H4v-5L16 3Zm-2 2 5 5', () => begin(item));
+                edit.className = 'rundown-icon rundown-edit';
+                const remove = phaseAction(`${text.remove}: ${item.name}`, 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6m4-6v6', async () => {
                     if (!window.confirm(text.deleteConfirm(item.name))) return;
                     try {
                         let saved = io('save', { schemaVersion: 1, templates: library.templates.filter(p => p.id !== item.id) }); if (saved?.then) saved = await saved; library = saved;
                         message = 'deleted'; error = false; render(); focusHeading();
                     } catch (e) { feedback(e.message); }
                 });
-                remove.setAttribute('aria-label', `${text.remove}: ${item.name}`);
+                remove.className = 'rundown-icon rundown-delete';
                 const exportButton = phaseAction(text.exportOne(item.name), 'M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5', () => exportSaved(item.id));
-                exportButton.className = 'rundown-export';
+                exportButton.className = 'rundown-icon rundown-export';
                 if (onLaunch) {
                     const launch = phaseAction(`${text.launch}: ${item.name}`, 'm8 5 11 7-11 7Z', async () => {
                         if (writing || launching) return;
@@ -451,7 +487,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
                     });
                     launch.className = 'rundown-launch';
                     launch.dataset.rundownId = item.id;
-                    launch.append(element('span', text.launch));
+                    launch.append(element('span', text.launch, 'launch-label-full'), element('span', text.launchShort, 'launch-label-short'));
                     actions.append(launch);
                 }
                 actions.append(edit, exportButton, remove); row.append(info, actions); list.append(row);
@@ -529,7 +565,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
                 else focusHeading();
                 return;
             }
-            active = true; const loading = load(); if (services) await loading;
+            active = true; backupOpen = false; const loading = load(); if (services) await loading;
             if (newDraft) begin();
             else { render(); focusHeading(); }
         },
