@@ -465,3 +465,15 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
 }
 .clock-only.presentation .session-context { display:none; }
 body.clock-only.presentation main { padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
+/* Recovery is exceptional feedback, not another timer configuration area. */
+.runtime-recovery {
+    max-width: 42rem;
+    margin: 1rem auto;
+    padding: 0 1rem;
+    overflow-wrap: anywhere;
+}
+.runtime-recovery h2 { font-size: 1rem; }
+.runtime-recovery select { max-width:100%; min-height:44px; width:100%; font:inherit; background:var(--surface); color:var(--text); }
+#recovery-detail { color:var(--muted); font-size:.875rem; line-height:1.5; }
+#recovery-feedback { scroll-margin-block:1rem; }
+.runtime-recovery button { min-height: 44px; margin-block: .25rem; }

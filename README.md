@@ -97,10 +97,10 @@ The authoritative timer object holds status, planned duration, cumulative post-s
 Before Start, additions change the planned duration. After Start, they extend the effective total and shift the existing deadline; paused additions preserve the paused state. Overtime additions retain elapsed history: they reduce overrun or return to countdown when the added budget exceeds it. At the exact boundary, the unified readout shows +00:00. Stop and New Run discard post-start additions and restore the planned duration.
 An injected timestamp makes the timer engine deterministic in tests. The browser uses `Date.now()`;
 refresh callbacks never decrement the timer. Returning to a backgrounded page recalculates from its deadline.
-Manual system-clock changes can affect a running countdown. Active countdowns are not restored after reload.
+Manual system-clock changes can affect a running countdown. The local REL-001A implementation restores validated Quick Timer runtime after same-tab reload, using its absolute deadline. Paused timers remain paused and READY never auto-starts. Session runtime recovery remains deferred. See [recovery behavior and limitations](docs/REL-001A_QUICK_RECOVERY.md).
 Unavailable local storage falls back to in-memory preferences.
 
-The service worker is available only in secure contexts such as HTTPS or localhost. It precaches the static app shell after the first successful visit. Updating `CACHE_NAME` in `src/service-worker.js` activates a fresh cache and removes older easyTimer caches. Keep the CSS/app JavaScript version queries in `index.html` and the worker's `APP_SHELL` in sync with each release; this prevents new HTML from loading incompatible resources from an older worker. A page reload still resets the timer because active countdown persistence is outside the current scope.
+The service worker is available only in secure contexts such as HTTPS or localhost. It precaches the static app shell after the first successful visit. Updating `CACHE_NAME` in `src/service-worker.js` activates a fresh cache and removes older easyTimer caches. Keep the CSS/app JavaScript version queries in `index.html` and the worker's `APP_SHELL` in sync with each release; this prevents new HTML from loading incompatible resources from an older worker. The local REL-001A shell is v45 and includes the recovery module. Quick runtime persistence is separate from the static cache; Session reload recovery is not implemented.
 
 ## Validation
 

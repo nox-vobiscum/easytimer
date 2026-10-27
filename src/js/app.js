@@ -4,6 +4,7 @@ import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress
 import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=35';
 import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=37';
+import { createRecovery } from './recovery.mjs?v=45';
 
 const copy = {
     en: {
@@ -79,6 +80,14 @@ let pickerOpen = false;
 let pickerTemplates = [];
 let pickerMessage = '';
 const development = location.origin === 'http://localhost:8000' && globalThis.easyTimerDevelopment?.enabled === true ? globalThis.easyTimerDevelopment : null;
+const recovery = await createRecovery({
+    storage: { getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value),
+        removeItem: key => localStorage.removeItem(key), key: index => localStorage.key(index), get length() { return localStorage.length; } },
+    tabs: { getItem: key => sessionStorage.getItem(key), setItem: (key, value) => sessionStorage.setItem(key, value), removeItem: key => sessionStorage.removeItem(key) },
+    locks: navigator.locks,
+});
+if (recovery.restored) { timer = transition(recovery.restored, { type: 'TICK' }, Date.now()); quickDurationMs = timer.durationMs; }
+let recoveryFeedback = '';
 const templateStore = development ? development.createStore() : createTemplateStore(() => localStorage);
 let limitExceeded = false;
 let expanded = false;
@@ -88,6 +97,83 @@ let menuOpen = false;
 let plannerOpen = false;
 let navigationRevision = 0;
 let clockOnly = false;
+const recoveryCopy = {
+    en: { heading: 'Timer recovery', choose: 'A saved Quick Timer is available. Choose which timer to restore.',
+        chooseMany: 'Saved Quick Timers are available. Choose which timer to restore.',
+        label: 'Saved timer', placeholder: 'Select a timer', restore: 'Restore timer', dismiss: 'Use current timer',
+        timer: 'Timer', start: 'Start', total: 'Total budget', notStarted: 'Not started', unknownStart: 'Start time not recorded', saved: 'Saved', elsewhere: 'In use in another tab',
+        error: 'Timer recovery is unavailable or saved data could not be trusted. You can keep using the timer; do not rely on recovery.',
+        active: 'This timer is already in use in another tab. Switch to that tab or start a new timer here.',
+        READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: 'Overtime' },
+    de: { heading: 'Timer wiederherstellen', choose: 'Ein gespeicherter Quick-Timer ist verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
+        chooseMany: 'Gespeicherte Quick-Timer sind verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
+        label: 'Gespeicherter Timer', placeholder: 'Timer auswählen', restore: 'Timer wiederherstellen', dismiss: 'Aktuellen Timer verwenden',
+        timer: 'Timer', start: 'Start', total: 'Gesamtzeit', notStarted: 'Noch nicht gestartet', unknownStart: 'Startzeit nicht erfasst', saved: 'Gespeichert', elsewhere: 'In anderem Tab aktiv',
+        error: 'Die Timer-Wiederherstellung ist nicht verfügbar oder gespeicherte Daten sind nicht verlässlich. Du kannst den Timer weiter nutzen; verlasse dich nicht auf die Wiederherstellung.',
+        active: 'Dieser Timer wird bereits in einem anderen Tab verwendet. Wechsle dorthin oder starte hier einen neuen Timer.',
+        READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Überzeit' },
+};
+let recoverySignature = '';
+function recoveryDescription(record, index) {
+    const t = recoveryCopy[language];
+    const start = record.startedAt == null
+        ? `${record.clock.status === 'READY' ? t.notStarted : t.unknownStart} · ${t.saved} ${new Date(record.savedAt).toLocaleString(language)}`
+        : `${t.start} ${new Date(record.startedAt).toLocaleString(language)}`;
+    return `${t.timer} ${index + 1} · ${start} · ${t.total} ${formatTime(record.clock.durationMs + record.clock.adjustmentMs)}${record.activeElsewhere ? ` · ${t.elsewhere}` : ''}`;
+}
+function renderRecoveryDetail() {
+    const candidates = recovery.candidates;
+    const index = candidates.findIndex(record => record.contextId === $('recovery-select').value);
+    $('recovery-detail').hidden = index < 0;
+    $('recovery-detail').textContent = index < 0 ? '' : recoveryDescription(candidates[index], index);
+}
+function renderRecovery() {
+    const candidates = recovery.candidates;
+    const signature = JSON.stringify([language, mode, recovery.error, recoveryFeedback, candidates, $('recovery-select').value]);
+    if (signature === recoverySignature) return;
+    recoverySignature = signature;
+    const t = recoveryCopy[language];
+    $('runtime-recovery').hidden = mode !== 'quick' || (!recovery.error && !recoveryFeedback && !candidates.length);
+    $('recovery-heading').textContent = t.heading;
+    const feedback = recoveryFeedback === 'CONTEXT_ACTIVE' ? t.active : recoveryFeedback || recovery.error ? t.error : candidates.length > 1 ? t.chooseMany : t.choose;
+    if ($('recovery-feedback').textContent !== feedback) $('recovery-feedback').textContent = feedback;
+    $('recovery-choices').hidden = !candidates.length;
+    $('recovery-label').textContent = t.label;
+    const selected = $('recovery-select').value;
+    $('recovery-select').replaceChildren(new Option(t.placeholder, ''));
+    for (const [index, record] of candidates.entries()) {
+        $('recovery-select').add(new Option(recoveryDescription(record, index), record.contextId));
+    }
+    $('recovery-select').value = selected;
+    $('recovery-restore').textContent = t.restore;
+    $('recovery-restore').disabled = !$('recovery-select').value;
+    $('recovery-dismiss').textContent = t.dismiss;
+    renderRecoveryDetail();
+}
+$('recovery-select').addEventListener('change', async () => {
+    recoveryFeedback = ''; renderRecovery(); renderRecoveryDetail();
+    await recovery.refreshAvailability(); renderRecovery();
+});
+$('recovery-dismiss').addEventListener('click', () => {
+    recovery.dismiss(); recoveryFeedback = ''; render(); $('primary').focus({ preventScroll: true });
+});
+$('recovery-restore').addEventListener('click', async () => {
+    if (mode !== 'quick') return;
+    dispatch({ type: 'TICK' });
+    if (timer.status !== 'READY' && !window.confirm(copy[language].switchConfirm)) return;
+    $('recovery-restore').disabled = true;
+    const baseline = JSON.stringify([mode, timer.status, timer.deadlineMs, timer.durationMs, timer.adjustmentMs, navigationRevision]);
+    try {
+        const restored = await recovery.recover($('recovery-select').value, () =>
+            baseline === JSON.stringify([mode, timer.status, timer.deadlineMs, timer.durationMs, timer.adjustmentMs, navigationRevision]));
+        timer = restored; quickDurationMs = timer.durationMs; recoveryFeedback = '';
+    } catch (cause) { recoveryFeedback = cause.message; }
+    render();
+    if (recoveryFeedback && mode === 'quick') {
+        $('recovery-feedback').focus({ preventScroll: true });
+        $('recovery-feedback').scrollIntoView({ block: 'nearest' });
+    } else $('primary').focus({ preventScroll: true });
+});
 const planner = createPlanner($('planner'), () => {
     navigationRevision += 1;
     plannerOpen = false;
@@ -192,7 +278,10 @@ function dispatch(action) {
     if (mode === 'session' && run) {
         const next = transitionSession(run, timer, action, Date.now());
         run = next.run; timer = next.clock;
-    } else if (timer) timer = transition(timer, action, Date.now());
+    } else if (timer) {
+        timer = transition(timer, action, Date.now());
+        recovery.save(timer, action.type);
+    }
     render();
 }
 function renderPicker() {
@@ -234,6 +323,7 @@ async function switchMode(nextMode) {
     navigationRevision += 1;
     if (mode === 'quick') quickDurationMs = timer.durationMs;
     mode = nextMode; run = null; limitExceeded = false;
+    recovery.save(null);
     pickerOpen = nextMode === 'session';
     timer = pickerOpen ? null : createTimer(quickDurationMs);
     if (pickerOpen) { const loading = loadTemplates(); if (development) await loading; }
@@ -244,6 +334,8 @@ async function switchMode(nextMode) {
     (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll: true });
 }
 function render() {
+    recovery.save(mode === 'quick' ? timer : null);
+    renderRecovery();
     const t = copy[language];
     const session = mode === 'session' && run;
     document.body.dataset.mode = mode;
@@ -359,6 +451,8 @@ function render() {
     if ($('help').textContent !== help) $('help').textContent = help;
     $('help').dataset.error = String(limitExceeded);
     updateClockView();
+    $('timer-view').style.removeProperty('visibility');
+    document.querySelector('main').removeAttribute('aria-busy');
 }
 
 $('primary').addEventListener('click', () => {
@@ -530,7 +624,7 @@ document.addEventListener('keydown', event => {
 updatePresentation();
 
 if ('serviceWorker' in navigator && !development) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js').catch(() => {});
-    });
+    const register = () => navigator.serviceWorker.register('service-worker.js').catch(() => {});
+    if (document.readyState === 'complete') register();
+    else window.addEventListener('load', register, { once: true });
 }

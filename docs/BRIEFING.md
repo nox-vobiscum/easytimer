@@ -51,7 +51,7 @@ The countdown is the dominant element. UX-007 uses two layout families sharing o
 - Adding time in overtime shifts the existing deadline: smaller additions reduce overtime, an exact compensation stays at zero, and larger additions return to countdown. This explicitly supersedes ET-001 decision 37.
 - Remaining time and overtime are derived from the deadline. Delayed callbacks and background-tab throttling do not accumulate timer drift.
 - A theme, language, orientation, viewport, or presentation change never resets the timer.
-- An active countdown is not restored after a complete page reload.
+- Local REL-001A restores validated Quick Timer runtime after same-tab reload; deadline-based elapsed time, frozen pause, configuration and extensions are preserved. Restart without a reliable context association requires explicit recovery selection. Session runtime is not restored. See [scope and limitations](REL-001A_QUICK_RECOVERY.md). Locally functionally and visually accepted by the product owner in desktop browsers; real iOS/PWA and screen-reader acceptance remain outstanding. This is local development, not a production release; production remains NO-GO.
 
 ## 3. Interface and responsive behavior
 
@@ -80,7 +80,7 @@ easyTimer is installable from supported browsers through `src/manifest.webmanife
 
 `src/service-worker.js` precaches the same-origin app shell after the first successful online visit. Navigation falls back to the cached index while offline. The cache name is versioned; activating a new version removes older `easytimer-` caches. Service workers require HTTPS or localhost.
 
-Offline reload starts a fresh ready timer because cross-reload timer persistence is outside the current scope.
+Offline reload can restore Quick runtime when the shell is cached and local persistence/context isolation are available. Session runtime recovery remains outside this slice. Storage failures disable reliable recovery visibly without blocking ordinary timer use.
 
 ## 5. Architecture
 
