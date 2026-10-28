@@ -1,5 +1,5 @@
 import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=35';
-import { createPlanner } from './planner.js?v=43';
+import { createPlanner } from './planner.js?v=49';
 import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=35';
 import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=35';
@@ -366,6 +366,10 @@ function render() {
     renderRecovery();
     const t = copy[language];
     const session = mode === 'session' && run;
+    development?.updateAccount?.({ language, fullscreen: Boolean(document.fullscreenElement) || expanded, mobileLandscape: isSmartphone() && landscape.matches, clockOnly,
+        canChange: () => planner.canChangeAccount(), closeMenu: () => setMenuOpen(false),
+        openSetup: async () => { await openEditor(); const details = document.getElementById('data-backup'); if (details) { details.open = true; document.getElementById('backup-summary').focus(); } },
+    });
     document.body.dataset.mode = mode;
     document.body.classList.toggle('picker-open', pickerOpen);
     $('session-picker').hidden = !pickerOpen || plannerOpen;

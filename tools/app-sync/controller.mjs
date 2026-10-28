@@ -7,7 +7,7 @@ import { buildGraph, analyzeReconciliation, createReconciliation } from '../sync
 import { createDiagnosticReport } from './diagnostics.mjs';
 export function createApplicationSync({ storage, factory, fetchImpl, fault, changed = () => {} }) {
     const client = createPocClient({ ...(fetchImpl ? { fetchImpl } : {}) });
-    let database, opening, transport = null, busy = false, error = '', adoption = false, review = null, preview = null;
+    let database, opening, transport = null, busy = false, error = '', adoption = false, review = null, preview = null, accountReady = false;
     const active = () => { try { return storage.getItem(MARKER) === 'active'; } catch { return false; } };
     const db = async () => database || (opening ||= openApplicationStorage({ storage, factory, fault }).then(value => database = value));
     const notify = () => changed();
@@ -36,6 +36,7 @@ export function createApplicationSync({ storage, factory, fetchImpl, fault, chan
     };
     return {
         client, active, get busy() { return busy; }, get adoptionAvailable() { return adoption; },
+        get accountConnected() { return accountReady && client.connected; },
         async diagnosticReport() {
             let records = null, readState = 'no-existing-connection';
             let activated = null;
@@ -50,16 +51,17 @@ export function createApplicationSync({ storage, factory, fetchImpl, fault, chan
         async activate() { return run(async () => { await (await db()).activate(); }); },
         async authorize(response) {
             return run(async () => {
-                transport = null;
+                transport = null; accountReady = false;
                 try {
                     check(active(), 'storageBlocked'); await client.authorize(response);
                     const session = client.integrationSession();
                     await (await db()).bind(await session.accountKey(), () => session.assertCurrent());
                     transport = applicationDrive(session);
+                    accountReady = true;
                 } catch (e) { client.disconnect(); throw e; }
             });
         },
-        disconnect() { client.disconnect(); transport = null; adoption = false; error = ''; review = null; preview = null; notify(); },
+        disconnect() { accountReady = false; client.disconnect(); transport = null; adoption = false; error = ''; review = null; preview = null; notify(); },
         async reviewConflict() {
             return run(async () => {
                 check(client.connected && transport, 'REAUTHORIZE');

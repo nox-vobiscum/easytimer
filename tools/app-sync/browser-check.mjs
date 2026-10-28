@@ -8,8 +8,10 @@ import { join, resolve, sep, basename } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startServer } from './server.mjs';
 import { fakeDrive } from '../sync-integration/fake-drive.mjs';
+import { checkAccountHeader } from './account-browser.mjs';
 const drive = fakeDrive();
 let loseNextUploadAcknowledgement = false, blockResolutionReadback = false;
+let profileFixture = null;
 let changedHtmlVersion = false;
 const server = await startServer({ port: 0, enabled: true, read: async file => {
     const body = await readFile(file);
@@ -53,18 +55,21 @@ try {
                     const url=new URL(request.url),response=await fetch(`http://127.0.0.1:${server.address().port}${url.pathname}${url.search}`);
                     await send('Fetch.fulfillRequest',{requestId,responseCode:response.status,responseHeaders:[...response.headers].map(([name,value])=>({name,value})),body:Buffer.from(await response.arrayBuffer()).toString('base64')});
                 } else if(request.url==='https://accounts.google.com/gsi/client') {
-                    const script=`globalThis.google={accounts:{oauth2:{initTokenClient(config){return {requestAccessToken(){config.callback({access_token:'BROWSER_APPLICATION_FAKE_ONLY',expires_in:3600,scope:'https://www.googleapis.com/auth/drive.appdata'})}}}}}};`;
+                    const script=`globalThis.google={accounts:{oauth2:{initTokenClient(config){globalThis.headerRequestedScope=config.scope;return {requestAccessToken(){globalThis.headerRequestCount=(globalThis.headerRequestCount||0)+1;globalThis.headerLastConfig=config;if(globalThis.headerAuthMode==='pending')return;if(globalThis.headerAuthMode==='cancel'){config.error_callback?.({type:'popup_closed'});return;}if(globalThis.headerAuthMode==='denied'){config.callback({error:'access_denied'});return;}if(globalThis.headerAuthMode==='incomplete'){config.callback({});return;}config.callback({access_token:'BROWSER_APPLICATION_FAKE_ONLY',expires_in:globalThis.headerTokenLifetime||3600,scope:'https://www.googleapis.com/auth/drive.appdata'})}}}}}};`;
                     await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'text/javascript'}],body:Buffer.from(script).toString('base64')});
                 } else if(request.url.startsWith('https://www.googleapis.com/')) {
                     if (blockResolutionReadback && new URL(request.url).pathname.startsWith('/drive/v3/files/')) {
                         await send('Fetch.failRequest',{requestId,errorReason:'InternetDisconnected'});return;
                     }
-                    const response=request.method==='OPTIONS'?new Response(null,{status:204}):await drive.fetch(request.url,{method:request.method,body:request.postData});
+                    let response=request.method==='OPTIONS'?new Response(null,{status:204}):await drive.fetch(request.url,{method:request.method,body:request.postData});
+                    if (profileFixture && request.method === 'GET' && new URL(request.url).pathname === '/drive/v3/about') response = new Response(JSON.stringify({ user: { permissionId: 'synthetic-account-A', ...profileFixture } }));
                     if (loseNextUploadAcknowledgement && request.method==='POST' && request.url.includes('/upload/')) {
                         loseNextUploadAcknowledgement=false;blockResolutionReadback=true;
                         await send('Fetch.failRequest',{requestId,errorReason:'InternetDisconnected'});return;
                     }
                     await send('Fetch.fulfillRequest',{requestId,responseCode:response.status,responseHeaders:[{name:'Access-Control-Allow-Origin',value:'http://localhost:8000'},{name:'Access-Control-Allow-Methods',value:'GET,POST,OPTIONS'},{name:'Access-Control-Allow-Headers',value:'authorization,content-type'},{name:'Content-Type',value:'application/json'}],body:Buffer.from(await response.arrayBuffer()).toString('base64')});
+                } else if (request.url === 'https://lh3.googleusercontent.com/header-fixture') {
+                    await send('Fetch.fulfillRequest', { requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'image/svg+xml' }, { name: 'Access-Control-Allow-Origin', value: '*' }], body: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><circle cx="14" cy="14" r="14" fill="#526078"/></svg>').toString('base64') });
                 } else await send('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'});
             })().catch(()=>send('Fetch.failRequest',{requestId,errorReason:'Failed'}).catch(()=>{}));
         }
@@ -362,6 +367,7 @@ try {
     assert.equal(runtimeAfterCreate.clock.deadlineMs, runtimeBeforeCreate.clock.deadlineMs);
     assert.equal(drive.calls.length, callsBeforeCreate, 'Local creation after recovery makes no Google calls');
     console.log('PASS: changed shell on a live server retains development entry; after Session recovery, a new manual 5/10/5-minute Rundown saves to real IndexedDB while existing definitions, legacy storage and active Run remain intact.');
+    await checkAccountHeader({ evaluate, cdp, wait, drive, external, output, setProfile: value => { profileFixture = value; } });
     assert.deepEqual(errors,[]);console.log('PASS: actual Editor activation/upload/edit/export/draft guards, reload, DE/EN/themes/320px and focus. Evidence: '+output);
     await cdp('Browser.close');
 } finally {

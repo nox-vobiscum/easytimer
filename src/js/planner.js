@@ -559,6 +559,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
     return {
         close,
+        canChangeAccount: () => !draft && !review && !writing,
         async open({ newDraft = false } = {}) {
             if (active) {
                 if (newDraft) { if (!canDiscard()) return; begin(); }

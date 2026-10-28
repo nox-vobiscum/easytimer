@@ -49,6 +49,24 @@ function loadGIS() {
     });
     return gisPromise;
 }
+// Library preparation alone never requests a token or starts synchronization.
+export function prepareDrive() {
+    return globalThis.google?.accounts?.oauth2 ? Promise.resolve() : loadGIS().then(() => {
+        if (!globalThis.google?.accounts?.oauth2) throw Error('GIS_UNAVAILABLE');
+    }).catch(error => { gisPromise = null; throw error; });
+}
+export function connectDrive(sync, { canChange, present, showStatus, execute }) {
+    if (!canChange() || sync.busy) return;
+    if (!globalThis.google?.accounts?.oauth2) { loadGIS().then(() => { if (present()) showStatus('connectAgain'); }).catch(() => { showStatus('syncError'); }); return; }
+    const epoch = ++authEpoch;
+    try {
+        google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, include_granted_scopes: false, prompt: 'select_account',
+            callback: response => { if (epoch === authEpoch) { if (response.error) showStatus('reconnect'); else execute(() => sync.authorize(response)); } },
+            error_callback: () => { if (epoch === authEpoch) showStatus('reconnect'); },
+        }).requestAccessToken();
+    } catch { showStatus('syncError'); }
+}
+export function disconnectDrive(sync) { authEpoch++; sync.disconnect(); }
 export function renderSyncPanel(parent, context, sync, panels) {
     const text = copy[context.language], section = document.createElement('section'); section.className = 'development-sync';
     const heading = document.createElement('h3'); heading.textContent = 'Google Drive';
@@ -88,17 +106,7 @@ export function renderSyncPanel(parent, context, sync, panels) {
         catch { await update(); }
     };
     const activate = button('drive-activate', text.activate, () => { if (window.confirm(text.activateConfirm)) execute(() => sync.activate()); });
-    const connect = button('drive-connect', text.connect, () => {
-        if (!context.canChange() || sync.busy) return;
-        if (!globalThis.google?.accounts?.oauth2) { loadGIS().then(() => { if (section.isConnected) showStatus('connectAgain'); }).catch(() => { showStatus('syncError'); }); return; }
-        const epoch = ++authEpoch;
-        try {
-            google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, include_granted_scopes: false, prompt: 'select_account',
-                callback: response => { if (epoch === authEpoch) { if (response.error) showStatus('reconnect'); else execute(() => sync.authorize(response)); } },
-                error_callback: () => { if (epoch === authEpoch) showStatus('reconnect'); },
-            }).requestAccessToken();
-        } catch { showStatus('syncError'); }
-    });
+    const connect = button('drive-connect', text.connect, () => connectDrive(sync, { canChange: context.canChange, present: () => section.isConnected, showStatus, execute }));
     const syncButton = button('drive-sync', text.sync, () => execute(() => sync.sync()));
     const reviewButton = button('drive-review', context.language === 'de' ? 'Konflikt prüfen' : 'Review conflict', async () => {
         if (!context.canChange() || sync.busy) return;
@@ -111,7 +119,7 @@ export function renderSyncPanel(parent, context, sync, panels) {
         } catch (e) { showStatus(e.message, syncFeedback(e.message, context.language)); }
     });
     const adopt = button('drive-adopt', text.adopt, () => { if (window.confirm(text.adoptConfirm)) execute(() => sync.sync({ adopt: true })); });
-    const disconnect = button('drive-disconnect', text.disconnect, () => { authEpoch++; sync.disconnect(); update(); });
+    const disconnect = button('drive-disconnect', text.disconnect, () => { disconnectDrive(sync); update(); });
     const backupError = context.language === 'de' ? 'Die Sicherung konnte nicht vorbereitet werden. Lokale Daten bleiben unverändert. Bitte erneut versuchen.' : 'The backup could not be prepared. Local data is unchanged. Please try again.';
     const backup = button('drive-backup', text.backup, async () => { try { downloadRundowns(await sync.backup()); } catch { showStatus('syncError', backupError); } });
     const otherBackup = button('drive-legacy-backup', text.legacyBackup, () => { try { downloadRundowns(sync.legacyBackup(), 'easytimer-other-browser-copy.json'); } catch { showStatus('syncError', backupError); } });

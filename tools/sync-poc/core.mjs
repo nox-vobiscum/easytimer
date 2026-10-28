@@ -1,5 +1,13 @@
 import { createSnapshotOperations } from './snapshots.mjs';
 export const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+export function profilePhotoURL(value) {
+    try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && !url.username && !url.password && !url.port
+            && /(^|\.)(googleusercontent\.com|ggpht\.com)$/.test(url.hostname)
+            && ![...url.searchParams.keys()].some(key => /token|authorization/i.test(key)) ? url.href : '';
+    } catch { return ''; }
+}
 export const PURPOSE = 'easytimer-sync-001-disposable-v1';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fields = 'id,name,appProperties,version,spaces';
@@ -47,10 +55,10 @@ export function revisionHeads(nodes) {
 }
 
 export function createPocClient({ fetchImpl = fetch, now = Date.now, evidence = () => {}, timeoutMs = 15000 } = {}) {
-    let token = null, expiresAt = 0, generation = 0, account = null;
+    let token = null, expiresAt = 0, generation = 0, account = null, profile = null;
     const pending = new Set();
     function disconnect() {
-        token = null; expiresAt = 0; account = null; generation++;
+        token = null; expiresAt = 0; account = null; profile = null; generation++;
         for (const controller of pending) controller.abort();
         pending.clear();
     }
@@ -112,7 +120,8 @@ export function createPocClient({ fetchImpl = fetch, now = Date.now, evidence = 
             })[method](...args);
         }])),
         disconnect, abort,
-        get connected() { return Boolean(token && now() < expiresAt && account); },
+        get connected() { if (token && now() >= expiresAt) disconnect(); return Boolean(token && account); },
+        get profile() { if (token && now() >= expiresAt) disconnect(); return token && account && profile ? { ...profile } : null; },
         get expiresAt() { return expiresAt; },
         async authorize(response) {
             disconnect();
@@ -120,9 +129,17 @@ export function createPocClient({ fetchImpl = fetch, now = Date.now, evidence = 
                 response.scope?.split(' ').filter(Boolean).length !== 1 || response.scope !== SCOPE) throw new Error('SCOPE_OR_TOKEN_REJECTED');
             token = response.access_token; expiresAt = now() + Number(response.expires_in) * 1000;
             try {
-                const { value } = await request('/drive/v3/about?fields=user(permissionId)');
+                let value;
+                try { ({ value } = await request('/drive/v3/about?fields=user(permissionId,displayName,emailAddress,photoLink)')); }
+                catch (error) {
+                    if (!/^HTTP_(400|403)$/.test(error.message)) throw error;
+                    // Optional presentation fields must not weaken mandatory account binding.
+                    ({ value } = await request('/drive/v3/about?fields=user(permissionId)'));
+                }
                 if (!value.user?.permissionId) throw new Error('ACCOUNT_UNRESOLVED');
                 account = value.user.permissionId;
+                const label = value => typeof value === 'string' ? value.trim().slice(0, 320) : '';
+                profile = { displayName: label(value.user.displayName), emailAddress: label(value.user.emailAddress), photoLink: profilePhotoURL(value.user.photoLink) };
                 const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(account));
                 return [...new Uint8Array(digest)].slice(0, 6).map(byte => byte.toString(16).padStart(2, '0')).join('');
             } catch (error) { disconnect(); throw error; }
