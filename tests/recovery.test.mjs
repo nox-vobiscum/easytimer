@@ -182,6 +182,57 @@ const sessionAct = (state, type, now) => transitionSession(state.run, state.cloc
 const sessionRecord = (state, now) => ({ schemaVersion: 1, contextId: 'session-context', savedAt: now,
     mode: 'session', run: state.run, clock: state.clock, quickDurationMs: 90000, startedAt: null });
 
+for (const mode of ['quick', 'session']) test(`unresolved ${mode} recovery survives reload until explicit dismissal`, async () => {
+    const storage = memory(), locks = lockManager(), ownerTabs = memory(), tabs = memory();
+    const owner = await createRecovery({ storage, locks, tabs: ownerTabs, now: () => 10000, uuid: () => 'pending-owner' });
+    const running = mode === 'session' ? sessionAct(prepareSession(sessionTemplate(), 'pending-run'), 'START', 10000) : { clock: act(createTimer(60000), 'START') };
+    owner.save(running.clock, 'START', running.run);
+    const original = storage.getItem(prefix + 'pending-owner');
+    tabs.setItem(contextKey, ownerTabs.getItem(contextKey));
+    const options = { storage, locks, tabs, now: () => 10000, uuid: () => 'pending-duplicate' };
+    let duplicate = await createRecovery(options);
+    assert.equal(duplicate.candidates.length, 1);
+    duplicate.save(createTimer()); duplicate.close(); await Promise.resolve();
+    duplicate = await createRecovery(options);
+    assert.equal(duplicate.candidates.length, 1, 'Reload must not resolve a decision through the automatically saved default clock');
+    await assert.rejects(duplicate.recover('pending-owner'), /CONTEXT_ACTIVE/);
+    assert.equal(storage.getItem(prefix + 'pending-owner'), original);
+    duplicate.dismiss(); duplicate.save(createTimer()); duplicate.close(); await Promise.resolve();
+    duplicate = await createRecovery(options);
+    assert.equal(duplicate.candidates.length, 0); assert.equal(duplicate.restored.status, 'READY');
+    duplicate.close(); owner.close();
+});
+
+test('pending reload refreshes changed or missing candidates; successful recovery clears the decision', async () => {
+    const storage = memory(), locks = lockManager(), ownerTabs = memory(), tabs = memory();
+    const owner = await createRecovery({ storage, locks, tabs: ownerTabs, now: () => 10000, uuid: () => 'changing-owner' });
+    owner.save(createTimer(60000));
+    const options = { storage, locks, tabs, now: () => 10000, uuid: () => 'changing-chooser' };
+    let chooser = await createRecovery(options); chooser.save(createTimer()); chooser.close(); await Promise.resolve();
+    owner.save(createTimer(120000));
+    chooser = await createRecovery(options);
+    assert.equal(chooser.pending, true); assert.equal(chooser.candidates[0].clock.durationMs, 120000);
+    assert.equal(chooser.candidates[0].activeElsewhere, true);
+    chooser.close(); owner.close(); await Promise.resolve();
+    chooser = await createRecovery(options);
+    assert.equal(chooser.candidates[0].activeElsewhere, false);
+    const recovered = await chooser.recover('changing-owner');
+    assert.equal(chooser.pending, false); chooser.save(recovered); chooser.close(); await Promise.resolve();
+    chooser = await createRecovery(options);
+    assert.equal(chooser.pending, false); assert.equal(chooser.candidates.length, 0);
+    assert.equal(chooser.restored.durationMs, 120000); chooser.close();
+
+    const pendingRecord = { ...record(createTimer()), recoveryPending: true };
+    storage.data.clear(); storage.setItem(prefix + 'test-context', JSON.stringify(pendingRecord));
+    const emptyTabs = memory(); emptyTabs.setItem(contextKey, 'test-context');
+    const empty = await createRecovery({ ...options, tabs: emptyTabs });
+    assert.equal(empty.pending, true); assert.equal(empty.candidates.length, 0);
+    empty.dismiss(); empty.save(createTimer());
+    assert.equal(Object.hasOwn(JSON.parse(storage.getItem(prefix + 'test-context')), 'recoveryPending'), false);
+    empty.close();
+    assert.throws(() => validateRuntime({ ...pendingRecord, recoveryPending: 'true' }), /INVALID_RECOVERY_DECISION/);
+});
+
 for (const mode of ['manual', 'automatic']) for (const status of ['READY', 'RUNNING', 'PAUSED']) {
     test(`Session ${mode} ${status} restores the original run/snapshot with one authoritative clock`, () => {
         const source = sessionTemplate(mode);

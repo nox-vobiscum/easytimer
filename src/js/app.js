@@ -4,7 +4,7 @@ import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress
 import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=35';
 import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=37';
-import { createRecovery } from './recovery.mjs?v=46';
+import { createRecovery } from './recovery.mjs?v=48';
 
 const copy = {
     en: {
@@ -108,9 +108,21 @@ let menuOpen = false;
 let plannerOpen = false;
 let navigationRevision = 0;
 let clockOnly = false;
+const VIEW_KEY = 'easyTimerView.v1';
+let restoringView = true;
+let lastView;
+function rememberView() {
+    if (restoringView) return;
+    const view = plannerOpen ? 'editor' : mode;
+    if (view === lastView) return;
+    lastView = view;
+    try { sessionStorage.setItem(VIEW_KEY, view); }
+    catch { /* View persistence is optional; runtime recovery has its own safeguards. */ }
+}
 const recoveryCopy = {
     en: { heading: 'Timer recovery', choose: 'A saved timer is available. Choose which timer to restore.',
         chooseMany: 'Saved timers are available. Choose which timer to restore.',
+        noCandidates: 'No saved timers are currently available. You can use the current independent timer.',
         label: 'Saved timer', placeholder: 'Select a timer', restore: 'Restore timer', dismiss: 'Use current timer',
         timer: 'Timer', start: 'Start', total: 'Total budget', notStarted: 'Not started', unknownStart: 'Start time not recorded', saved: 'Saved', elsewhere: 'In use in another tab',
         error: 'Timer recovery is unavailable or saved data could not be trusted. You can keep using the timer; do not rely on recovery.',
@@ -118,6 +130,7 @@ const recoveryCopy = {
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: 'Overtime' },
     de: { heading: 'Timer wiederherstellen', choose: 'Ein gespeicherter Timer ist verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
         chooseMany: 'Gespeicherte Timer sind verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
+        noCandidates: 'Derzeit sind keine gespeicherten Timer verfügbar. Du kannst den aktuellen unabhängigen Timer verwenden.',
         label: 'Gespeicherter Timer', placeholder: 'Timer auswählen', restore: 'Timer wiederherstellen', dismiss: 'Aktuellen Timer verwenden',
         timer: 'Timer', start: 'Start', total: 'Gesamtzeit', notStarted: 'Noch nicht gestartet', unknownStart: 'Startzeit nicht erfasst', saved: 'Gespeichert', elsewhere: 'In anderem Tab aktiv',
         error: 'Die Timer-Wiederherstellung ist nicht verfügbar oder gespeicherte Daten sind nicht verlässlich. Du kannst den Timer weiter nutzen; verlasse dich nicht auf die Wiederherstellung.',
@@ -142,15 +155,15 @@ function renderRecoveryDetail() {
 }
 function renderRecovery() {
     const candidates = recovery.candidates;
-    const signature = JSON.stringify([language, mode, recovery.error, recoveryFeedback, candidates, $('recovery-select').value]);
+    const signature = JSON.stringify([language, mode, recovery.pending, recovery.error, recoveryFeedback, candidates, $('recovery-select').value]);
     if (signature === recoverySignature) return;
     recoverySignature = signature;
     const t = recoveryCopy[language];
-    $('runtime-recovery').hidden = !recovery.error && !recoveryFeedback && (mode !== 'quick' || !candidates.length);
+    $('runtime-recovery').hidden = !recovery.error && !recoveryFeedback && (mode !== 'quick' || (!recovery.pending && !candidates.length));
     $('recovery-heading').textContent = t.heading;
-    const feedback = recoveryFeedback === 'CONTEXT_ACTIVE' ? t.active : recoveryFeedback || recovery.error ? t.error : candidates.length > 1 ? t.chooseMany : t.choose;
+    const feedback = recoveryFeedback === 'CONTEXT_ACTIVE' ? t.active : recoveryFeedback || recovery.error ? t.error : !candidates.length && recovery.pending ? t.noCandidates : candidates.length > 1 ? t.chooseMany : t.choose;
     if ($('recovery-feedback').textContent !== feedback) $('recovery-feedback').textContent = feedback;
-    $('recovery-choices').hidden = mode !== 'quick' || !candidates.length;
+    $('recovery-choices').hidden = mode !== 'quick' || (!recovery.pending && !candidates.length);
     $('recovery-label').textContent = t.label;
     const selected = $('recovery-select').value;
     $('recovery-select').replaceChildren(new Option(t.placeholder, ''));
@@ -348,6 +361,7 @@ async function switchMode(nextMode) {
     (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll: true });
 }
 function render() {
+    rememberView();
     recovery.save(timer, null, mode === 'session' ? run : null, quickDurationMs);
     renderRecovery();
     const t = copy[language];
@@ -404,6 +418,7 @@ function render() {
     if (!timer) {
         updateClockView();
         if (document.title !== 'easyTimer') document.title = 'easyTimer';
+        document.querySelector('main').removeAttribute('aria-busy');
         return;
     }
     $('heading').textContent = session ? t.session : t.countdown;
@@ -574,7 +589,7 @@ async function openEditor(newDraft = false) {
     if (exiting) await exiting;
     if (!plannerOpen) return;
     updatePresentation();
-    planner.open({ newDraft });
+    await planner.open({ newDraft });
 }
 $('open-planner').addEventListener('click', () => openEditor());
 $('create-rundown').addEventListener('click', () => {
@@ -635,6 +650,18 @@ document.addEventListener('keydown', event => {
     }
     if (event.key === 'Escape') setTimeout(updatePresentation, 0);
 });
+// View state never selects a recovery candidate or changes an accessible runtime.
+let savedView;
+try { savedView = sessionStorage.getItem(VIEW_KEY); } catch { /* Use the recovered runtime view. */ }
+const unresolvedRecovery = (mode === 'quick' && recovery.pending) || (!recovery.restored && recovery.error);
+if (!unresolvedRecovery && savedView === 'editor') {
+    await openEditor();
+} else if (!unresolvedRecovery && savedView === 'session' && mode !== 'session' && !recovery.restored) {
+    // No accessible Run: restore the existing picker, never an empty Session screen.
+    mode = 'session'; pickerOpen = true; timer = null;
+    await loadTemplates();
+}
+restoringView = false;
 updatePresentation();
 
 if ('serviceWorker' in navigator && !development) {

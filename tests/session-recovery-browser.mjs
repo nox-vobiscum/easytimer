@@ -27,7 +27,7 @@ export async function checkSessionRecovery({ evaluate, click, text, cdp }) {
     };
     const resetClock = async () => {
         if (script) { await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: script }); script = null; }
-        await evaluate("(()=>{for(const key of Object.keys(localStorage))if(key.startsWith('easyTimerRuntime.v1.'))localStorage.removeItem(key);sessionStorage.removeItem('easyTimerRuntimeContext.v1')})()");
+        await evaluate("(()=>{for(const key of Object.keys(localStorage))if(key.startsWith('easyTimerRuntime.v1.'))localStorage.removeItem(key);sessionStorage.removeItem('easyTimerRuntimeContext.v1');sessionStorage.removeItem('easyTimerView.v1')})()");
         const origin = await evaluate('performance.timeOrigin'); await cdp('Page.reload');
         await wait(`performance.timeOrigin!==${origin}&&Boolean(document.querySelector('#primary')?.title)`);
     };

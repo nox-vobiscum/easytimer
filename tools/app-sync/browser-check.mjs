@@ -154,6 +154,7 @@ try {
     changedHtmlVersion = true;
     await cdp('Page.reload');await wait('Boolean(globalThis.easyTimerDevelopment)');await wait('document.getElementById("primary")?.title?.length > 0');
     assert.equal(await evaluate('document.querySelector("script[type=module]").getAttribute("src")'), '/tools/app-sync/entry.mjs', 'A live server must retain the correct storage entry after a shell-version change');
+    assert.equal(await evaluate('document.body.classList.contains("planner-open")'), true, 'Reload restores the asynchronous Development Editor without Google authorization');
     await evaluate('document.getElementById("open-planner").click()');await wait(`Boolean(document.querySelector('[aria-label="Edit: IDB workshop"]'))`);
     await wait('document.getElementById("drive-status").textContent==="Google Drive not connected. Reconnect if needed."');
     assert.equal(await evaluate('document.querySelector(".backup-status-hint").dataset.tone'), 'neutral', 'Missing memory-only authorization is not a sync error');

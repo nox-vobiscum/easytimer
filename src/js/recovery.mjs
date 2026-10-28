@@ -28,11 +28,13 @@ function validateRun(run) {
 export function validateRuntime(record) {
     const keys = ['schemaVersion', 'contextId', 'savedAt', 'mode', 'clock'];
     if (record && Object.hasOwn(record, 'startedAt')) keys.push('startedAt');
+    if (record && Object.hasOwn(record, 'recoveryPending')) keys.push('recoveryPending');
     if (record?.mode === 'session') keys.push('run', 'quickDurationMs');
     if (!exact(record, keys)
         || record.schemaVersion !== 1 || !['quick', 'session'].includes(record.mode)
         || typeof record.contextId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(record.contextId) || !integer(record.savedAt)) throw new Error('INVALID_RUNTIME');
     if (Object.hasOwn(record, 'startedAt') && record.startedAt !== null && !integer(record.startedAt)) throw new Error('INVALID_START');
+    if (Object.hasOwn(record, 'recoveryPending') && typeof record.recoveryPending !== 'boolean') throw new Error('INVALID_RECOVERY_DECISION');
     const session = record.mode === 'session';
     if (session) { validateRun(record.run); createTimer(record.quickDurationMs); }
     const c = record.clock;
@@ -111,6 +113,7 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
     };
     let restored = null;
     let candidates = [];
+    let pending = false;
     try {
         if (!locks?.request) throw new Error('ISOLATION_UNAVAILABLE');
         const previous = tabs.getItem(CONTEXT);
@@ -119,6 +122,7 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
             if (storage.getItem(PREFIX + id) !== null) {
                 try {
                     const saved = read(id);
+                    pending = saved.recoveryPending === true;
                     restored = restoreRuntime(saved, now());
                     startedAt = saved.startedAt ?? null;
                     previousStatus = saved.clock.status;
@@ -131,14 +135,15 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
             if (!await claim(id)) throw new Error('ISOLATION_UNAVAILABLE');
         }
         tabs.setItem(CONTEXT, id);
-        // An unambiguous same-tab restore must not become a restart chooser.
+        // An unresolved choice survives restoring this tab's independent fallback clock.
         for (let index = 0; index < storage.length; index++) {
-            if (restored) break;
+            if (restored && !pending) break;
             const key = storage.key(index);
             if (!key?.startsWith(PREFIX) || key === PREFIX + id) continue;
             try { candidates.push(read(key.slice(PREFIX.length))); }
             catch { error ||= 'INVALID_RUNTIME'; }
         }
+        pending ||= candidates.length > 0;
     } catch (cause) { fail(cause.message); }
 
     const refreshAvailability = async () => {
@@ -155,6 +160,7 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
     return {
         restored,
         get error() { return error; },
+        get pending() { return pending; },
         get candidates() { return candidates.map(record => ({ ...structuredClone(record), activeElsewhere: activity.get(record.contextId) ?? null })); },
         refreshAvailability,
         // Only semantic transitions write. Deadline-based ticks need no persistence.
@@ -182,7 +188,7 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
             lastObserved = observed;
             const semantic = clock ? JSON.stringify({ status: clock.status, durationMs: clock.durationMs,
                 adjustmentMs: clock.adjustmentMs, deadlineMs: clock.deadlineMs,
-                startedAt, run: runSemantic, ...(run ? { quickDurationMs } : {}),
+                startedAt, recoveryPending: pending, run: runSemantic, ...(run ? { quickDurationMs } : {}),
                 ...(['PAUSED', 'OVERTIME_PAUSED', 'OVERTIME_STOPPED'].includes(clock.status) ? { remainingMs: clock.remainingMs, overtimeMs: clock.overtimeMs } : {}) }) : 'none';
             if (semantic === lastSemantic) return true;
             try {
@@ -190,6 +196,7 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
                     const savedAt = now();
                     const current = run ? transitionSession(run, clock, { type: 'TICK' }, savedAt) : { clock: transition(clock, { type: 'TICK' }, savedAt) };
                     const record = validateRuntime({ schemaVersion: 1, contextId: id, savedAt, mode: run ? 'session' : 'quick', startedAt,
+                        ...(pending ? { recoveryPending: true } : {}),
                         clock: current.clock, ...(run ? { run: current.run, quickDurationMs } : {}) });
                     storage.setItem(PREFIX + id, JSON.stringify(record));
                 } else storage.removeItem(PREFIX + id);
@@ -220,7 +227,7 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
                 tabs.setItem(CONTEXT, candidateId);
                 startedAt = saved.startedAt ?? null;
                 previousStatus = saved.clock.status; previousRunId = saved.run?.runId ?? null;
-                oldRelease(); id = candidateId; lastSemantic = null; candidates = [];
+                oldRelease(); id = candidateId; lastSemantic = null; candidates = []; pending = false;
                 return clock;
             } catch (cause) {
                 if (acquired) { release(); release = oldRelease; }
@@ -228,7 +235,7 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
                 throw cause;
             } finally { recovering = false; }
         },
-        dismiss() { candidates = []; },
+        dismiss() { candidates = []; pending = false; },
         close() { release?.(); healthy = false; },
     };
 }
