@@ -1,10 +1,10 @@
-import { createTimer, formatOvertime, formatTime, timeBudget, transition } from './timer.mjs?v=35';
+import { createTimer, formatOvertime, formatTime, timeBudget, transition, adjustmentError } from './timer.mjs?v=53';
 import { createPlanner } from './planner.js?v=49';
-import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=35';
+import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=53';
 import { createTemplateStore } from './templates.mjs?v=37';
-import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=35';
+import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=53';
 import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=37';
-import { createRecovery } from './recovery.mjs?v=48';
+import { createRecovery } from './recovery.mjs?v=53';
 
 const copy = {
     en: {
@@ -32,6 +32,8 @@ const copy = {
         addDuration: 'Add to duration', extendRemaining: 'Extend remaining time', extendBudget: 'Extend time budget',
         total: 'Total', planned: 'Planned', limit: 'The total budget cannot exceed 99:59:59.',
         addTime: seconds => `Add ${seconds} seconds`,
+        adjustmentShortcut: 'Click or Enter/Space adds time. Hold Shift while clicking or pressing Enter/Space to subtract.',
+        invalidAdjustment: 'This time adjustment is not valid.',
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
     de: {
@@ -59,6 +61,8 @@ const copy = {
         addDuration: 'Dauer ergänzen', extendRemaining: 'Restzeit verlängern', extendBudget: 'Zeitbudget verlängern',
         total: 'Gesamt', planned: 'Geplant', limit: 'Das Gesamtbudget darf 99:59:59 nicht überschreiten.',
         addTime: seconds => `${seconds} Sekunden hinzufügen`,
+        adjustmentShortcut: 'Klick oder Enter/Leertaste ergänzt Zeit. Mit gedrückter Umschalttaste beim Klicken oder bei Enter/Leertaste wird Zeit abgezogen.',
+        invalidAdjustment: 'Diese Zeitanpassung ist nicht gültig.',
         fullscreen: 'Vollbild', exitFullscreen: 'Vollbild verlassen', expand: 'Ansicht vergrößern', exitExpanded: 'Vergrößerte Ansicht verlassen',
     },
 };
@@ -391,7 +395,8 @@ function render() {
     $('menu-toggle').title = menuLabel;
     const { totalMs, plannedMs, adjustmentMs } = timer ? timeBudget(timer) : { totalMs: 1, plannedMs: 0, adjustmentMs: 0 };
     $('time').dataset.visualState = timer ? timeVisualState(timer, totalMs) : 'NORMAL';
-    const remaining = timer ? Math.max(0, Math.min(1, timer.remainingMs / totalMs)) : 1;
+    const remaining = timer ? totalMs > 0 ? Math.max(0, Math.min(1, timer.remainingMs / totalMs)) : 0 : 1;
+    $('primary').disabled = mode === 'quick' && timer?.status === 'READY' && timer.durationMs === 0;
     $('progress').style.setProperty('--remaining', `${remaining * 100}%`);
     document.documentElement.lang = language;
     document.documentElement.dataset.theme = theme;
@@ -477,12 +482,13 @@ function render() {
     $('stop-overtime').hidden = !session || run.stage !== 'COMPLETED' || timer.status === 'OVERTIME_STOPPED';
     $('stop-overtime').setAttribute('aria-label', t.stopOvertime); $('stop-overtime').title = t.stopOvertime;
     document.querySelectorAll('[data-adjustment]').forEach(button => button.setAttribute('aria-label', t.addTime(Number(button.dataset.adjustment) / 1000)));
+    $('adjustment-shortcut').textContent = t.adjustmentShortcut;
     const budget = session ? `${t.workshopRemaining} ${formatTime(sessionRemaining(run, timer))}`
-        : `${t.total} ${formatTime(totalMs)}${adjustmentMs ? ` · ${t.planned} ${formatTime(plannedMs)} + ${formatTime(adjustmentMs)}` : ''}`;
+        : `${t.total} ${formatTime(totalMs)}${adjustmentMs ? ` · ${t.planned} ${formatTime(plannedMs)} ${adjustmentMs < 0 ? '−' : '+'} ${formatTime(Math.abs(adjustmentMs))}` : ''}`;
     if ($('time-budget').textContent !== budget) $('time-budget').textContent = budget;
-    const help = limitExceeded ? t.limit : '';
+    const help = limitExceeded ? t[limitExceeded] : '';
     if ($('help').textContent !== help) $('help').textContent = help;
-    $('help').dataset.error = String(limitExceeded);
+    $('help').dataset.error = String(Boolean(limitExceeded));
     updateClockView();
     $('timer-view').style.removeProperty('visibility');
     document.querySelector('main').removeAttribute('aria-busy');
@@ -513,12 +519,22 @@ document.querySelectorAll('[data-preset]').forEach(button => button.addEventList
     timer = transition(timer, { type: 'CONFIGURE', durationMs: Number(button.dataset.preset) }, Date.now());
     render();
 }));
-document.querySelectorAll('[data-adjustment]').forEach(button => button.addEventListener('click', () => {
-    if (mode !== 'quick') return;
-    const amountMs = Number(button.dataset.adjustment);
-    limitExceeded = timer.durationMs + timer.adjustmentMs + amountMs > 359999000;
-    dispatch({ type: 'ADJUST', amountMs });
-}));
+document.querySelectorAll('[data-adjustment]').forEach(button => {
+    const adjust = subtract => {
+        if (mode !== 'quick') return;
+        const amountMs = Number(button.dataset.adjustment) * (subtract ? -1 : 1);
+        limitExceeded = adjustmentError(timer, amountMs);
+        dispatch({ type: 'ADJUST', amountMs });
+    };
+    button.setAttribute('aria-describedby', 'adjustment-shortcut');
+    button.addEventListener('click', event => adjust(event.shiftKey));
+    button.addEventListener('keydown', event => {
+        if (event.shiftKey && ['Enter', ' '].includes(event.key)) {
+            event.preventDefault();
+            if (!event.repeat) adjust(true);
+        }
+    });
+});
 document.querySelectorAll('button[data-theme]').forEach(button => button.addEventListener('click', () => {
     theme = button.dataset.theme;
     savePreference('easyTimerTheme', theme);

@@ -46,6 +46,88 @@ test('extensions preserve original duration, paused budget, Stop and Restart sem
     assert.equal(act(restored, 'STOP').remainingMs, 60000);
     assert.equal(act(restored, 'RESTART').deadlineMs, 70000);
 });
+
+test('negative Quick budgets restore in every state and invalid signed records stay rejected', () => {
+    for (const status of ['READY', 'RUNNING', 'PAUSED', 'FINISHED']) {
+        let clock = createTimer(300000);
+        if (status === 'READY') clock = act(clock, 'ADJUST', 10000, { amountMs: -60000 });
+        else {
+            clock = act(clock, 'START', 10000);
+            if (status === 'PAUSED') clock = act(clock, 'PAUSE', 20000);
+            clock = act(clock, 'ADJUST', 20000, { amountMs: -60000 });
+            clock = act(clock, 'TICK', status === 'FINISHED' ? 300000 : 20000);
+        }
+        const saved = { ...record(clock), savedAt: status === 'FINISHED' ? 300000 : 20000 };
+        assert.deepEqual(restoreRuntime(saved, 400000), act(clock, 'TICK', 400000));
+    }
+    const clock = act(act(createTimer(300000), 'START', 0), 'ADJUST', 10000, { amountMs: -60000 });
+    for (const adjustmentMs of [-300000, -299001, -300001, -1.5, NaN]) {
+        assert.throws(() => validateRuntime(record({ ...clock, adjustmentMs })));
+    }
+});
+
+test('negative adjustments survive same-tab reload and lock-protected takeover with stable identity', async () => {
+    const storage = memory(), tabs = memory(), locks = lockManager(); let now = 10000;
+    const options = { storage, tabs, locks, now: () => now, uuid: () => 'negative-owner' };
+    let owner = await createRecovery(options);
+    let clock = act(createTimer(300000), 'START', now); owner.save(clock, 'START');
+    now = 20000; clock = act(clock, 'ADJUST', now, { amountMs: -60000 }); owner.save(clock, 'ADJUST');
+    owner.close(); await Promise.resolve(); now = 30000;
+    owner = await createRecovery(options);
+    assert.equal(owner.restored.adjustmentMs, -60000); assert.equal(owner.restored.deadlineMs, 250000);
+    const peer = await createRecovery({ ...options, tabs: memory(), uuid: () => 'negative-peer' });
+    await assert.rejects(peer.recover('negative-owner'), /CONTEXT_ACTIVE/);
+    owner.close(); await Promise.resolve(); now = 300000;
+    const recovered = await peer.recover('negative-owner');
+    assert.equal(recovered.adjustmentMs, -60000); assert.equal(recovered.overtimeMs, 50000);
+    peer.save(act(recovered, 'STOP', now), 'STOP'); peer.close();
+    assert.equal(JSON.parse(storage.getItem(prefix + 'negative-owner')).clock.adjustmentMs, 0);
+});
+
+test('intentional READY zero and PAUSED zero survive reload and explicit lock-protected takeover', async () => {
+    for (const paused of [false, true]) {
+        const storage = memory(), tabs = memory(), locks = lockManager(); let now = 10000;
+        const options = { storage, tabs, locks, now: () => now, uuid: () => 'zero-owner' };
+        let owner = await createRecovery(options);
+        let clock = createTimer(300000);
+        if (paused) {
+            clock = act(clock, 'START', now); owner.save(clock, 'START');
+            now = 130000; clock = act(clock, 'PAUSE', now);
+        }
+        clock = act(clock, 'ADJUST', now, { amountMs: -3600000 }); owner.save(clock, 'ADJUST');
+        assert.equal(clock.remainingMs, 0);
+        assert.equal(clock.adjustmentMs, paused ? -180000 : 0);
+        owner.close(); await Promise.resolve(); now += 1000000;
+        owner = await createRecovery(options);
+        assert.deepEqual(owner.restored, clock);
+        const peer = await createRecovery({ ...options, tabs: memory(), uuid: () => 'zero-peer' });
+        await assert.rejects(peer.recover('zero-owner'), /CONTEXT_ACTIVE/);
+        owner.close(); await Promise.resolve(); now += 1000000;
+        const recovered = await peer.recover('zero-owner');
+        assert.deepEqual(recovered, clock);
+        if (paused) {
+            const resumed = act(recovered, 'RESUME', now);
+            assert.equal(resumed.deadlineMs, now); assert.equal(resumed.overtimeMs, 0);
+            peer.save(resumed, 'RESUME');
+            assert.equal(restoreRuntime(JSON.parse(storage.getItem(prefix + 'zero-owner')), now + 10000).overtimeMs, 10000);
+        } else assert.deepEqual(act(recovered, 'START', now), recovered);
+        peer.close();
+    }
+});
+
+test('clamped expiry persists only effective adjustment and actual overtime origin', () => {
+    let clock = act(createTimer(300000), 'START', 10000);
+    clock = act(clock, 'ADJUST', 130000, { amountMs: -300000 });
+    assert.equal(clock.adjustmentMs, -180000); assert.equal(clock.deadlineMs, 130000);
+    const saved = { ...record(clock), savedAt: 130000 };
+    assert.equal(restoreRuntime(saved, 140000).overtimeMs, 10000);
+    for (const corrupt of [
+        { ...clock, adjustmentMs: -300001 },
+        { ...clock, status: 'RUNNING' },
+        { ...createTimer(0), status: 'PAUSED' },
+        { ...clock, status: 'PAUSED', deadlineMs: null, overtimeMs: 1 },
+    ]) assert.throws(() => validateRuntime({ ...saved, clock: corrupt }));
+});
 test('actual start metadata survives extensions, pause/resume and reload; old records stay explicitly unknown', async () => {
     const storage = memory(), tabs = memory(), locks = lockManager(); let now = 10000;
     const options = { storage, tabs, locks, now: () => now, uuid: () => 'started' };
@@ -336,7 +418,7 @@ test('invalid or uncertain Session states are blocked before execution', () => {
         r => { r.run.phaseOvertime = { unknown: 5 }; }, r => { r.clock.durationMs = 120000; r.clock.remainingMs = 120000; },
         r => { r.clock.policy = 'quick'; }, r => { r.clock.adjustmentMs = 1000; },
         r => { r.clock.status = 'OVERTIME_STOPPED'; r.clock.remainingMs = 0; },
-        r => { r.quickDurationMs = 0; }, r => { delete r.run; },
+        r => { r.quickDurationMs = -1; }, r => { delete r.run; },
     ]) { const invalid = structuredClone(valid); mutate(invalid); assert.throws(() => restoreRuntime(invalid, 10000)); }
     let auto = sessionAct(prepareSession(sessionTemplate('automatic'), 'auto-invalid'), 'START', 0);
     assert.throws(() => validateRuntime(sessionRecord({ run: auto.run, clock: act(auto.clock, 'TICK', 60000) }, 60000)), /UNRECONCILED_SESSION/);

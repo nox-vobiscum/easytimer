@@ -5,6 +5,7 @@
 }
 * { box-sizing:border-box; }
 body { margin:0; min-height:100vh; min-height:100svh; display:flex; flex-direction:column; background:var(--bg); color:var(--text); }
+.adjustment-shortcut { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 button,input { font:inherit; }
 button { min-height:44px; padding:.65rem 1.1rem; border:1px solid var(--border); border-radius:.65rem; background:var(--surface); color:var(--text); cursor:pointer; font-weight:600; touch-action:manipulation; }
 button:hover:not(:disabled) { border-color:var(--accent); background:var(--selected); }

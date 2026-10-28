@@ -1,5 +1,5 @@
-import { createTimer, transition } from './timer.mjs?v=35';
-import { transitionSession } from './session.mjs?v=35';
+import { createTimer, transition } from './timer.mjs?v=53';
+import { transitionSession } from './session.mjs?v=53';
 import { validateTemplate } from './templates.mjs?v=37';
 
 const PREFIX = 'easyTimerRuntime.v1.';
@@ -43,17 +43,17 @@ export function validateRuntime(record) {
     if (!exact(c, clockKeys)
         || !['READY', 'RUNNING', 'PAUSED', 'FINISHED', ...(session ? ['OVERTIME_PAUSED', 'OVERTIME_STOPPED'] : [])].includes(c.status)) throw new Error('INVALID_CLOCK');
     createTimer(c.durationMs, session ? 'session' : 'quick');
-    if (!session && c.status === 'READY' && record.startedAt != null) throw new Error('INVALID_START');
+    if (!session && ((c.status === 'READY' && record.startedAt != null) || (c.durationMs === 0 && c.status !== 'READY'))) throw new Error('INVALID_START');
     if (session && (c.policy !== 'session' || c.adjustmentMs !== 0
         || c.durationMs !== record.run.phases[record.run.currentIndex].durationSeconds * 1000
         || (record.run.stage === 'COMPLETED' && !['FINISHED', 'OVERTIME_PAUSED', 'OVERTIME_STOPPED'].includes(c.status))
         || (record.run.stage === 'PHASE' && (c.status === 'OVERTIME_STOPPED'
             || (record.run.transitionMode === 'automatic' && c.status === 'OVERTIME_PAUSED'))))) throw new Error('INVALID_SESSION_CLOCK');
     const total = c.durationMs + c.adjustmentMs;
-    if (![c.adjustmentMs, c.remainingMs, c.overtimeMs].every(integer) || !Number.isSafeInteger(total)
+    if (!Number.isSafeInteger(c.adjustmentMs) || ![c.remainingMs, c.overtimeMs].every(integer) || !Number.isSafeInteger(total) || total < 0
         || total > (session ? 360000000 : 359999000) || c.remainingMs > total) throw new Error('INVALID_BUDGET');
     if (['READY', 'PAUSED'].includes(c.status)) {
-        if (c.deadlineMs !== null || c.overtimeMs !== 0 || c.remainingMs <= 0) throw new Error('INVALID_PAUSE');
+        if (c.deadlineMs !== null || c.overtimeMs !== 0 || (session && c.remainingMs <= 0)) throw new Error('INVALID_PAUSE');
         if (c.status === 'READY' && (c.adjustmentMs !== 0 || c.remainingMs !== c.durationMs)) throw new Error('INVALID_READY');
     } else if (['OVERTIME_PAUSED', 'OVERTIME_STOPPED'].includes(c.status)) {
         if (c.deadlineMs !== null || c.remainingMs !== 0) throw new Error('INVALID_OVERTIME');

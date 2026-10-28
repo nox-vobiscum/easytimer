@@ -1,5 +1,5 @@
 export function createTimer(durationMs = 300000, policy = 'quick') {
-    if (!['quick', 'session'].includes(policy) || !Number.isSafeInteger(durationMs) || durationMs <= 0 || durationMs > (policy === 'session' ? 360000000 : 359999000)) throw new RangeError('Invalid duration');
+    if (!['quick', 'session'].includes(policy) || !Number.isSafeInteger(durationMs) || durationMs < 0 || (policy === 'session' && durationMs === 0) || durationMs > (policy === 'session' ? 360000000 : 359999000)) throw new RangeError('Invalid duration');
     return { status: 'READY', durationMs, adjustmentMs: 0, remainingMs: durationMs, deadlineMs: null, overtimeMs: 0, ...(policy === 'session' ? { policy } : {}) };
 }
 export function durationFromFields(...fields) {
@@ -7,6 +7,11 @@ export function durationFromFields(...fields) {
     const [h, m, s] = fields.map(Number);
     if (h > 99 || m > 59 || s > 59) return null;
     return (h * 3600 + m * 60 + s) * 1000 || null;
+}
+export function adjustmentError(state, amountMs) {
+    if (!Number.isSafeInteger(amountMs) || amountMs === 0) return 'invalidAdjustment';
+    if (amountMs > 0 && state.durationMs + state.adjustmentMs + amountMs > 359999000) return 'limit';
+    return '';
 }
 export function transition(state, action, now) {
     if (!Number.isFinite(now)) throw new TypeError('Invalid clock');
@@ -22,20 +27,22 @@ export function transition(state, action, now) {
         case 'CONFIGURE': return current.status === 'READY' ? createTimer(action.durationMs, current.policy) : current;
         case 'ADJUST': {
             if (current.policy === 'session') return current;
-            if (!Number.isSafeInteger(action.amountMs) || action.amountMs <= 0 || current.durationMs + current.adjustmentMs + action.amountMs > 359999000) return current;
-            if (current.status === 'READY') return createTimer(current.durationMs + action.amountMs);
-            const adjustmentMs = current.adjustmentMs + action.amountMs;
-            if (current.status === 'PAUSED') return { ...current, adjustmentMs, remainingMs: current.remainingMs + action.amountMs };
-            const deadlineMs = current.deadlineMs + action.amountMs;
+            if (adjustmentError(current, action.amountMs)) return current;
+            if (current.status === 'READY') return createTimer(Math.max(0, current.durationMs + action.amountMs));
+            if (action.amountMs < 0 && current.status === 'FINISHED') return current;
+            const effectiveMs = action.amountMs < 0 ? -Math.min(-action.amountMs, current.remainingMs) : action.amountMs;
+            const adjustmentMs = current.adjustmentMs + effectiveMs;
+            if (current.status === 'PAUSED') return { ...current, adjustmentMs, remainingMs: current.remainingMs + effectiveMs };
+            const deadlineMs = current.deadlineMs + effectiveMs;
             const remainingMs = Math.max(0, deadlineMs - now);
             return { ...current, adjustmentMs, deadlineMs, remainingMs, overtimeMs: Math.max(0, now - deadlineMs), status: remainingMs ? 'RUNNING' : 'FINISHED' };
         }
         case 'START':
-            if (!['READY', 'FINISHED'].includes(current.status)) return current;
+            if (!['READY', 'FINISHED'].includes(current.status) || current.durationMs === 0) return current;
             return { ...createTimer(current.durationMs, current.policy), status: 'RUNNING', deadlineMs: now + current.durationMs };
         case 'PAUSE': return current.status === 'RUNNING' ? { ...current, status: 'PAUSED', deadlineMs: null } : current;
-        case 'RESUME': return current.status === 'PAUSED' ? { ...current, status: 'RUNNING', deadlineMs: now + current.remainingMs, overtimeMs: 0 } : current;
-        case 'RESTART': return { ...createTimer(current.durationMs, current.policy), status: 'RUNNING', deadlineMs: now + current.durationMs };
+        case 'RESUME': return current.status === 'PAUSED' ? { ...current, status: current.remainingMs ? 'RUNNING' : 'FINISHED', deadlineMs: now + current.remainingMs, overtimeMs: 0 } : current;
+        case 'RESTART': return current.durationMs === 0 ? current : { ...createTimer(current.durationMs, current.policy), status: 'RUNNING', deadlineMs: now + current.durationMs };
         case 'STOP': return createTimer(current.durationMs, current.policy);
         case 'BEGIN_OVERTIME': return current.policy === 'session' ? { ...current, status: 'FINISHED', remainingMs: 0, overtimeMs: 0, deadlineMs: now } : current;
         case 'PAUSE_OVERTIME': return current.policy === 'session' && current.status === 'FINISHED' ? { ...current, status: 'OVERTIME_PAUSED', deadlineMs: null } : current;

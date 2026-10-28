@@ -16,6 +16,7 @@ import { checkDirectLaunch } from './direct-launch-browser.mjs';
 import { checkRecovery, checkRecoveryCorrections } from './recovery-browser.mjs';
 import { checkSessionRecovery } from './session-recovery-browser.mjs';
 import { checkNavigation } from './navigation-browser.mjs';
+import { checkSubtraction } from './subtraction-browser.mjs';
 import { checkPortability } from './portability-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
@@ -162,14 +163,15 @@ try {
     await checkRecoveryCorrections({ evaluate, click, text, cdp, configure });
     await checkSessionRecovery({ evaluate, click, text, cdp });
     await checkNavigation({ evaluate, click, text, cdp });
+    await checkSubtraction({ evaluate, click, text, cdp, configure });
     await checkTitle('READY');
     assert.equal(await evaluate("document.getElementById('account-toggle')"), null, 'Normal application has no Google account control');
     assert.equal(await evaluate("document.getElementById('account-menu-entry')"), null, 'Normal application has no development Drive menu entry');
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=51'&&js==='js/app.js?v=51'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'51','app.js':'51','recovery.mjs':'48','planner.js':'49','templates.mjs':'37','timer.mjs':'35','session.mjs':'35','time-visuals.mjs':'35','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including recovery, the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=53'&&js==='js/app.js?v=53'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'53','app.js':'53','recovery.mjs':'53','planner.js':'49','templates.mjs':'37','timer.mjs':'53','session.mjs':'53','time-visuals.mjs':'53','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including recovery, the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
