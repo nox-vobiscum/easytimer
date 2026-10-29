@@ -1,11 +1,22 @@
-name: FTP Deploy
+name: Deploy staging (et.rbsnet.at)
 on:
   push:
-    branches: [ main ]
+    branches: [ develop ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: easytimer-staging
+  cancel-in-progress: false
+
 jobs:
-  web-deploy:
-    name: Deploy
+  staging-deploy:
+    name: Deploy staging
     runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://et.rbsnet.at/
     steps:
     - name: 🚚 Get latest code
       uses: actions/checkout@v4
@@ -22,15 +33,17 @@ jobs:
     - name: 📂 Sync files
       uses: SamKirkland/FTP-Deploy-Action@v4.3.5
       with:
-        server: ${{ secrets.FTP_SERVER }}
-        username: ${{ secrets.FTP_USERNAME }}
-        password: ${{ secrets.FTP_PASSWORD }}
-        # Preserve the existing src/... remote paths. Confirm hosting DocumentRoot
-        # and review the old FTP state before any production deployment.
+        server: ${{ secrets.STAGING_FTP_SERVER }}
+        username: ${{ secrets.STAGING_FTP_USERNAME }}
+        password: ${{ secrets.STAGING_FTP_PASSWORD }}
+        # Preserve the existing src/... paths within the dedicated staging account.
+        # Confirm its root and domain DocumentRoot before enabling deployment.
         local-dir: ${{ runner.temp }}/easytimer-release/ftp/
         server-dir: /
         port: 21
-        protocol: ftp
+        protocol: ftps
+        security: strict
+        dangerous-clean-slate: false
         # Retain default exclusions and protect previously uploaded development
         # files from implicit cleanup. Remote inventory/removal needs approval.
         exclude: |
