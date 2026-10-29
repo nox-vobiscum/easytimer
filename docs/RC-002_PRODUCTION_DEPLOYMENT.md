@@ -64,7 +64,7 @@ Reference: [GitHub deployment environments](https://docs.github.com/en/actions/r
    are not accepted. Main ancestry is not evidence of product acceptance; the
    explicit owner decision supplies that approval. Releasing an older main commit
    is possible only by explicitly selecting and approving it.
-5. The job runs existing packaging tests, creates the 18-file artifact and verifies
+5. The job runs existing packaging tests, creates the current 24-file RC-003 artifact and verifies
    exact inventory/checksums before transfer. Only the artifact's `ftp/` is uploaded.
 6. Inspect the run result and perform the approved production smoke checks. On
    failure, stop and report; there is no automatic rollback or retry policy.

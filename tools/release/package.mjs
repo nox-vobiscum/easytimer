@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const sourceRoot = fileURLToPath(new URL('../../src/', import.meta.url));
 export const productionFiles = Object.freeze([
+    'about.html', 'faq.html', 'imprint.html', 'privacy.html', 'js/info.js', 'js/header.mjs',
     'index.html', 'css/styles.css', 'js/app.js', 'js/planner.js', 'js/portability.mjs',
     'js/recovery.mjs', 'js/session.mjs', 'js/templates.mjs', 'js/time-visuals.mjs', 'js/timer.mjs',
     'service-worker.js', 'manifest.webmanifest', 'assets/branding/favicon.ico',
@@ -44,8 +45,13 @@ export async function validateProduction(root = sourceRoot) {
             check(!/\bimport\s*\(|\bexport\s+.*?\bfrom\s|^import\s*['"]|\b(?:fetch|importScripts|Worker|WebSocket|XMLHttpRequest)\s*\(/m.test(text), `UNREVIEWED_RUNTIME_LOADING: ${file}`);
             check(!/accounts\.google\.com|www\.googleapis\.com|googleusercontent\.com/.test(text), `GOOGLE_RUNTIME_DEPENDENCY: ${file}`);
         }
-        if (file === 'index.html') {
-            for (const match of text.matchAll(/<(?:script|link|img)\b[^>]*?\b(?:src|href)="([^"]+)"/g)) add(file, match[1]);
+        if (file.endsWith('.html') || file === 'js/header.mjs') {
+            // Shared header markup is mounted in root-level documents, not under js/.
+            const document = file === 'js/header.mjs' ? 'index.html' : file;
+            for (const match of text.matchAll(/<(?:script|link|img)\b[^>]*?\b(?:src|href)="([^"]+)"/g)) add(document, match[1]);
+            for (const match of text.matchAll(/<a\b[^>]*?\bhref="([^"]+)"/g)) {
+                if (!/^(?:https?:|mailto:|#|\?)/.test(match[1]) && match[1] !== './') add(document, match[1]);
+            }
             check(!/\bon\w+\s*=|<script\b(?![^>]*\bsrc=)/i.test(text), 'UNREVIEWED_INLINE_SCRIPT');
         }
         if (file.endsWith('.css')) {

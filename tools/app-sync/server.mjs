@@ -23,7 +23,7 @@ export async function startServer({ port = 8000, enabled = false, read = readFil
         if (![`localhost:${server.address().port}`, `127.0.0.1:${server.address().port}`].includes(req.headers.host) || req.method !== 'GET') { res.writeHead(403); res.end(); return; }
         const path = new URL(req.url, 'http://localhost').pathname;
         const relative = path.startsWith('/tools/') ? path.slice(1) : path.startsWith('/src/') ? path.slice(1) : 'src' + (path === '/' ? '/index.html' : path);
-        if ((relative.startsWith('tools/') && (!enabled || !development.has(relative))) || !/^(src\/(?:index\.html|service-worker\.js|manifest\.webmanifest|js\/[a-z-]+\.(?:js|mjs)|css\/styles\.css|assets\/branding\/[a-zA-Z0-9_.-]+)|tools\/)/.test(relative) || relative.includes('..') || (enabled && relative === 'src/service-worker.js')) { res.writeHead(404); res.end(); return; }
+        if ((relative.startsWith('tools/') && (!enabled || !development.has(relative))) || !/^(src\/(?:(?:index|about|faq|imprint|privacy)\.html|service-worker\.js|manifest\.webmanifest|js\/[a-z-]+\.(?:js|mjs)|css\/styles\.css|assets\/branding\/[a-zA-Z0-9_.-]+)|tools\/)/.test(relative) || relative.includes('..') || (enabled && relative === 'src/service-worker.js')) { res.writeHead(404); res.end(); return; }
         try {
             let body = await read(resolve(root, relative));
             if (enabled && relative === 'src/index.html') body = developmentEntry(body.toString());

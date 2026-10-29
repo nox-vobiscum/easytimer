@@ -40,7 +40,7 @@ const copy = {
 Object.assign(copy.en, {
     launchShort: 'Launch',
     myRundowns: 'My Rundowns',
-    backupSubtitle: 'Import, export and optional Google Drive', backupAttention: 'Attention needed', backupDisconnected: 'Google Drive not connected',
+    backupSubtitle: 'Local JSON import and export', backupAttention: 'Attention needed', backupDisconnected: 'Google Drive not connected',
     launch: 'Launch session', launchFailed: 'This saved Rundown could not be loaded. Refresh the list and try again. Your current timer has not been replaced.',
     importConflict: 'Import blocked: Rundowns changed in another tab. Existing Rundowns remain unchanged; the import preview is retained.',
     importStorageWrite: 'Import failed: the data could not be saved. Existing Rundowns remain unchanged; the import preview is retained.',
@@ -62,7 +62,7 @@ Object.assign(copy.en, {
 Object.assign(copy.de, {
     launchShort: 'Starten',
     myRundowns: 'Meine Rundowns',
-    backupSubtitle: 'Import, Export und optional Google Drive', backupAttention: 'Prüfung erforderlich', backupDisconnected: 'Google Drive nicht verbunden',
+    backupSubtitle: 'Lokaler JSON-Import und -Export', backupAttention: 'Prüfung erforderlich', backupDisconnected: 'Google Drive nicht verbunden',
     launch: 'Session starten', launchFailed: 'Dieser gespeicherte Rundown konnte nicht geladen werden. Bitte die Liste aktualisieren und erneut versuchen. Der bisherige Timer wurde nicht ersetzt.',
     importConflict: 'Import blockiert: Rundowns wurden in einem anderen Tab geändert. Bestehende Rundowns bleiben unverändert; die Importvorschau bleibt erhalten.',
     importStorageWrite: 'Import fehlgeschlagen: Die Daten konnten nicht gespeichert werden. Bestehende Rundowns bleiben unverändert; die Importvorschau bleibt erhalten.',

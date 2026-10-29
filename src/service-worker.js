@@ -1,11 +1,17 @@
-const CACHE_NAME = 'easytimer-shell-v54';
+const CACHE_NAME = 'easytimer-shell-v60';
 const APP_SHELL = [
     './',
     './index.html',
-    './css/styles.css?v=54',
-    './js/app.js?v=54',
+    './about.html',
+    './faq.html',
+    './imprint.html',
+    './privacy.html',
+    './js/info.js?v=59',
+    './js/header.mjs?v=59',
+    './css/styles.css?v=60',
+    './js/app.js?v=60',
     './js/recovery.mjs?v=54',
-    './js/planner.js?v=49',
+    './js/planner.js?v=55',
     './js/templates.mjs?v=37',
     './js/timer.mjs?v=54',
     './js/session.mjs?v=54',
@@ -43,7 +49,12 @@ self.addEventListener('fetch', event => {
 
     if (event.request.mode === 'navigate') {
         event.respondWith(
-            fetch(event.request).catch(() => caches.match('./index.html'))
+            fetch(event.request).catch(async () => {
+                const pages = ['about.html', 'faq.html', 'imprint.html', 'privacy.html'];
+                const page = pages.find(name => url.pathname === new URL(name, self.registration.scope).pathname);
+                if (page) return (await caches.match(new URL(page, self.registration.scope).href)) || Response.error();
+                return caches.match('./index.html');
+            })
         );
         return;
     }

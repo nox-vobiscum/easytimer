@@ -6,6 +6,7 @@ import { join, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { packageProduction, verifyArtifact } from '../tools/release/package.mjs';
+import { checkInformation, checkInformationContinuity, checkHeaderIntents } from './information-browser.mjs';
 
 const artifact = await packageProduction();
 await verifyArtifact(artifact.directory);
@@ -41,11 +42,16 @@ async function checkOffline(negativeControl) {
         const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
         socket = new WebSocket(targets.find(target => target.type === 'page').webSocketDebuggerUrl);
         await new Promise((done, reject) => { socket.onopen = done; socket.onerror = reject; });
-        let sequence = 0; const pending = new Map(), external = [], exceptions = [];
+        let sequence = 0; const pending = new Map(), external = [], exceptions = [], dialogs = [];
+        let acceptConfirmation = true;
         socket.onmessage = ({ data }) => {
             const message = JSON.parse(data);
             if (message.method === 'Network.requestWillBeSent' && !message.params.request.url.startsWith(origin + '/')) external.push(message.params.request.url);
             if (message.method === 'Runtime.exceptionThrown') exceptions.push(message.params.exceptionDetails.text);
+            if (message.method === 'Page.javascriptDialogOpening') {
+                dialogs.push(message.params.type);
+                cdp('Page.handleJavaScriptDialog', { accept: message.params.type !== 'beforeunload' && acceptConfirmation });
+            }
             const request = pending.get(message.id);
             if (request) { clearTimeout(request.timeout); pending.delete(message.id); message.error ? request.reject(Error(JSON.stringify(message.error))) : request.resolve(message.result); }
         };
@@ -69,6 +75,29 @@ async function checkOffline(negativeControl) {
         assert.deepEqual(await evaluate('Promise.all(["/tools/app-sync/account.mjs","/tools/sync-poc/index.html","/tests/browser-check.mjs","/docs/backlog.md"].map(url=>fetch(url).then(r=>r.status)))'), [404,404,404,404]);
         assert.equal(await evaluate('document.querySelectorAll("#account-toggle,#account-menu-entry,.development-sync").length'), 0);
         assert.equal(await evaluate('typeof globalThis.easyTimerDevelopment'), 'undefined');
+        if (!negativeControl) {
+            await checkInformation({ cdp, evaluate, wait, origin, screenshots:profile });
+            await checkInformationContinuity({ cdp, evaluate, wait });
+            await checkHeaderIntents({ cdp, evaluate, wait, setConfirmation: value => { acceptConfirmation = value; }, confirmations: () => dialogs.filter(type => type === 'confirm').length });
+            await click('#menu-toggle');
+            assert.equal(await evaluate('document.querySelectorAll(".menu-information a").length'), 4);
+            await click('#open-planner');
+            assert.equal(await evaluate('document.querySelector(".backup-subtitle").textContent'), 'Local JSON import and export');
+            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create Rundown").click()');
+            await evaluate('const name=document.querySelector("#template-name");name.value="Unsaved information test";name.dispatchEvent(new Event("input",{bubbles:true}))');
+            // A real pointer gesture activates native beforeunload protection.
+            await click('#menu-toggle');
+            const point = await evaluate('(()=>{const r=document.querySelector("[data-information=about]").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()');
+            await cdp('Input.dispatchMouseEvent', { type:'mousePressed', button:'left', clickCount:1, ...point });
+            await cdp('Input.dispatchMouseEvent', { type:'mouseReleased', button:'left', clickCount:1, ...point });
+            await wait('document.querySelector("#template-name")?.value === "Unsaved information test"');
+            await delay(200);
+            assert(dialogs.includes('beforeunload'), 'Native draft warning is preserved for information links');
+            assert.equal(await evaluate('location.pathname'), '/');
+            await click('#menu-toggle');
+            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Cancel").click()');
+            await click('.planner-back');
+        }
         const urls = await evaluate('(async()=>{const cache=await caches.open("easytimer-shell-v' + artifact.inventory.pwaVersion + '");return (await cache.keys()).map(r=>new URL(r.url).pathname+new URL(r.url).search)})()');
         for (const file of artifact.inventory.files.filter(file => file.path !== 'src/service-worker.js')) assert(urls.some(url => url.split('?')[0] === '/' + file.path.slice(4)), `Precached file: ${file.path}`);
         if (negativeControl) {
@@ -104,12 +133,15 @@ async function checkOffline(negativeControl) {
             await click('#primary'); await click('#primary');
             const run = await evaluate('JSON.parse(localStorage.getItem("easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1")))');
             assert.equal(run.clock.status, 'PAUSED');
-            await cdp('Page.reload'); await wait('document.getElementById("status")?.textContent==="Paused"');
+            const pausedOrigin = await evaluate('performance.timeOrigin');
+            await cdp('Page.reload'); await wait(`performance.timeOrigin!==${pausedOrigin} && document.body?.dataset.mode==="session" && document.getElementById("status")?.textContent==="Paused"`);
             assert.equal(await evaluate('document.body.dataset.mode'), 'session');
             assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerTemplates")).templates[0].id'), library.templates[0].id);
             assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1"))).run.runId'), run.run.runId);
+            await checkInformation({ cdp, evaluate, wait, origin, screenshots:profile, offline:true });
             assert.deepEqual(exceptions, []);
             console.log('PASS: packaged production cold-starts with server stopped and HTTP cache disabled; Quick, Editor save, Session READY/pause and reload recovery work offline.');
+            console.log(`Information screenshots: ${profile}`);
         }
         assert.deepEqual(external, [], 'No external SDK, API or profile-image request');
         await cdp('Browser.close');

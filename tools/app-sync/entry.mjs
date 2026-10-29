@@ -1,12 +1,14 @@
 import { createApplicationSync } from './controller.mjs';
 import { renderSyncPanel, syncFeedback } from './panel.mjs';
 import { createAccountControl } from './account.mjs';
+import { mountApplicationHeader } from '/js/header.mjs?v=59';
 if (location.origin !== 'http://localhost:8000') throw Error('DEVELOPMENT_ORIGIN_REQUIRED');
 if (navigator.serviceWorker?.controller) {
     document.body.textContent = 'Use a fresh test browser profile without a localhost service worker. / Bitte ein frisches Testprofil ohne localhost-Service-Worker verwenden.';
     throw Error('FRESH_PROFILE_REQUIRED');
 }
 const panels = new Set();
+mountApplicationHeader();
 let account;
 const sync = createApplicationSync({ storage: localStorage, changed: () => { panels.forEach(update => update()); account?.update(); } });
 account = createAccountControl(sync);
@@ -20,4 +22,4 @@ globalThis.easyTimerDevelopment = {
 window.addEventListener('storage', () => panels.forEach(update => update()));
 window.addEventListener('focus', () => panels.forEach(update => update()));
 window.addEventListener('pagehide', () => sync.disconnect());
-await import('/js/app.js?v=54');
+await import('/js/app.js?v=60');

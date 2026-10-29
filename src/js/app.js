@@ -1,13 +1,16 @@
+import { mountApplicationHeader } from './header.mjs?v=59';
 import { createTimer, formatOvertime, formatTime, timeBudget, transition, adjustmentError } from './timer.mjs?v=54';
-import { createPlanner } from './planner.js?v=49';
+import { createPlanner } from './planner.js?v=55';
 import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=54';
 import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=54';
 import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=37';
 import { createRecovery } from './recovery.mjs?v=54';
 
+const applicationHeader = mountApplicationHeader();
 const copy = {
     en: {
+        about: 'About', faq: 'FAQ', imprint: 'Imprint', privacy: 'Privacy', information: 'Information',
         planner: 'Session Editor', mode: 'Mode', editorSubtitle: 'Create & manage rundowns', exportRundown: 'Export Rundown', exportFailed: 'The download could not be prepared. Please try again.',
         clockOnly: 'Show clock-only view', clockControls: 'Show timer controls',
         quick: 'Quick Timer', session: 'Session Timer', chooseWorkshop: 'Load Rundown', backQuick: 'Back to Quick Timer',
@@ -37,6 +40,7 @@ const copy = {
         fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', expand: 'Expand view', exitExpanded: 'Exit expanded view',
     },
     de: {
+        about: 'Über easyTimer', faq: 'FAQ', imprint: 'Impressum', privacy: 'Datenschutz', information: 'Informationen',
         planner: 'Session-Editor', mode: 'Modus', editorSubtitle: 'Rundowns erstellen & verwalten', exportRundown: 'Rundown exportieren', exportFailed: 'Der Download konnte nicht vorbereitet werden. Bitte erneut versuchen.',
         clockOnly: 'Nur die Uhr anzeigen', clockControls: 'Timer-Bedienung anzeigen',
         quick: 'Quick-Timer', session: 'Session-Timer', chooseWorkshop: 'Rundown laden', backQuick: 'Zurück zum Quick-Timer',
@@ -75,6 +79,15 @@ function savePreference(key, value) {
     try { localStorage.setItem(key, value); } catch { /* Preferences remain usable when storage is unavailable. */ }
 }
 let language = readPreference('easyTimerLanguage', navigator.language?.startsWith('de') ? 'de' : 'en', ['de', 'en']);
+const INFORMATION_ORIGIN_KEY = 'easyTimerInformationOrigin.v1';
+// Native navigation retains the Editor's existing beforeunload draft warning.
+document.querySelectorAll('[data-information]').forEach(link => link.addEventListener('click', event => {
+    link.href = `${link.dataset.information}.html?lang=${language}`;
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    // Only navigation metadata: runtime identity and ownership remain in recovery.
+    try { sessionStorage.setItem(INFORMATION_ORIGIN_KEY, JSON.stringify({ view: plannerOpen ? 'editor' : mode })); }
+    catch { /* Returning can still use ordinary view/runtime recovery. */ }
+}));
 let theme = readPreference('easyTimerTheme', 'system', ['light', 'dark', 'system']);
 let timer = createTimer();
 let mode = 'quick';
@@ -108,7 +121,6 @@ let limitExceeded = false;
 let expanded = false;
 let fullscreenRequested = false;
 let fullscreenRequestId = 0;
-let menuOpen = false;
 let plannerOpen = false;
 let navigationRevision = 0;
 let clockOnly = false;
@@ -241,14 +253,7 @@ function setClockOnly(active) {
 }
 
 function setMenuOpen(open, restoreFocus = false) {
-    const focusWasInside = $('preferences').contains(document.activeElement);
-    menuOpen = Boolean(open);
-    $('preferences').hidden = !menuOpen;
-    $('menu-toggle').setAttribute('aria-expanded', String(menuOpen));
-    const label = copy[language][menuOpen ? 'closeMenu' : 'openMenu'];
-    $('menu-toggle').setAttribute('aria-label', label);
-    $('menu-toggle').title = label;
-    if (restoreFocus || (!menuOpen && focusWasInside)) $('menu-toggle').focus({ preventScroll: true });
+    applicationHeader.setOpen(open, restoreFocus);
 }
 
 function updatePresentation() {
@@ -390,7 +395,7 @@ function render() {
     $('fullscreen').title = fullscreenLabel;
     $('fullscreen').setAttribute('aria-label', fullscreenLabel);
     $('fullscreen').setAttribute('aria-pressed', String(fullscreen || expanded));
-    const menuLabel = t[menuOpen ? 'closeMenu' : 'openMenu'];
+    const menuLabel = t[applicationHeader.open ? 'closeMenu' : 'openMenu'];
     $('menu-toggle').setAttribute('aria-label', menuLabel);
     $('menu-toggle').title = menuLabel;
     const { totalMs, plannedMs, adjustmentMs } = timer ? timeBudget(timer) : { totalMs: 1, plannedMs: 0, adjustmentMs: 0 };
@@ -415,6 +420,7 @@ function render() {
         button.setAttribute('aria-label', t[button.dataset.language]);
         button.title = t[button.dataset.language];
     });
+    applicationHeader.renderPreferences(language, theme);
     document.querySelectorAll('[data-preset]').forEach(button => {
         const minutes = Number(button.dataset.preset) / 60000;
         button.textContent = `${minutes} min`;
@@ -535,17 +541,11 @@ document.querySelectorAll('[data-adjustment]').forEach(button => {
         }
     });
 });
-document.querySelectorAll('button[data-theme]').forEach(button => button.addEventListener('click', () => {
-    theme = button.dataset.theme;
-    savePreference('easyTimerTheme', theme);
-    render();
-}));
-document.querySelectorAll('[data-language]').forEach(button => button.addEventListener('click', () => {
-    language = button.dataset.language;
-    savePreference('easyTimerLanguage', language);
-    render();
-}));
-$('menu-toggle').addEventListener('click', () => setMenuOpen(!menuOpen));
+applicationHeader.bindPreferences(next => {
+    language = next; savePreference('easyTimerLanguage', language); render();
+}, next => {
+    theme = next; savePreference('easyTimerTheme', theme); render();
+});
 $('open-session').addEventListener('click', () => switchMode('session'));
 $('open-quick').addEventListener('click', () => switchMode('quick'));
 $('picker-back').addEventListener('click', () => switchMode('quick'));
@@ -625,9 +625,6 @@ document.addEventListener('click', event => {
         setClockOnly(true);
     }
 }, true);
-document.addEventListener('click', event => {
-    if (menuOpen && !$('preferences-menu').contains(event.target)) setMenuOpen(false);
-});
 // Callbacks only refresh the display; the deadline remains authoritative.
 setInterval(() => { if (timer && ['RUNNING', 'FINISHED'].includes(timer.status)) dispatch({ type: 'TICK' }); }, 100);
 document.addEventListener('visibilitychange', () => dispatch({ type: 'TICK' }));
@@ -650,12 +647,6 @@ document.addEventListener('keydown', event => {
         setClockOnly(false);
         return;
     }
-    if (event.key === 'Escape' && menuOpen) {
-        event.preventDefault();
-        event.stopPropagation();
-        setMenuOpen(false, true);
-        return;
-    }
     if (event.key === 'Escape' && document.fullscreenElement) {
         fullscreenRequestId += 1;
         fullscreenRequested = false;
@@ -673,6 +664,21 @@ document.addEventListener('keydown', event => {
 // View state never selects a recovery candidate or changes an accessible runtime.
 let savedView;
 try { savedView = sessionStorage.getItem(VIEW_KEY); } catch { /* Use the recovered runtime view. */ }
+const returnURL = new URL(location.href);
+let informationIntent = null;
+if (returnURL.searchParams.get('from') === 'information') {
+    const intent = returnURL.searchParams.get('open');
+    if (['quick', 'session', 'editor'].includes(intent)) informationIntent = intent;
+    // Consume before any asynchronous view restoration or confirmation can run.
+    returnURL.searchParams.delete('open');
+    try {
+        const origin = JSON.parse(sessionStorage.getItem(INFORMATION_ORIGIN_KEY));
+        if (['quick', 'session', 'editor'].includes(origin?.view)) savedView = origin.view;
+    } catch { /* Invalid/missing navigation metadata does not affect recovery. */ }
+    returnURL.searchParams.delete('from');
+    history.replaceState(null, '', returnURL);
+}
+try { sessionStorage.removeItem(INFORMATION_ORIGIN_KEY); } catch { /* Optional navigation metadata. */ }
 const unresolvedRecovery = (mode === 'quick' && recovery.pending) || (!recovery.restored && recovery.error);
 if (!unresolvedRecovery && savedView === 'editor') {
     await openEditor();
@@ -683,6 +689,17 @@ if (!unresolvedRecovery && savedView === 'editor') {
 }
 restoringView = false;
 updatePresentation();
+if (!unresolvedRecovery && informationIntent) {
+    if (informationIntent === 'editor') await openEditor();
+    else if (informationIntent === mode) {
+        // Information-page same-mode requests reveal the existing runtime only.
+        if (!plannerOpen || planner.close()) {
+            setMenuOpen(false); updatePresentation();
+            (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll:true });
+        }
+    } else await switchMode(informationIntent);
+}
+// Unresolved recovery deliberately discards, rather than defers, the intent.
 
 if ('serviceWorker' in navigator && !development) {
     const register = () => navigator.serviceWorker.register('service-worker.js').catch(() => {});
