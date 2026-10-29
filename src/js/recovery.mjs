@@ -1,5 +1,5 @@
-import { createTimer, transition } from './timer.mjs?v=53';
-import { transitionSession } from './session.mjs?v=53';
+import { createTimer, transition } from './timer.mjs?v=54';
+import { transitionSession } from './session.mjs?v=54';
 import { validateTemplate } from './templates.mjs?v=37';
 
 const PREFIX = 'easyTimerRuntime.v1.';

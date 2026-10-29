@@ -23,7 +23,7 @@ import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-tr
 const timeTravelOptions=parseTimeTravelOptions(process.argv.slice(2));
 if(timeTravelOptions.help||timeTravelOptions.list) {console.log(timeTravelHelp());process.exit(0);}
 
-const root = resolve('src');
+const root = resolve(process.env.EASYTIMER_WEB_ROOT || 'src');
 const server = createServer(async (req, res) => {
     try {
         const requestPath = new URL(req.url, 'http://localhost').pathname;
@@ -48,6 +48,7 @@ const browser = spawn(process.env.EASYTIMER_BROWSER || 'C:\\Program Files (x86)\
 let launchError;
 browser.on('error', error => { launchError = error; });
 let socket;
+const errors = [];
 try {
     let port;
     for (let i = 0; i < 100; i++) {
@@ -61,7 +62,6 @@ try {
     await new Promise((done, reject) => { socket.onopen = done; socket.onerror = reject; });
     let nextId = 0;
     const pending = new Map();
-    const errors = [];
     socket.onmessage = ({ data }) => {
         const message = JSON.parse(data);
         if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails);
@@ -170,8 +170,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=53'&&js==='js/app.js?v=53'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'53','app.js':'53','recovery.mjs':'53','planner.js':'49','templates.mjs':'37','timer.mjs':'53','session.mjs':'53','time-visuals.mjs':'53','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including recovery, the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=54'&&js==='js/app.js?v=54'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'54','app.js':'54','recovery.mjs':'54','planner.js':'49','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including recovery, the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -872,6 +872,9 @@ try {
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');
     }
     await cdp('Browser.close');
+} catch (error) {
+    if (errors.length) console.error('Browser runtime exceptions:', JSON.stringify(errors));
+    throw error;
 } finally {
     socket?.close();
     browser.kill();

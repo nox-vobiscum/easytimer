@@ -10,12 +10,36 @@ jobs:
     - name: 🚚 Get latest code
       uses: actions/checkout@v4
 
+    - name: Prepare allowlisted production artifact
+      run: node tools/release/package.mjs --output "$RUNNER_TEMP/easytimer-release"
+
+    - name: Check packaging safeguards
+      run: node --test tests/packaging.test.mjs
+
+    - name: Verify production artifact
+      run: node tools/release/package.mjs --verify "$RUNNER_TEMP/easytimer-release"
+
     - name: 📂 Sync files
       uses: SamKirkland/FTP-Deploy-Action@v4.3.5
       with:
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
+        # Preserve the existing src/... remote paths. Confirm hosting DocumentRoot
+        # and review the old FTP state before any production deployment.
+        local-dir: ${{ runner.temp }}/easytimer-release/ftp/
         server-dir: /
         port: 21
         protocol: ftp
+        # Retain default exclusions and protect previously uploaded development
+        # files from implicit cleanup. Remote inventory/removal needs approval.
+        exclude: |
+          **/.git*
+          **/.git*/**
+          **/node_modules/**
+          docs/**
+          tests/**
+          tools/**
+          .vscode/**
+          README.md
+          src/stopwatch.svg

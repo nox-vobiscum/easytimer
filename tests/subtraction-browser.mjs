@@ -10,9 +10,10 @@ export async function checkSubtraction({ evaluate, click, text, cdp, configure }
         const now = await evaluate('subNow');
         if(boot) await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:boot});
         boot = (await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`window.subRealNow=Date.now;window.subNow=${now+advance};Date.now=()=>window.subNow;`})).identifier;
+        const before = await evaluate('performance.timeOrigin');
         await cdp('Page.reload');
         for(let n=0;n<100;n++) {
-            if(await evaluate(`document.querySelector('#time')?.textContent===${JSON.stringify(expected)}&&Boolean(document.querySelector('#primary')?.title)`))break;
+            if(await evaluate(`performance.timeOrigin!==${before}&&document.querySelector('#time')?.textContent===${JSON.stringify(expected)}&&Boolean(document.querySelector('#primary')?.title)`))break;
             await new Promise(resolve=>setTimeout(resolve,50));
         }
         assert.equal(await text('#time'),expected);
