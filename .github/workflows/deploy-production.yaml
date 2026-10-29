@@ -1,0 +1,88 @@
+name: Deploy easytimer.at (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Owner-approved release commit (full lowercase 40-character SHA)
+        required: true
+        type: string
+      confirm_release_sha:
+        description: Repeat the approved SHA to explicitly authorize this deployment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: easytimer-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://easytimer.at/
+    steps:
+      - name: Check out trusted main history
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate and select the explicitly approved release
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          CONFIRM_RELEASE_SHA: ${{ inputs.confirm_release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full lowercase commit SHA is required.'; exit 1; }
+          [[ "$RELEASE_SHA" == "$CONFIRM_RELEASE_SHA" ]] || { echo 'Release confirmation does not match.'; exit 1; }
+          [[ "$(git cat-file -t "$RELEASE_SHA")" == commit ]]
+          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main
+          git checkout --detach "$RELEASE_SHA"
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
+          echo "Approved release: $RELEASE_SHA"
+          echo "Release commit: $RELEASE_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check packaging safeguards
+        run: node --test tests/packaging.test.mjs
+
+      - name: Prepare allowlisted production artifact
+        run: node tools/release/package.mjs --output "$RUNNER_TEMP/easytimer-release"
+
+      - name: Verify production inventory and checksums
+        run: node tools/release/package.mjs --verify "$RUNNER_TEMP/easytimer-release"
+
+      - name: Deploy verified artifact to the dedicated production account
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.PRODUCTION_FTP_SERVER }}
+          username: ${{ secrets.PRODUCTION_FTP_USERNAME }}
+          password: ${{ secrets.PRODUCTION_FTP_PASSWORD }}
+          local-dir: ${{ runner.temp }}/easytimer-release/ftp/
+          server-dir: /
+          protocol: ftps
+          port: 21
+          security: strict
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            docs/**
+            tests/**
+            tools/**
+            .vscode/**
+            README.md
+            src/stopwatch.svg
