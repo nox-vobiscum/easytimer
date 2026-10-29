@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { configureQuickTimebox } from './quick-timebox.mjs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createVirtualClock } from './virtual-clock.mjs';
@@ -261,7 +262,8 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
     try {
         await evaluate('window.confirm=()=>true');
         await clock.install(await evaluate('Date.now()')); await syncClock();
-        await evaluate('document.querySelector(\'[data-preset="60000"]\').click();document.querySelector("#primary").click()');
+        await configureQuickTimebox(evaluate, 60000);
+        await evaluate('document.querySelector("#primary").click()');
         const running = await readRecord();
         await excursion('quick', '20s', true);
         assert.equal((await readRecord()).clock.deadlineMs, running.clock.deadlineMs);
@@ -324,6 +326,9 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
         await navigate('.info-return', false);
         assert.equal(await evaluate('document.body.dataset.mode'), 'quick');
         console.log('PASS: information origin survives chains/reload; real deadlines, Quick running/pause/overtime, same Session phase catch-up/pause, Editor and unresolved recovery survive explicit top return.');
+    } catch (error) {
+        console.error('Information continuity failure:', error);
+        throw error;
     } finally {
         if (bootstrap) await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier:bootstrap });
         await clock.restore();

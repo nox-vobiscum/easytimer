@@ -90,7 +90,7 @@ export async function checkSessionRecovery({ evaluate, click, text, cdp }) {
         await evaluate('window.confirm=()=>true'); await menu('#open-quick');
         await reload(start + 270000, 'quick');
         assert.equal((await record()).mode, 'quick'); assert.equal((await record()).run, undefined);
-        assert.equal(await text('#time'), '05:00');
+        assert.equal(await text('#time'), '00:00');
         await cdp('Emulation.clearDeviceMetricsOverride'); await resetClock();
 
         // Real second window: Session owner; the first window is an independent chooser.

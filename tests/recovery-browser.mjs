@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { configureQuickTimebox } from './quick-timebox.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 // Runs only inside the harness's disposable browser profile, never owner storage.
@@ -50,7 +51,7 @@ export async function checkRecovery({ evaluate, click, text, cdp, configure }) {
         await evaluate(`Boolean(window.recoveryChild=window.open('/','recovery-duplicate'))`);
         await ready(`Boolean(window.recoveryChild?.document.querySelector('#primary')?.title)`);
         assert.equal(await evaluate(`sessionStorage.getItem('easyTimerRuntimeContext.v1')!==recoveryChild.sessionStorage.getItem('easyTimerRuntimeContext.v1')`), true, 'Duplicated tab association receives a distinct exclusive owner');
-        await evaluate(`recoveryChild.document.querySelector('[data-preset="900000"]').click()`);
+        await configureQuickTimebox(evaluate, 900000, 'recoveryChild');
         assert.equal(await text('#time'), '01:00', 'Second window cannot change the original clock');
         assert.equal(await evaluate(`JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1'))).clock.durationMs`), 60000);
         // Explicitly selecting an active context must fail, never steal its lock.
@@ -96,6 +97,7 @@ export async function checkRecoveryCorrections({ evaluate, click, text, cdp, con
         await click('[data-adjustment="30000"]');
         await evaluate(`Boolean(window.recoveryB=window.open('/','recovery-owner-b'))`);
         await wait(`Boolean(recoveryB.document.querySelector('#primary')?.title)`);
+        await configureQuickTimebox(evaluate, 900000, 'recoveryB');
         await evaluate(`recoveryB.document.querySelector('#primary').click()`);
         await evaluate(`Boolean(window.recoveryC=window.open('/','recovery-chooser-c'))`);
         await wait(`Boolean(recoveryC.document.querySelector('#primary')?.title)`);
@@ -106,8 +108,8 @@ export async function checkRecoveryCorrections({ evaluate, click, text, cdp, con
         assert.match(await evaluate(`recoveryC.document.querySelector('#recovery-feedback').textContent`), /timers are available/);
         const labels = await evaluate(`Array.from(recoveryC.document.querySelector('#recovery-select').options).slice(1).map(o=>o.textContent)`);
         assert.equal(labels.length, 2); assert.ok(labels.every(label => label.includes('Start ') && label.includes('In use in another tab') && !label.includes('Overtime')));
-        assert.ok(labels.some(label => label.includes('Total budget 01:30')));
-        assert.ok(labels.some(label => label.includes('Total budget 05:00')));
+        assert.ok(labels.some(label => label.includes('Timebox 01:30')));
+        assert.ok(labels.some(label => label.includes('Timebox 15:00')));
         await delay(150);
         assert.deepEqual(await evaluate(`Array.from(recoveryC.document.querySelector('#recovery-select').options).slice(1).map(o=>o.textContent)`), labels, 'Identification labels do not simulate a live countdown');
         for (const language of ['de', 'en']) {
@@ -115,7 +117,7 @@ export async function checkRecoveryCorrections({ evaluate, click, text, cdp, con
             await evaluate(`(()=>{const w=recoveryC,s=w.document.querySelector('#recovery-select');s.value=${JSON.stringify(ownerIds.b)};s.dispatchEvent(new w.Event('change'));w.document.querySelector('#recovery-restore').click()})()`);
             await wait(`recoveryC.document.querySelector('#recovery-feedback').textContent.includes(${JSON.stringify(language === 'de' ? 'Wechsle dorthin' : 'Switch to that tab')})`);
             assert.equal(await evaluate(`(()=>{const w=recoveryC,e=w.document.querySelector('#recovery-feedback'),r=e.getBoundingClientRect();return w.document.activeElement===e&&r.top>=0&&r.bottom<=w.innerHeight})()`), true, 'Refusal is visible and receives keyboard/screen-reader focus');
-            assert.equal(await evaluate(`recoveryC.document.querySelector('#time').textContent`), '05:00');
+            assert.equal(await evaluate(`recoveryC.document.querySelector('#time').textContent`), '00:00');
             assert.deepEqual(await readOwners(), deadlines, 'Denied takeover preserves both running originals');
         }
         // Recheck at action time: a formerly locked candidate becomes recoverable.

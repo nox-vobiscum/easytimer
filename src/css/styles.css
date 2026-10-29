@@ -239,11 +239,11 @@ noscript { text-align:center; padding:1rem; }
 .control-bar button { min-width:44px; }
 .amount-compact { display:none; }
 .action-icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; }
-.duration-config { margin:1rem auto 0; max-width:42rem; }
+.duration-config { margin:1rem auto 0; max-width:48rem; }
 .duration-config h2, .duration-adjustments h2 { font-size:.8rem; font-weight:500; color:var(--muted); margin:0 0 .6rem; }
 .duration-presets, .adjustment-buttons { display:flex; flex-wrap:wrap; justify-content:center; gap:.45rem; }
 .duration-presets button { min-width:4.25rem; padding:.5rem .7rem; background:var(--selected); border-color:var(--border); font-size:.85rem; }
-.duration-presets button[aria-pressed="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); color:var(--accent); }
+.duration-presets .timebox-reset { display:inline-flex; align-items:center; justify-content:center; min-width:44px; padding:.5rem; background:transparent; border-color:transparent; }
 .duration-adjustments { position:relative; border-left:1px solid var(--border); padding-left:1rem; }
 .duration-adjustments h2 { position:absolute; bottom:100%; left:1rem; right:0; white-space:nowrap; }
 @container (max-width: 42rem) {
@@ -303,6 +303,11 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
 @media(max-height:400px) {
   .presentation .duration-presets { gap:.3rem; }
   .presentation .duration-presets button { min-width:3rem; padding:.4rem .5rem; font-size:.75rem; }
+}
+@media(max-height:400px) and (max-width:700px) {
+  .presentation:not(.clock-only) .controls-region:has(.duration-config:not([hidden])) { display:flex; align-items:center; justify-content:center; gap:.5rem; min-height:56px; }
+  .presentation:not(.clock-only) .controls-region:has(.duration-config:not([hidden])) .duration-config { flex:0 1 auto; min-width:0; }
+  .presentation:not(.clock-only) .controls-region:has(.duration-config:not([hidden])) .control-bar { flex:none; margin-top:0; }
 }
 .presentation #help:not(:empty) { margin:.5rem 0 0; min-height:0; font-size:.75rem; }
 .presentation #status { font-size:.85rem; }

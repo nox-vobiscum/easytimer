@@ -81,7 +81,7 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
             assert.equal(await text('#time'),'+00:00','Overtime is red from its first zero display');
             await click('#primary');await check('NORMAL');await click('#stop');await check('NORMAL');
         }
-        await configure(0,3,0);await click('[data-adjustment="30000"]');await check('NORMAL');
+        await configure(0,2,30);await click('[data-preset="60000"]');await check('NORMAL');
         await click('#primary');await tick(185000);await check('ENDGAME');
         await click('[data-adjustment="30000"]');await check('NORMAL');
         await tick(60000);await check('EXPIRED');assert.equal(await text('#time'),'+00:05');

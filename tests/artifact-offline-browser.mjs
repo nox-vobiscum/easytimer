@@ -71,7 +71,7 @@ async function checkOffline(negativeControl) {
         await cdp('Page.enable'); await cdp('Runtime.enable'); await cdp('Network.enable');
         await cdp('Page.navigate', { url: origin + '/' });
         await wait('Boolean(document.getElementById("primary")?.title)&&Boolean(navigator.serviceWorker.controller)');
-        assert.equal(await evaluate('document.getElementById("time").textContent'), '05:00');
+        assert.equal(await evaluate('document.getElementById("time").textContent'), '00:00');
         assert.deepEqual(await evaluate('Promise.all(["/tools/app-sync/account.mjs","/tools/sync-poc/index.html","/tests/browser-check.mjs","/docs/backlog.md"].map(url=>fetch(url).then(r=>r.status)))'), [404,404,404,404]);
         assert.equal(await evaluate('document.querySelectorAll("#account-toggle,#account-menu-entry,.development-sync").length'), 0);
         assert.equal(await evaluate('typeof globalThis.easyTimerDevelopment'), 'undefined');

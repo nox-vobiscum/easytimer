@@ -27,13 +27,13 @@ const copy = {
         switchConfirm: 'Leave this timer and discard its run progress? The destination will not start automatically.',
         stopWorkshopConfirm: 'Stop this workshop and reset all phases and overtime to phase 1?',
         countdown: 'Countdown', light: 'Light', dark: 'Dark', system: 'System', theme: 'Appearance', language: 'Language',
-        de: 'German', en: 'English', duration: 'Duration',
+        de: 'German', en: 'English', duration: 'Timebox', resetTimebox: 'Reset timebox to 00:00',
         start: 'Start', pause: 'Pause', resume: 'Resume', stop: 'Stop',
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: "Time’s up", newRun: 'Start again', overtime: 'Overtime',
         openMenu: 'Open preferences', closeMenu: 'Close preferences',
-        preset: minutes => `Set ${minutes} minutes`,
-        addDuration: 'Add to duration', extendRemaining: 'Extend remaining time', extendBudget: 'Extend time budget',
-        total: 'Total', planned: 'Planned', limit: 'The total budget cannot exceed 99:59:59.',
+        preset: minutes => `Add ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`,
+        addDuration: 'Add to Timebox', extendRemaining: 'Extend remaining time', extendBudget: 'Extend Timebox',
+        total: 'Timebox', planned: 'Planned', limit: 'The Timebox cannot exceed 99:59:59.',
         addTime: seconds => `Add ${seconds} seconds`,
         adjustmentShortcut: 'Click or Enter/Space adds time. Hold Shift while clicking or pressing Enter/Space to subtract.',
         invalidAdjustment: 'This time adjustment is not valid.',
@@ -57,13 +57,13 @@ const copy = {
         switchConfirm: 'Diesen Timer verlassen und seinen Fortschritt verwerfen? Der Zielmodus startet nicht automatisch.',
         stopWorkshopConfirm: 'Workshop stoppen und alle Phasen und Überzeiten auf Phase 1 zurücksetzen?',
         countdown: 'Countdown', light: 'Hell', dark: 'Dunkel', system: 'System', theme: 'Darstellung', language: 'Sprache',
-        de: 'Deutsch', en: 'Englisch', duration: 'Dauer',
+        de: 'Deutsch', en: 'Englisch', duration: 'Timebox', resetTimebox: 'Timebox auf 00:00 zurücksetzen',
         start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', stop: 'Stoppen',
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Zeit abgelaufen', newRun: 'Erneut starten', overtime: 'Überzeit',
         openMenu: 'Einstellungen öffnen', closeMenu: 'Einstellungen schließen',
-        preset: minutes => `${minutes} Minuten einstellen`,
-        addDuration: 'Dauer ergänzen', extendRemaining: 'Restzeit verlängern', extendBudget: 'Zeitbudget verlängern',
-        total: 'Gesamt', planned: 'Geplant', limit: 'Das Gesamtbudget darf 99:59:59 nicht überschreiten.',
+        preset: minutes => `${minutes} ${minutes === 1 ? 'Minute' : 'Minuten'} hinzufügen`,
+        addDuration: 'Timebox ergänzen', extendRemaining: 'Restzeit verlängern', extendBudget: 'Timebox verlängern',
+        total: 'Timebox', planned: 'Geplant', limit: 'Die Timebox darf 99:59:59 nicht überschreiten.',
         addTime: seconds => `${seconds} Sekunden hinzufügen`,
         adjustmentShortcut: 'Klick oder Enter/Leertaste ergänzt Zeit. Mit gedrückter Umschalttaste beim Klicken oder bei Enter/Leertaste wird Zeit abgezogen.',
         invalidAdjustment: 'Diese Zeitanpassung ist nicht gültig.',
@@ -89,7 +89,8 @@ document.querySelectorAll('[data-information]').forEach(link => link.addEventLis
     catch { /* Returning can still use ordinary view/runtime recovery. */ }
 }));
 let theme = readPreference('easyTimerTheme', 'system', ['light', 'dark', 'system']);
-let timer = createTimer();
+const DEFAULT_QUICK_DURATION = 0;
+let timer = createTimer(DEFAULT_QUICK_DURATION);
 let mode = 'quick';
 let run = null;
 let quickDurationMs = timer.durationMs;
@@ -140,7 +141,7 @@ const recoveryCopy = {
         chooseMany: 'Saved timers are available. Choose which timer to restore.',
         noCandidates: 'No saved timers are currently available. You can use the current independent timer.',
         label: 'Saved timer', placeholder: 'Select a timer', restore: 'Restore timer', dismiss: 'Use current timer',
-        timer: 'Timer', start: 'Start', total: 'Total budget', notStarted: 'Not started', unknownStart: 'Start time not recorded', saved: 'Saved', elsewhere: 'In use in another tab',
+        timer: 'Timer', start: 'Start', total: 'Timebox', notStarted: 'Not started', unknownStart: 'Start time not recorded', saved: 'Saved', elsewhere: 'In use in another tab',
         error: 'Timer recovery is unavailable or saved data could not be trusted. You can keep using the timer; do not rely on recovery.',
         active: 'This timer is already in use in another tab. Switch to that tab or start a new timer here.',
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: 'Overtime' },
@@ -148,7 +149,7 @@ const recoveryCopy = {
         chooseMany: 'Gespeicherte Timer sind verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
         noCandidates: 'Derzeit sind keine gespeicherten Timer verfügbar. Du kannst den aktuellen unabhängigen Timer verwenden.',
         label: 'Gespeicherter Timer', placeholder: 'Timer auswählen', restore: 'Timer wiederherstellen', dismiss: 'Aktuellen Timer verwenden',
-        timer: 'Timer', start: 'Start', total: 'Gesamtzeit', notStarted: 'Noch nicht gestartet', unknownStart: 'Startzeit nicht erfasst', saved: 'Gespeichert', elsewhere: 'In anderem Tab aktiv',
+        timer: 'Timer', start: 'Start', total: 'Timebox', notStarted: 'Noch nicht gestartet', unknownStart: 'Startzeit nicht erfasst', saved: 'Gespeichert', elsewhere: 'In anderem Tab aktiv',
         error: 'Die Timer-Wiederherstellung ist nicht verfügbar oder gespeicherte Daten sind nicht verlässlich. Du kannst den Timer weiter nutzen; verlasse dich nicht auf die Wiederherstellung.',
         active: 'Dieser Timer wird bereits in einem anderen Tab verwendet. Wechsle dorthin oder starte hier einen neuen Timer.',
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Überzeit' },
@@ -407,7 +408,10 @@ function render() {
     document.documentElement.dataset.theme = theme;
     document.querySelectorAll('[data-copy]').forEach(el => { el.textContent = t[el.dataset.copy]; });
     document.querySelector('.duration-config').hidden = mode !== 'quick' || timer?.status !== 'READY';
-    document.querySelector('.duration-adjustments').hidden = mode !== 'quick';
+    document.querySelector('.duration-adjustments').hidden = mode !== 'quick' || timer?.status === 'READY';
+    $('reset-timebox').disabled = mode !== 'quick' || timer?.status !== 'READY';
+    $('reset-timebox').setAttribute('aria-label', t.resetTimebox);
+    $('reset-timebox').title = t.resetTimebox;
     $('adjustment-heading').textContent = t[timer?.status === 'READY' ? 'addDuration' : timer?.status === 'FINISHED' ? 'extendBudget' : 'extendRemaining'];
     document.querySelectorAll('[data-label]').forEach(el => { el.setAttribute('aria-label', t[el.dataset.label]); });
     document.querySelectorAll('button[data-theme]').forEach(button => {
@@ -423,11 +427,10 @@ function render() {
     applicationHeader.renderPreferences(language, theme);
     document.querySelectorAll('[data-preset]').forEach(button => {
         const minutes = Number(button.dataset.preset) / 60000;
-        button.textContent = `${minutes} min`;
+        button.textContent = `+${minutes} min`;
         button.setAttribute('aria-label', t.preset(minutes));
         button.title = t.preset(minutes);
         button.disabled = mode !== 'quick' || timer?.status !== 'READY';
-        button.setAttribute('aria-pressed', String(timer?.durationMs === Number(button.dataset.preset)));
     });
     if (pickerOpen) renderPicker();
     if (!timer) {
@@ -519,16 +522,15 @@ $('stop').addEventListener('click', () => {
     render();
     if (restoreFocus) $('primary').focus({ preventScroll: true });
 });
-document.querySelectorAll('[data-preset]').forEach(button => button.addEventListener('click', () => {
-    if (mode !== 'quick' || timer.status !== 'READY') return;
+$('reset-timebox').addEventListener('click', () => {
+    if (mode !== 'quick' || timer?.status !== 'READY') return;
     limitExceeded = false;
-    timer = transition(timer, { type: 'CONFIGURE', durationMs: Number(button.dataset.preset) }, Date.now());
-    render();
-}));
-document.querySelectorAll('[data-adjustment]').forEach(button => {
+    dispatch({ type: 'CONFIGURE', durationMs: DEFAULT_QUICK_DURATION });
+});
+document.querySelectorAll('[data-preset], [data-adjustment]').forEach(button => {
     const adjust = subtract => {
-        if (mode !== 'quick') return;
-        const amountMs = Number(button.dataset.adjustment) * (subtract ? -1 : 1);
+        if (mode !== 'quick' || !timer || (button.hasAttribute('data-preset') !== (timer.status === 'READY'))) return;
+        const amountMs = Number(button.dataset.preset ?? button.dataset.adjustment) * (subtract ? -1 : 1);
         limitExceeded = adjustmentError(timer, amountMs);
         dispatch({ type: 'ADJUST', amountMs });
     };

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'easytimer-shell-v60';
+const CACHE_NAME = 'easytimer-shell-v61';
 const APP_SHELL = [
     './',
     './index.html',
@@ -8,8 +8,8 @@ const APP_SHELL = [
     './privacy.html',
     './js/info.js?v=59',
     './js/header.mjs?v=59',
-    './css/styles.css?v=60',
-    './js/app.js?v=60',
+    './css/styles.css?v=61',
+    './js/app.js?v=61',
     './js/recovery.mjs?v=54',
     './js/planner.js?v=55',
     './js/templates.mjs?v=37',

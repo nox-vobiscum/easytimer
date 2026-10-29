@@ -17,6 +17,8 @@ import { checkRecovery, checkRecoveryCorrections } from './recovery-browser.mjs'
 import { checkSessionRecovery } from './session-recovery-browser.mjs';
 import { checkNavigation } from './navigation-browser.mjs';
 import { checkSubtraction } from './subtraction-browser.mjs';
+import { configureQuickTimebox } from './quick-timebox.mjs';
+import { checkTimeboxControls } from './timebox-browser.mjs';
 import { checkPortability } from './portability-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
@@ -98,8 +100,7 @@ try {
         assert.equal(title,expected,`Title matches ${state}`);
     }
     async function configure(h, m, s) {
-        // Exercise the real configuration handler with short deterministic test durations.
-        await evaluate(`(()=>{const el=document.querySelector('[data-preset]');const original=el.dataset.preset;const duration=${(h*3600+m*60+s)*1000};el.dataset.preset=duration;el.click();el.dataset.preset=original;const minutes=Number(original)/60000;el.textContent=minutes+' min';const label=document.documentElement.lang==='de'?minutes+' Minuten einstellen':'Set '+minutes+' minutes';el.title=label;el.setAttribute('aria-label',label);el.setAttribute('aria-pressed',String(Number(original)===duration));})()`);
+        await configureQuickTimebox(evaluate, (h * 3600 + m * 60 + s) * 1000);
     }
     async function checkMenu(state) {
         const before=await evaluate(`({status:document.querySelector('#status').textContent,time:document.querySelector('#time').textContent,budget:document.querySelector('#time-budget').textContent,presentation:document.body.classList.contains('presentation')})`);
@@ -158,7 +159,8 @@ try {
         await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else {
-    assert.equal(await text('#time'), '05:00');
+    assert.equal(await text('#time'), '00:00');
+    await checkTimeboxControls({ evaluate, click, text, cdp, configure });
     await checkRecovery({ evaluate, click, text, cdp, configure });
     await checkRecoveryCorrections({ evaluate, click, text, cdp, configure });
     await checkSessionRecovery({ evaluate, click, text, cdp });
@@ -170,8 +172,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=60'&&js==='js/app.js?v=60'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'60','app.js':'60','info.js':'59','header.mjs':'59','recovery.mjs':'54','planner.js':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including information pages, recovery, the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=61'&&js==='js/app.js?v=61'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'61','app.js':'61','info.js':'59','header.mjs':'59','recovery.mjs':'54','planner.js':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including information pages, recovery, the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -367,9 +369,9 @@ try {
                 assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length > 0`),ready);
                 assert.equal(await text('#adjustment-heading'),label);
                 assert.ok(Math.abs(await evaluate(`document.querySelector('#time').getBoundingClientRect().top`) - top)<180,`Deliberate readout transition at ${width}px (${label})`);
-                assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>{const r=b.getBoundingClientRect();return !b.disabled&&r.height>=44&&r.left>=0&&r.right<=innerWidth})`),true);
+                assert.equal(await evaluate(`Array.from(document.querySelectorAll('${ready ? '[data-preset], #reset-timebox' : '[data-adjustment]'}')).every(b=>{const r=b.getBoundingClientRect();return !b.disabled&&r.height>=44&&r.left>=0&&r.right<=innerWidth})`),true);
             }
-            const labels = language === 'de' ? ['Dauer ergänzen','Restzeit verlängern','Zeitbudget verlängern'] : ['Add to duration','Extend remaining time','Extend time budget'];
+            const labels = language === 'de' ? ['Timebox ergänzen','Restzeit verlängern','Timebox verlängern'] : ['Add to Timebox','Extend remaining time','Extend Timebox'];
             await checkContext(true,labels[0]);
             await click('#primary');
             await checkContext(false,labels[1]);
@@ -415,7 +417,7 @@ try {
                         compact:getComputedStyle(document.querySelector('#primary-label')).display==='none',
                         oneRow:Math.max(...rects.map(r=>r.top))-Math.min(...rects.map(r=>r.top))<3,
                         overflow:document.documentElement.scrollWidth>innerWidth};})()`);
-                assert.equal(geometry.count,state==='READY'?5:6);
+                assert.equal(geometry.count,state==='READY'?1:6);
                 assert.equal(geometry.preset,state==='READY',`READY presets at ${width}x${height}`);
                 assert.ok(geometry.fit&&geometry.names&&geometry.separate&&geometry.belowTime&&geometry.aboveBudget&&!geometry.overflow,JSON.stringify({width,height,state,language,geometry}));
                 assert.equal(geometry.compact,width<704);
@@ -433,9 +435,9 @@ try {
     await configure(0,5,0);
     for (const state of ['READY','RUNNING','PAUSED']) {
         if(state!=='READY') await click('#primary');
-        for (const amount of [3600000,300000,60000,30000]) {
+        for (const amount of (state === 'READY' ? [3600000,300000,60000] : [3600000,300000,60000,30000])) {
             const before=await text('#time-budget');
-            await click(`[data-adjustment="${amount}"]`);
+            await click(`[${state === 'READY' ? 'data-preset' : 'data-adjustment'}="${amount}"]`);
             assert.notEqual(await text('#time-budget'),before,'Every addition updates the budget');
             await checkTitle(state);
         }
@@ -453,7 +455,7 @@ try {
     }
     await click('#primary');
     await checkTitle('RUNNING');
-    assert.equal(await text('#time-budget'),'Total 00:01','New Run clears additions');
+    assert.equal(await text('#time-budget'),'Timebox 00:01','New Run clears additions');
     await click('#stop');
     await evaluate('Date.now=window.originalNow;delete window.originalNow');
     await cdp('Emulation.setDeviceMetricsOverride',{width:320,height:568,deviceScaleFactor:1,mobile:true});
@@ -468,15 +470,15 @@ try {
     await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
     await click('[data-language="en"]');
     assert.equal(await text('#status'), 'Ready');
-    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.textContent)`), ['1 min','2 min','3 min','5 min','10 min','15 min','30 min','60 min']);
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.textContent)`), ['+1 min','+2 min','+3 min','+5 min','+10 min','+15 min','+30 min','+60 min']);
     assert.equal(await evaluate(`new Set(Array.from(document.querySelectorAll('[data-preset]')).map(b=>b.getBoundingClientRect().top)).size`),1,'Desktop presets use one row');
     assert.equal(await evaluate(`document.querySelectorAll('.timer input').length`),0,'Quick Timer has no manual duration inputs; hidden Editor drafts are independent');
     assert.equal(await evaluate(`['primary','stop'].every(id=>document.getElementById(id).querySelector('svg')&&document.getElementById(id).textContent.trim())`),true);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-preset]')).backgroundColor !== getComputedStyle(document.querySelector('[data-adjustment]')).backgroundColor`),true);
-    await click('[data-preset="900000"]');
-    await click('[data-adjustment="300000"]');
-    assert.equal(await text('#time'),'20:00');
-    assert.equal(await text('#time-budget'),'Total 20:00');
+    await click('#reset-timebox');
+    await click('[data-preset="300000"]');
+    assert.equal(await text('#time'),'05:00');
+    assert.equal(await text('#time-budget'),'Timebox 05:00');
     assert.equal(await evaluate(`document.querySelectorAll('[data-preset][aria-pressed="true"]').length`),0);
     await click('#primary');
     await click('[data-adjustment="30000"]');
@@ -486,18 +488,18 @@ try {
     const pausedBeforeAddition = await text('#time');
     await click('[data-adjustment="300000"]');
     assert.equal(await text('#status'),'Paused');
-    assert.equal(await text('#time-budget'),'Total 25:30 · Planned 20:00 + 05:30');
+    assert.equal(await text('#time-budget'),'Timebox 10:30 · Planned 05:00 + 05:30');
     await checkTitle('PAUSED');
     assert.notEqual(await text('#time'),pausedBeforeAddition);
     await click('#stop');
     await click('#primary');
-    assert.equal(await text('#time-budget'),'Total 20:00');
+    assert.equal(await text('#time-budget'),'Timebox 05:00');
     await click('#stop');
     await configure(99,59,59);
     await click('#primary');
     assert.equal(await evaluate('document.title'),'99:59:59 · easyTimer');
     await click('#stop');
-    await click('[data-adjustment="30000"]');
+    await click('[data-preset="60000"]');
     assert.equal(await text('#time'),'99:59:59');
     assert.match(await text('#help'),/99:59:59/);
     await click('#stop');
@@ -583,7 +585,7 @@ try {
     await checkTitle('FINISHED');
     await click('[data-adjustment="30000"]');
     assert.equal(await text('#status'),'Running');
-    assert.equal(await text('#time-budget'),'Total 00:32 · Planned 00:02 + 00:30');
+    assert.equal(await text('#time-budget'),'Timebox 00:32 · Planned 00:02 + 00:30');
     await checkTitle('RUNNING');
     assert.ok(await evaluate(`parseFloat(document.querySelector('#progress').style.getPropertyValue('--remaining')) > 0`));
     await click('#stop');
@@ -790,7 +792,7 @@ try {
         assert.equal(await evaluate('document.body.classList.contains("presentation")'),true);
         await checkMenu('READY');
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true,'READY presets visible in expanded view');
-        assert.equal(await evaluate(`(()=>{const p=document.querySelector('.duration-config').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return p.top>=t.bottom&&p.bottom<=a.top&&p.left>=0&&p.right<=innerWidth})()`),true,'READY presets fit between readout and actions');
+        assert.equal(await evaluate(`(()=>{const p=document.querySelector('.duration-config').getBoundingClientRect();const t=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return p.top>=t.bottom&&a.top>=t.bottom&&(p.bottom<=a.top||p.right<=a.left||a.right<=p.left)&&p.left>=0&&p.right<=innerWidth})()`),true,'READY builders and Start fit below the readout without overlap');
         const readyTop = await evaluate(`document.querySelector('#time').getBoundingClientRect().top`);
         await click('#primary');
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Running presets hidden');
@@ -802,7 +804,7 @@ try {
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length`),0,'Stop then Start keeps presets hidden');
         await click('#stop');
         assert.equal(await evaluate(`document.querySelector('.duration-config').getClientRects().length>0`),true,'Stop restores room presets');
-        assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-adjustment]')).every(b=>b.getClientRects().length>0)`),true,'All additions visible in expanded view');
+        assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-preset],#reset-timebox')).every(b=>b.getClientRects().length>0)&&document.querySelector('.duration-adjustments').hidden`),true,'Expanded READY shows only time-building controls');
         assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const d=document.querySelector('.duration-adjustments').getBoundingClientRect();const p=document.querySelector('#progress').getBoundingClientRect();return d.bottom<=b.top&&b.bottom<=p.top+1&&p.bottom<=innerHeight})()`),true,'Budget line fits above progress and below additions');
         assert.equal(await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const a=document.querySelector('.actions').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=a.top})()`),true,`Long duration fits at ${width}x${height}`);
         if (process.env.EASYTIMER_SCREENSHOT_DIR) {
@@ -835,7 +837,7 @@ try {
     assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),false);
     await click('[data-adjustment="300000"]');
     assert.equal(await text('#status'),'Läuft');
-    assert.equal(await text('#time-budget'),'Gesamt 05:01 · Geplant 00:01 + 05:00');
+    assert.equal(await text('#time-budget'),'Timebox 05:01 · Geplant 00:01 + 05:00');
     assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const a=document.querySelector('.duration-adjustments').getBoundingClientRect();const p=document.querySelector('#progress').getBoundingClientRect();return b.top>=a.bottom&&b.bottom<=p.top+1&&p.bottom<=innerHeight})()`),true,'Extended budget fits short landscape');
     await click('#stop');
     assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),true);
