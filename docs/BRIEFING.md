@@ -223,9 +223,18 @@ Never force-push a release branch or include unrelated working-tree changes.
 - Branch: `develop`
 - URL: [et.rbsnet.at](https://et.rbsnet.at/)
 - Workflow: `.github/workflows/deploy.yaml`
-- Trigger: automatic only on pushes to `develop`
+- Trigger: automatic only on pushes to `develop` that change an allowlisted
+  application, packaging, validation or deployment path
 - GitHub Environment: `staging`
 - Dedicated `STAGING_FTP_*` secrets and account root
+
+Documentation-only changes to the root README/changelog or `docs/**` do not
+deploy staging. The allowlist covers `src/**`, `tools/release/**`, `tests/**`,
+`.github/workflows/**`, `.github/actions/**`, root package metadata and
+`.gitattributes`. A commit containing both documentation and an allowlisted path
+does deploy. When a future change introduces another source, packaging,
+validation or deployment dependency, update the workflow allowlist and its
+focused test in the same reviewed commit.
 
 ### Production
 

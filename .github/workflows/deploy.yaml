@@ -2,6 +2,16 @@ name: Deploy staging (et.rbsnet.at)
 on:
   push:
     branches: [ develop ]
+    paths:
+      - 'src/**'
+      - 'tools/release/**'
+      - 'tests/**'
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'npm-shrinkwrap.json'
+      - '.gitattributes'
 
 permissions:
   contents: read

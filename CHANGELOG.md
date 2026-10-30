@@ -8,8 +8,13 @@ commit, staging and production deployment are distinct events.
 
 No committed application changes are currently awaiting production release.
 
-Documentation consolidation under DOC-001 is local and uncommitted; it does not
-change the application or PWA version.
+- **CI-001 (local, uncommitted):** documentation-only pushes no longer trigger
+  staging. The conservative path allowlist still covers application sources,
+  release tooling, tests, workflows/actions, package metadata and Git attribute
+  changes.
+- **DOC-001:** documentation consolidation was committed as `3069802` and
+  published to `develop` and `main`. It did not change the application, the
+  production artifact or PWA v62.
 
 ## PWA v62 — 2026-10-30
 

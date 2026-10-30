@@ -225,9 +225,19 @@ UX-008 endgame highlighting is implemented locally and always enabled in both ti
 
 ## Documentation maintenance
 
+### CI-001 — Skip staging deployment for documentation-only pushes
+
+**Status:** Implemented and validated locally; commit and publication require
+separate owner approval. The staging workflow remains `develop`-only and uses a
+conservative dependency allowlist. Documentation-only changes do not deploy;
+application, release-tooling, test, workflow/action, package-metadata and Git
+attribute changes do. Production remains manual-only.
+
 ### DOC-001 — Documentation Consolidation & Archiving
 
-**Priority:** Low. **Status:** Phase B implemented and validated locally; owner acceptance and a separately authorized commit remain pending. No application, release or deployment change is implied.
+**Priority:** Low. **Status:** Complete and published to `develop` and `main` as
+`3069802`. The documentation-only commit did not change the application,
+production artifact or PWA v62.
 
 **Goal:** Keep the `docs/` root intentionally small, navigable and focused on current, actionable project knowledge.
 
