@@ -68,7 +68,9 @@ This correction changes runtime code only in:
 
 Updated tests: `tools/app-sync/conflict-experiments.mjs`, `browser-check.mjs`, `proposed-heads.test.mjs`.
 
-Documentation: this report, `docs/BRIEFING.md`, `docs/backlog.md`, `docs/SYNC-003B_CONFLICT_RESOLUTION.md` and the follow-up link in `docs/SYNC-003B_TWO_HEAD_ANALYSIS.md`.
+Documentation: this report, `docs/BRIEFING.md`, `docs/backlog.md`,
+`docs/SYNC-003B_CONFLICT_RESOLUTION.md` and the follow-up link in
+`docs/archive/investigations/SYNC-003B_TWO_HEAD_ANALYSIS.md`.
 
 No changes to storage/publication/transport/core schema logic or `src/`, service worker, OAuth, hosting or workflow in this correction. Cached production assets did not change, so no PWA bump. No local server restart was needed: the existing development server reads these already allowed modules from disk. No owner data or backup was accessed by the agent. Owner-operated live acceptance and recovery subsequently passed.
 

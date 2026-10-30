@@ -4,7 +4,7 @@
 
 ## Isolation and references
 
-Read the [owner PoC decision](SYNC-001_POC_DECISION.md), [incremental plan](SYNC-002_IMPLEMENTATION_PLAN.md), [local integrity contract](SYNC-002_LOCAL_INTEGRITY_CONTRACT.md), [SYNC-002A experiment](SYNC-002A_LOCAL_STORAGE_EXPERIMENT.md), [DATA-001 contract](DATA-001_RUNDOWN_PORTABILITY.md), [briefing](BRIEFING.md) and [backlog](backlog.md) before implementation.
+Read the [owner PoC decision](SYNC-001_POC_DECISION.md), [incremental plan](SYNC-002_IMPLEMENTATION_PLAN.md), [local integrity contract](SYNC-002_LOCAL_INTEGRITY_CONTRACT.md), [SYNC-002A experiment](SYNC-002A_LOCAL_STORAGE_EXPERIMENT.md), [DATA-001 contract](../../DATA-001_RUNDOWN_PORTABILITY.md), [briefing](../../BRIEFING.md) and [backlog](../../backlog.md) before implementation.
 
 All new executable code is isolated in `tools/sync-core/`. It imports only the existing pure `validateLibrary` from `src/js/templates.mjs`; it does not import the app, editor, timers, Google PoC, IndexedDB adapter or portability download code. No new dependencies. No HTTP, OAuth, token, database, migration, UI, pruning or runtime initialization is implemented. Browser-supported Web Crypto performs SHA-256; Node.js 22 runs the deterministic tests.
 
@@ -12,7 +12,7 @@ The worktree already contained uncommitted SYNC-002A/001 experiments, owner hand
 
 ## Experimental version-1 envelope
 
-**SYNC-003B additive naming extension (local development only):** copy decisions may also contain a `name` beside `id` and `phaseIds`. When present, it must be the exact deterministic numbered name recomputed by `applyChoices`, considering all base/left/right names and earlier copies in stable conflict-ID order. Matching uses NFC plus lowercase; existing numeric suffixes are replaced, collisions increment the suffix and the stem is truncated at Unicode scalar boundaries to stay within the existing 120 UTF-16-unit limit. The name is hash-covered and semantic graph validation rejects arbitrary renaming even if the attacker recalculates the hash. Old copy decisions without `name` keep their original behavior and hashes; all other unknown fields still fail. Older pre-extension readers reject the new field rather than silently repairing it. This is not a public protocol rollout. See [SYNC-003B](SYNC-003B_CONFLICT_RESOLUTION.md).
+**SYNC-003B additive naming extension (local development only):** copy decisions may also contain a `name` beside `id` and `phaseIds`. When present, it must be the exact deterministic numbered name recomputed by `applyChoices`, considering all base/left/right names and earlier copies in stable conflict-ID order. Matching uses NFC plus lowercase; existing numeric suffixes are replaced, collisions increment the suffix and the stem is truncated at Unicode scalar boundaries to stay within the existing 120 UTF-16-unit limit. The name is hash-covered and semantic graph validation rejects arbitrary renaming even if the attacker recalculates the hash. Old copy decisions without `name` keep their original behavior and hashes; all other unknown fields still fail. Older pre-extension readers reject the new field rather than silently repairing it. This is not a public protocol rollout. See [SYNC-003B](../implementation/SYNC-003B_CONFLICT_RESOLUTION.md).
 
 All fields below are required. Unknown fields are rejected, including transport metadata:
 

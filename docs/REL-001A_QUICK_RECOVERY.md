@@ -1,5 +1,11 @@
 # REL-001A — Durable Quick Timer Recovery
 
+> **Current context (2026-10-30):** Quick and Session recovery are production
+> capabilities in PWA v62. The acceptance and NO-GO language below records the
+> original REL-001A increment before later integration and release; it is not the
+> current deployment status. Real-device iOS/PWA and screen-reader coverage
+> remain separate quality checks.
+
 Locally functionally and visually accepted by the product owner in desktop browsers.
 Real iOS/installed-PWA and screen-reader acceptance remain outstanding. Production
 remains NO-GO; this acceptance does not authorize staging, commit or release.

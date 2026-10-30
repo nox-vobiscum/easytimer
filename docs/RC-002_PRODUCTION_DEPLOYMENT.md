@@ -1,5 +1,11 @@
 # RC-002 — Automatic staging and manual production deployment
 
+> **Current context (2026-10-30):** The two-environment pipeline is operational.
+> `develop` automatically deploys staging and `main` is deployed only through
+> the guarded manual production workflow. PWA v62 was verified in both
+> environments. The preparation-only wording below describes the original
+> workflow increment, not the current GitHub state.
+
 Local workflow preparation only. Production remains NO-GO. No deployment or
 GitHub configuration has been performed by this increment.
 

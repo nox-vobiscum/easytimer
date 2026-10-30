@@ -1,6 +1,6 @@
 # SYNC-003A — Local Application Integration
 
-**Status: SYNC-003A — Local application integration implemented and owner-validated with real Google Drive. Production NO-GO.** No public OAuth release or deployment. Accepted architecture: append-only immutable full-library snapshots. D1's checkpoint/receipt replacement is **not adopted**; [SYNC-099](backlog.md#sync-099--optional-snapshot-cleanup) remains Someday / Maybe / Very Low, with no thresholds, scheduler or deletion code.
+**Status: SYNC-003A — Local application integration implemented and owner-validated with real Google Drive. Production NO-GO.** No public OAuth release or deployment. Accepted architecture: append-only immutable full-library snapshots. D1's checkpoint/receipt replacement is **not adopted**; [SYNC-099](../../backlog.md#sync-099--optional-snapshot-cleanup) remains Someday / Maybe / Very Low, with no thresholds, scheduler or deletion code.
 
 ## Implementation
 

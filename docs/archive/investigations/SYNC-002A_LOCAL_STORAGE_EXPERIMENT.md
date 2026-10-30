@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-25 (Europe/Vienna). **Status:** Local Chromium experiment passed; production storage integration and migration are NOT approved.
 
-Read with [PoC decision](SYNC-001_POC_DECISION.md), [incremental plan](SYNC-002_IMPLEMENTATION_PLAN.md), [integrity contract](SYNC-002_LOCAL_INTEGRITY_CONTRACT.md) and [DATA-001](DATA-001_RUNDOWN_PORTABILITY.md). Those handoff documents and pending unrelated work were not edited.
+Read with [PoC decision](SYNC-001_POC_DECISION.md), [incremental plan](SYNC-002_IMPLEMENTATION_PLAN.md), [integrity contract](SYNC-002_LOCAL_INTEGRITY_CONTRACT.md) and [DATA-001](../../DATA-001_RUNDOWN_PORTABILITY.md). Those handoff documents and pending unrelated work were not edited.
 
 ## Baseline and scope
 

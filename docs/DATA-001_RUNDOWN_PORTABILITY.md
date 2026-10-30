@@ -1,5 +1,9 @@
 # DATA-001 — Rundown JSON portability
 
+> **Current context (2026-10-30):** DATA-001 remains a production capability in
+> PWA v62. The original v35/v36 release metadata below is retained for
+> traceability; the data contract and schemaVersion 1 validation remain current.
+
 **Status:** Complete, locally accepted by the owner and successfully deployed. Release tag: `release/data-001-v35`.
 **Baseline:** `fb719f74bd4c9ce01b195803d3b94a792fc60d17`, deployed Rundown entry/footer, PWA v34.
 **Checkpoint:** Annotated `checkpoint/before-data-001` at the unchanged baseline.

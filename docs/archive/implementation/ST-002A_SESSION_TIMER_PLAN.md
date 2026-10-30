@@ -8,7 +8,7 @@
 **Local checkpoint:** annotated `checkpoint/st-002-before-session-timer`.
 **Local branch:** `feature/st-002-session-timer`, created exactly at the checkpoint.
 
-The [canonical UX concept](EASYTIMER_UX_KONZEPT_v2.md#7-et-001-decision-register--approved-long-term-target-not-mvp-requirements) remains authoritative. The owner approved this first-increment scope, including the four decisions in section 6. It neither replaces the 56 decisions nor authorizes later work. [The backlog](backlog.md) tracks optional initiatives without duplicating that register. The text below retains the analysis rationale; implementation status is recorded at the end.
+The [canonical UX concept](../../EASYTIMER_UX_KONZEPT_v2.md#7-et-001-decision-register--approved-long-term-target-not-mvp-requirements) remains authoritative. The owner approved this first-increment scope, including the four decisions in section 6. It neither replaces the 56 decisions nor authorizes later work. [The backlog](../../backlog.md) tracks optional initiatives without duplicating that register. The text below retains the analysis rationale; implementation status is recorded at the end.
 
 ## 1. Verified baseline and ST-001 closure
 

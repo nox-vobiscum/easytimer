@@ -1,5 +1,11 @@
 # RC-003 — Public information pages: local review draft
 
+> **Current context (2026-10-30):** About, FAQ, Imprint and Privacy are released
+> in PWA v62. Navigation, shared header, DE/EN content, packaging and isolated
+> production behavior were verified. The local-draft/NO-GO wording below records
+> the earlier RC-003 review stage and is retained for traceability; publication
+> does not replace independent legal review.
+
 Based on `368ce319ee9ed31fe314e0d8b6f10b32dd5c8b3d`. Local implementation only;
 no legal approval or publication authorization. Production remains NO-GO.
 

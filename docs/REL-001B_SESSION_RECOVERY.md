@@ -1,5 +1,10 @@
 # REL-001B — Durable Session Timer Recovery
 
+> **Current context (2026-10-30):** REL-001B is integrated and released in PWA
+> v62. The local-only status below is the historical checkpoint state. The
+> shared record/ownership contract remains relevant; real-device iOS/PWA and
+> screen-reader coverage remain separate quality checks.
+
 Locally functionally accepted by the product owner in Firefox. Real iOS/PWA and
 screen-reader acceptance remain outstanding. Production remains NO-GO.
 Base: locally accepted REL-001A commit `55039877e7aad1a6d1b3d0355d43e9a9f6b86538`.

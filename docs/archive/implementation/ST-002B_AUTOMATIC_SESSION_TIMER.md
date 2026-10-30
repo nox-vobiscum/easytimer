@@ -1,5 +1,11 @@
 # ST-002B: Automatic Session Timer
 
+> **Current context (2026-10-30):** Manual and Automatic Session Timer behavior,
+> durable recovery and protected navigation are production capabilities in PWA
+> v62. Historical delivery and limitation statements below describe the
+> incremental ST-002B baseline. This file remains in the documentation root
+> because the protected local backlog links to it directly.
+
 **Status:** Deployed and verified at `ead2ad1`, PWA v28; see the production outcome below. The annotated release tag and rollback checkpoint remain unchanged.
 **Baseline:** Production `7f6f9c057dc1350a53bf6845a91069dbee60794a` (ST-002A, UX-009/UX-010 and centering hotfix), PWA v27.
 **Rollback:** Annotated `checkpoint/before-st-002b`, unchanged at the baseline.
@@ -49,7 +55,7 @@ node tests/browser-check.mjs --scenario auto-transition,auto-multiple-transition
 node tests/browser-check.mjs --scenario auto-workshop-overtime --theme dark --advance 2h
 ```
 
-DEV-001 now offers 31 scenarios, including 11 automatic cases; see [the command reference](DEV-001_TIME_TRAVEL.md). Test output and screenshots remain in unique temporary directories outside the repository. No runtime dependencies are added.
+DEV-001 now offers 31 scenarios, including 11 automatic cases; see [the command reference](../../DEV-001_TIME_TRAVEL.md). Test output and screenshots remain in unique temporary directories outside the repository. No runtime dependencies are added.
 
 Verification on 2026-10-24 passed **63/63 unit tests**, the **complete Quick/Planner/manual/automatic/visual/Clock-only/PWA browser regression**, and all **62 Light/Dark virtual-time captures**. Targeted automatic browser checks also passed after adding coverage for an open Planner draft. The focused review captures desktop 1280x800, narrow mobile 320x568 and smartphone landscape 844x390 in Light/Dark, including READY, endgame, transition, completion and Clock-only across phases/final overtime. The test prints a temporary HTML gallery. Actual DOM observations verify no intermediate phase/overtime frames; atomic timestamp-and-click cases verify catch-up before PRIMARY and confirmation handlers.
 
@@ -65,6 +71,6 @@ Local release preparation produced implementation commit `f6a55e8be126ed620d4047
 
 ## Device and recovery limits
 
-At the original ST-002B release, sleep/wake catch-up required the page context to survive and reload started a fresh Quick Timer. Subsequent local [REL-001B](REL-001B_SESSION_RECOVERY.md) implements Session reload recovery through validated snapshots and the same coordinator; local Firefox owner acceptance has passed, while real iOS/PWA and screen-reader acceptance remain open and production remains NO-GO. Four-hour recovery notifications/dialogs, rewind, active-session Manual/Automatic switching, live editing, statistics UI, signals and additional restart controls remain deferred. Existing `Date.now()` sensitivity to manual system-clock changes is unchanged. No missed signals are replayed.
+At the original ST-002B release, sleep/wake catch-up required the page context to survive and reload started a fresh Quick Timer. Subsequent local [REL-001B](../../REL-001B_SESSION_RECOVERY.md) implements Session reload recovery through validated snapshots and the same coordinator; local Firefox owner acceptance has passed, while real iOS/PWA and screen-reader acceptance remain open and production remains NO-GO. Four-hour recovery notifications/dialogs, rewind, active-session Manual/Automatic switching, live editing, statistics UI, signals and additional restart controls remain deferred. Existing `Date.now()` sensitivity to manual system-clock changes is unchanged. No missed signals are replayed.
 
 Native iOS Safari/PWA sleep/wake, process eviction, browser chrome/safe areas, orientation and VoiceOver acceptance remain manual checks; Chromium emulation does not establish them. ST-002B production v28 is verified. Keep all previous checkpoints and the feature branch; publication approval does not authorize hosting/DNS changes or another increment.

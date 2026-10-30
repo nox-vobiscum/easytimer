@@ -1,5 +1,10 @@
 # RC-001 — Local Production Packaging and Offline Hardening
 
+> **Current context (2026-10-30):** The deterministic 24-file package and
+> offline safeguards are active in the verified PWA v62 staging and production
+> pipelines. The local NO-GO wording below records the original RC-001 review
+> stage and is preserved as historical evidence.
+
 Based on `4b2de246712f855d21b3e986280be5efbe06457f`, on
 `feature/rc-001-production-hardening`. Local RC-001 owner acceptance is COMPLETE
 for PWA v54. This is not production authorization. Production remains NO-GO.

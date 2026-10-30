@@ -1,5 +1,9 @@
 # DEV-001: Virtual-time timer inspection
 
+> **Current context (2026-10-30):** This remains the active virtual-time command
+> reference for the PWA v62 test harness. It is a development utility and is not
+> included in the production package.
+
 Run commands from the repository root with Node.js 22+ and an installed Chromium browser. No package installation or new dependencies are required. Windows defaults to Edge; optionally select Chrome in PowerShell:
 
 ```powershell
