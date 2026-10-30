@@ -18,6 +18,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
     const clock = createVirtualClock(evaluate);
     const tick = ms => clock.advance(ms);
     const menu = async id => { await click('#menu-toggle'); await click(id); };
+    const picker = async () => { if (await evaluate(`document.body.dataset.mode==='session'`)) await menu('#open-quick'); await menu('#open-session'); };
     const choose = async id => {
         await evaluate(`(()=>{const select=document.querySelector('#session-template');select.value=${JSON.stringify(id)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         await click('#prepare-session');
@@ -43,7 +44,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
     await clock.install(await evaluate('Date.now()'));
     try {
         await configure(0,1,0); await click('#primary'); await click('[data-adjustment="30000"]');
-        await menu('#open-session');
+        await picker();
         assert.equal(await evaluate('document.body.dataset.mode'),'quick','Running Quick switch can be cancelled');
         await click('#menu-toggle'); await click('#primary');
         await menu('#open-session');
@@ -67,7 +68,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await evaluate(`document.querySelector('#session-template option[value="automatic-run"]').disabled`),false);
         await choose('automatic-run'); assert.equal(await text('#status'),'Ready');
         assert.equal(await evaluate(`document.querySelector('#next').hidden&&document.querySelector('#next').disabled`),true);
-        await menu('#open-session');
+        await picker();
         await evaluate(`const select=document.querySelector('#session-template');select.value='';select.focus();`);
         await key('ArrowDown','ArrowDown',40); await key('Tab','Tab',9);
         assert.equal(await evaluate('document.activeElement.id'),'prepare-session','Native picker selection and Tab reach Prepare');
@@ -138,17 +139,17 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await text('#phase-number'),'Phase 1 of 2'); assert.equal(await text('#time'),'01:00');
         assert.equal(await text('#status'),'Ready');
         assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`),storedDuringRun,'Session actions never save runtime state into templates');
-        await menu('#open-session'); await choose('single-run');
+        await picker(); await choose('single-run');
         await evaluate(`document.querySelector('#next').focus()`);
         await key(' ','Space',32);
         assert.equal(await text('#status'),'Workshop complete','Early completion of an unstarted last phase is explicit');
         await menu('#open-quick');
         assert.equal(await text('#status'),'Ready'); assert.equal(await text('#time'),'01:00');
         await tick(60000); assert.equal(await text('#time'),'01:00','Returning restores Quick configuration without an active deadline');
-        await menu('#open-session'); await choose('long-run');
+        await picker(); await choose('long-run');
         assert.equal(await text('#time'),'100:00:00'); assert.match(await text('#time-budget'),/1000:00:00/);
         await evaluate(`(()=>{const data=JSON.parse(localStorage.getItem('easyTimerTemplates'));data.templates[0].phases[0].title=${JSON.stringify(library.templates[0].phases[0].title)};localStorage.setItem('easyTimerTemplates',JSON.stringify(data));})()`);
-        await menu('#open-session'); await choose('manual-run'); await click('#primary');
+        await picker(); await choose('manual-run'); await click('#primary');
         for (const [width,height,screenWidth,screenHeight,touch] of [[1280,800,1280,800,false],[390,600,768,1024,true],[320,568,320,568,true],[844,390,390,844,true]]) {
             await cdp('Emulation.setTouchEmulationEnabled',{enabled:touch});
             await cdp('Emulation.setDeviceMetricsOverride',{width,height,screenWidth,screenHeight,mobile:touch,deviceScaleFactor:1});
@@ -189,7 +190,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await text('#time'),'+00:10');
         await click('#fullscreen'); assert.equal(await evaluate(`document.body.classList.contains('presentation')`),false);
         await evaluate(`delete document.fullscreenEnabled`);
-        await menu('#open-session'); await choose('manual-run'); await click('#primary'); await tick(1000);
+        await picker(); await choose('manual-run'); await click('#primary'); await tick(1000);
         await cdp('Emulation.setTouchEmulationEnabled',{enabled:true});
         const target = await evaluate(`(()=>{const r=document.querySelector('#next').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
         await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[target]});

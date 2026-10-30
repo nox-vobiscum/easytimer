@@ -19,6 +19,7 @@ import { checkNavigation } from './navigation-browser.mjs';
 import { checkSubtraction } from './subtraction-browser.mjs';
 import { configureQuickTimebox } from './quick-timebox.mjs';
 import { checkTimeboxControls } from './timebox-browser.mjs';
+import { checkSessionNavigation } from './session-navigation-browser.mjs';
 import { checkPortability } from './portability-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
@@ -158,6 +159,9 @@ try {
     if(timeTravelOptions.names.length) {
         await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
         assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_UX011_ONLY === '1') {
+        await checkSessionNavigation({evaluate,click,text,cdp,configure});
+        assert.equal(errors.length,0,JSON.stringify(errors));
     } else {
     assert.equal(await text('#time'), '00:00');
     await checkTimeboxControls({ evaluate, click, text, cdp, configure });
@@ -172,8 +176,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=61'&&js==='js/app.js?v=61'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'61','app.js':'61','info.js':'59','header.mjs':'59','recovery.mjs':'54','planner.js':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including information pages, recovery, the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=62'&&js==='js/app.js?v=62'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'62','app.js':'62','info.js':'59','header.mjs':'59','recovery.mjs':'54','planner.js':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including information pages, recovery, the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -187,6 +191,7 @@ try {
     await checkMenuPolish({evaluate,click,text,cdp});
     await checkRundownEntry({evaluate,click,text,cdp});
     await checkDirectLaunch({evaluate,click,text,cdp});
+    await checkSessionNavigation({evaluate,click,text,cdp,configure});
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
     assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
     assert.equal(await evaluate(`document.querySelector('link[rel="manifest"]').getAttribute('href')`), 'manifest.webmanifest');

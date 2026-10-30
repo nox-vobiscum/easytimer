@@ -14,7 +14,7 @@ export async function checkRundownEntry({evaluate,click,text,cdp}) {
     const output=await mkdtemp(join(tmpdir(),'easytimer-rundown-review-')),images=[];
     const capture=async(name,label)=>{const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(output,name+'.png'),Buffer.from(shot.data,'base64'));images.push([name+'.png',label]);};
     const menu=async selector=>{if(await evaluate(`document.querySelector('#preferences').hidden`))await click('#menu-toggle');await click(selector);};
-    const picker=()=>menu('#open-session');
+    const picker=async()=>{if(await evaluate(`document.body.dataset.mode==='session'`))await menu('#open-quick');await menu('#open-session');};
     const newDraft=async()=>{await click('#create-rundown');assert.equal(await evaluate(`Boolean(document.querySelector('#export-all'))`),true,'Picker opens the existing library overview');await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(b=>b.textContent==='Create Rundown'||b.textContent==='Rundown erstellen').click()`);};
     const select=async id=>evaluate(`(()=>{const e=document.querySelector('#session-template');e.value=${JSON.stringify(id)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     const field=(selector,value)=>evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);

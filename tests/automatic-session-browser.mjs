@@ -19,6 +19,7 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
     const menu=async selector=>{await click('#menu-toggle');await click(selector);};
     const prepare=async()=>{
         await evaluate('window.autoAccept=true;window.autoConfirmAdvance=0');
+        if(await evaluate(`document.body.dataset.mode==='session'`))await menu('#open-quick');
         await menu('#open-session');
         await evaluate(`(()=>{const s=document.querySelector('#session-template');s.value='automatic-acceptance';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         await click('#prepare-session');

@@ -25,6 +25,10 @@ const copy = {
         OVERTIME_PAUSED: 'Overtime paused', phaseExpired: 'Phase time elapsed', phaseOvertime: 'Phase overtime', finalOvertime: 'Workshop overtime',
         workshopRemaining: 'Workshop remaining', phaseCount: (n, total) => `Phase ${n} of ${total}`, upNext: 'Up next',
         switchConfirm: 'Leave this timer and discard its run progress? The destination will not start automatically.',
+        switchToQuickConfirm: 'End the current Rundown and switch to Quick Timer? The current Session progress will be discarded.',
+        switchToSessionConfirm: 'Leave the current Quick Timer and open Session Timer? The current Quick Timer progress will be discarded.',
+        replaceQuickConfirm: 'Replace the current Quick Timer with the selected Rundown? The current Quick Timer progress will be discarded. The Rundown will remain Ready until you start it.',
+        replaceSessionConfirm: 'Replace the current Rundown with the selected Rundown? The current Session progress will be discarded. The replacement will remain Ready until you start it.',
         stopWorkshopConfirm: 'Stop this workshop and reset all phases and overtime to phase 1?',
         countdown: 'Countdown', light: 'Light', dark: 'Dark', system: 'System', theme: 'Appearance', language: 'Language',
         de: 'German', en: 'English', duration: 'Timebox', resetTimebox: 'Reset timebox to 00:00',
@@ -55,6 +59,10 @@ const copy = {
         OVERTIME_PAUSED: 'Überzeit pausiert', phaseExpired: 'Phasenzeit abgelaufen', phaseOvertime: 'Phasenüberzeit', finalOvertime: 'Workshop-Überzeit',
         workshopRemaining: 'Workshop-Restzeit', phaseCount: (n, total) => `Phase ${n} von ${total}`, upNext: 'Als Nächstes',
         switchConfirm: 'Diesen Timer verlassen und seinen Fortschritt verwerfen? Der Zielmodus startet nicht automatisch.',
+        switchToQuickConfirm: 'Aktuellen Rundown beenden und zum Quick-Timer wechseln? Der Fortschritt dieser Session wird verworfen.',
+        switchToSessionConfirm: 'Aktuellen Quick-Timer verlassen und den Session-Timer öffnen? Der Fortschritt des Quick-Timers wird verworfen.',
+        replaceQuickConfirm: 'Aktuellen Quick-Timer durch den ausgewählten Rundown ersetzen? Der Fortschritt des Quick-Timers wird verworfen. Der Rundown bleibt bereit, bis du ihn startest.',
+        replaceSessionConfirm: 'Aktuellen Rundown durch den ausgewählten Rundown ersetzen? Der Fortschritt dieser Session wird verworfen. Der neue Rundown bleibt bereit, bis du ihn startest.',
         stopWorkshopConfirm: 'Workshop stoppen und alle Phasen und Überzeiten auf Phase 1 zurücksetzen?',
         countdown: 'Countdown', light: 'Hell', dark: 'Dunkel', system: 'System', theme: 'Darstellung', language: 'Sprache',
         de: 'Deutsch', en: 'Englisch', duration: 'Timebox', resetTimebox: 'Timebox auf 00:00 zurücksetzen',
@@ -352,10 +360,16 @@ function exitPresentationForWorkspace() {
     return document.fullscreenElement ? document.exitFullscreen().catch(() => {}) : null;
 }
 async function switchMode(nextMode) {
-    if (nextMode === 'quick' && mode === 'quick') return;
     dispatch({ type: 'TICK' });
+    if (nextMode === mode) {
+        if (plannerOpen && !planner.close()) { dispatch({ type: 'TICK' }); return; }
+        setMenuOpen(false); updatePresentation();
+        (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll: true });
+        return;
+    }
     const hasProgress = timer && (mode === 'session' ? hasSessionProgress(run, timer) : timer.status !== 'READY');
-    if (hasProgress && !window.confirm(copy[language].switchConfirm)) { dispatch({ type: 'TICK' }); return; }
+    const confirmation = mode === 'session' ? copy[language].switchToQuickConfirm : copy[language].switchToSessionConfirm;
+    if (hasProgress && !window.confirm(confirmation)) { dispatch({ type: 'TICK' }); return; }
     if (plannerOpen && !planner.close()) { dispatch({ type: 'TICK' }); return; }
     navigationRevision += 1;
     if (mode === 'quick') quickDurationMs = timer.durationMs;
@@ -564,7 +578,8 @@ async function loadSavedSession(id, fromEditor = false) {
     const prepared = prepareSession(template);
     dispatch({ type: 'TICK' });
     const hasProgress = timer && (mode === 'session' ? hasSessionProgress(run, timer) : timer.status !== 'READY');
-    if (hasProgress && !window.confirm(copy[language].switchConfirm)) { dispatch({ type: 'TICK' }); return; }
+    const confirmation = mode === 'session' ? copy[language].replaceSessionConfirm : copy[language].replaceQuickConfirm;
+    if (hasProgress && !window.confirm(confirmation)) { dispatch({ type: 'TICK' }); return; }
     if (fromEditor && !planner.close()) return;
     if (mode === 'quick' && timer) quickDurationMs = timer.durationMs;
     mode = 'session'; run = prepared.run; timer = prepared.clock;
@@ -693,13 +708,7 @@ restoringView = false;
 updatePresentation();
 if (!unresolvedRecovery && informationIntent) {
     if (informationIntent === 'editor') await openEditor();
-    else if (informationIntent === mode) {
-        // Information-page same-mode requests reveal the existing runtime only.
-        if (!plannerOpen || planner.close()) {
-            setMenuOpen(false); updatePresentation();
-            (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll:true });
-        }
-    } else await switchMode(informationIntent);
+    else await switchMode(informationIntent);
 }
 // Unresolved recovery deliberately discards, rather than defers, the intent.
 

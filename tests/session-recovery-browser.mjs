@@ -69,6 +69,7 @@ export async function checkSessionRecovery({ evaluate, click, text, cdp }) {
         assert.equal((await record()).run.runId, first.run.runId); assert.deepEqual((await record()).run.phaseOvertime, {});
 
         await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(library))})`);
+        await menu('#open-quick');
         await prepare('automatic'); await click('#primary'); const automatic = await record();
         const start = automatic.clock.deadlineMs - 60000;
         await reload(start + 180000);

@@ -10,7 +10,7 @@ export async function checkHeaderIntents({ cdp, evaluate, wait, setConfirmation,
     const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
     const navigate = async (selector, info) => {
         const before = await evaluate('performance.timeOrigin'); await click(selector);
-        await wait(`performance.timeOrigin!==${before} && document.readyState==='complete' && ${info ? 'Boolean(document.querySelector(".info-return"))' : 'Boolean(document.querySelector("#primary")?.title) && document.body?.dataset.mode'}`);
+        await wait(`performance.timeOrigin!==${before} && document.readyState==='complete' && ${info ? 'Boolean(document.querySelector(".info-return")&&document.querySelector("[data-language]"))' : 'Boolean(document.querySelector("#primary")?.title) && document.body?.dataset.mode'}`);
     };
     const enter = async () => {
         await evaluate('if(document.querySelector("#preferences").hidden)document.querySelector("#menu-toggle").click()');
@@ -242,7 +242,7 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
         if (reload) {
             await syncClock();
             const before = await evaluate('performance.timeOrigin'); await cdp('Page.reload');
-            await wait(`performance.timeOrigin!==${before} && Boolean(document.querySelector('.info-return'))`);
+            await wait(`performance.timeOrigin!==${before} && Boolean(document.querySelector('.info-return')&&document.querySelector('[data-language]'))`);
             await assertReturnLabels(view);
         }
         assert.equal(await evaluate(`sessionStorage.getItem('${originKey}')`), origin);
@@ -320,7 +320,7 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
         // With no known origin, even repeated direct visits use the normal entry.
         await syncClock();
         await cdp('Page.navigate', { url:(await evaluate('location.origin')) + '/imprint.html' });
-        await wait('Boolean(document.querySelector(".info-return"))');
+        await wait('Boolean(document.querySelector(".info-return")&&document.querySelector("[data-language]"))');
         assert.equal(await evaluate('document.querySelector(".info-return").getAttribute("href")'), './');
         await assertReturnLabels('direct');
         await navigate('.info-return', false);
