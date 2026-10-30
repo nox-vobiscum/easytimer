@@ -171,8 +171,100 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await checkPlannerCorrections({ evaluate, click, text, cdp });
     await checkCompactPlanner({ evaluate, click, text, cdp });
     await checkRepositioning({ evaluate, click, text, cdp });
+    await checkDirectInsertion({ evaluate, click, cdp });
     await checkInitialPhase({ evaluate, click, text });
     console.log('PASS: Session Editor creation/edit/reorder/save/cancel/delete, storage protection, responsive themes/localization/focus, fullscreen exit and uninterrupted Quick Timer.');
+}
+
+async function checkDirectInsertion({ evaluate, click, cdp }) {
+    const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
+    const library = { schemaVersion:1, templates:[{ id:'insert-rundown', name:'Insertion workshop', transitionMode:'manual', phases:[
+        {id:'insert-a',title:'Opening',durationSeconds:300},
+        {id:'insert-b',title:'Discussion',durationSeconds:900},
+        {id:'insert-c',title:'Closing',durationSeconds:600},
+    ]}] };
+    const action = label => evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent===${JSON.stringify(label)}||button.getAttribute('aria-label')?.startsWith(${JSON.stringify(label)}+': ')).click()`);
+    const field = (selector, value) => evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    const ids = () => evaluate(`Array.from(document.querySelectorAll('.phase-list li')).map(row=>row.dataset.phaseId)`);
+    const choose = id => evaluate(`(()=>{const select=document.querySelector('.insert-position');select.value=${JSON.stringify(id)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    const add = () => click('.add-phase');
+    await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(library))});window.insertConfirm=window.confirm;window.confirm=()=>true;`);
+    try {
+        await click('#menu-toggle'); await click('#open-planner'); await action('Edit');
+        assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.insert-position option')).map(option=>({value:option.value,text:option.textContent}))`), [
+            {value:'',text:'Optional: Choose insert position'},
+            {value:'insert-a',text:'Before 1 · Opening'},
+            {value:'insert-b',text:'Before 2 · Discussion'},
+            {value:'insert-c',text:'Before 3 · Closing'},
+        ]);
+        await add();
+        let order = await ids(); const appended = order.at(-1);
+        assert.deepEqual(order.slice(0,3), ['insert-a','insert-b','insert-c'], 'No selection preserves append behavior');
+        assert.equal(await evaluate(`document.activeElement.id`), `phase-${appended}-title`);
+        assert.equal(await evaluate(`document.querySelector('#phase-${appended}-minutes').value`), '10');
+        await field(`#phase-${appended}-title`, 'Appended');
+
+        await evaluate(`document.querySelector('.insert-position').focus()`);
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
+        assert.equal(await evaluate(`document.querySelector('.insert-position').value`), 'insert-a', 'Native keyboard selection stores the stable phase ID');
+        await evaluate(`document.querySelector('.add-phase').focus()`);
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+        order = await ids(); const beforeFirst = order[0];
+        assert.deepEqual(order.slice(1,4), ['insert-a','insert-b','insert-c']);
+        await field(`#phase-${beforeFirst}-title`, 'Before first');
+        assert.equal(await evaluate(`document.querySelector('.insert-position').value`), '', 'Insertion resets the optional selection');
+
+        await choose('insert-b'); await add();
+        order = await ids(); const beforeMiddle = order[order.indexOf('insert-b') - 1];
+        await field(`#phase-${beforeMiddle}-title`, 'Before middle');
+        await choose('insert-c'); await add();
+        order = await ids(); const beforeLast = order[order.indexOf('insert-c') - 1];
+        await field(`#phase-${beforeLast}-title`, 'Before last');
+        assert.equal(new Set(order).size, order.length, 'Every inserted phase has a unique stable ID');
+        assert.deepEqual(await evaluate(`['insert-a','insert-b','insert-c'].map(id=>{const row=document.querySelector('[data-phase-id="'+id+'"]');return {id,title:row.querySelector('.phase-title input').value,minutes:row.querySelector('.phase-duration input').value};})`), [
+            {id:'insert-a',title:'Opening',minutes:'5'}, {id:'insert-b',title:'Discussion',minutes:'15'}, {id:'insert-c',title:'Closing',minutes:'10'},
+        ], 'Existing phase identities and values remain unchanged');
+        assert.equal(await evaluate(`document.querySelectorAll('.insert-position option').length`), order.length + 1, 'Each insertion immediately updates the options');
+
+        await field('#phase-insert-b-title', 'Renamed discussion');
+        assert.equal(await evaluate(`document.querySelector('.insert-position option[value="insert-b"]').textContent`), `Before ${order.indexOf('insert-b') + 1} · Renamed discussion`);
+        await click('#reposition-insert-c'); await click('.phase-reposition-popover [data-direction="-1"]');
+        order = await ids();
+        assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.insert-position option')).slice(1).map(option=>option.value)`), order, 'Reordering refreshes option positions');
+
+        await choose('insert-b'); await click('#phase-insert-b-title'); await click('[aria-label^="Remove phase: Renamed discussion"]');
+        assert.equal(await evaluate(`document.querySelector('.insert-position').value`), '', 'Deleting the selected stable target clears the selection');
+        const beforeFallback = await ids(); await add(); const afterFallback = await ids();
+        assert.deepEqual(afterFallback.slice(0,-1), beforeFallback, 'An invalidated target safely falls back to append');
+
+        await cdp('Emulation.setDeviceMetricsOverride',{width:320,height:568,screenWidth:320,screenHeight:568,mobile:true,deviceScaleFactor:1});
+        assert.equal(await evaluate(`(()=>{const group=document.querySelector('.phase-add-controls').getBoundingClientRect();const button=document.querySelector('.add-phase').getBoundingClientRect();const select=document.querySelector('.insert-position').getBoundingClientRect();return select.top>=button.bottom&&select.width<=260&&group.right<=innerWidth&&select.height>=44;})()`), true, 'The optional selector wraps compactly at 320px');
+        await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:800,screenWidth:1280,screenHeight:800,mobile:false,deviceScaleFactor:1});
+        await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+
+        await action('Cancel');
+        assert.deepEqual(await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates'))`), library, 'Cancel preserves the saved Rundown');
+        await action('Edit'); await choose('insert-b'); await add();
+        const savedOrder = await ids(); const savedInserted = savedOrder[savedOrder.indexOf('insert-b') - 1];
+        await field(`#phase-${savedInserted}-title`, 'Saved insertion'); await action('Save');
+        const saved = await evaluate(`JSON.parse(localStorage.getItem('easyTimerTemplates')).templates[0]`);
+        assert.deepEqual(saved.phases.map(phase=>phase.id), savedOrder);
+        assert.equal(saved.phases.find(phase=>phase.id===savedInserted).durationSeconds, 600);
+
+        await action('Edit');
+        while (await evaluate(`document.querySelector('.phase-list li')!==null`)) await click('.phase-list li .phase-actions button:last-child');
+        assert.equal(await evaluate(`document.querySelector('.insert-position').disabled`), true);
+        await add();
+        assert.equal(await evaluate(`document.querySelectorAll('.phase-list li').length===1&&!document.querySelector('.insert-position').disabled&&document.activeElement.matches('.phase-title input')`), true, 'An empty draft appends its first phase and enables insertion choices');
+        await action('Cancel'); await action('Back to timer');
+    } finally {
+        await evaluate(`window.confirm=window.insertConfirm;localStorage.setItem('easyTimerTemplates',${JSON.stringify(baseline)})`);
+        await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+        await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:800,screenWidth:1280,screenHeight:800,mobile:false,deviceScaleFactor:1});
+    }
+    console.log('PASS: PLAN-001 append/insert positions, stable IDs, dynamic options, invalid targets, responsive layout and draft persistence.');
 }
 
 async function checkCompactPlanner({ evaluate, click, text, cdp }) {

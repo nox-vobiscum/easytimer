@@ -7,7 +7,7 @@ const copy = {
         edit: 'Edit', remove: 'Delete', templateName: 'Workshop name', transition: 'Phase transitions', manual: 'Manual', automatic: 'Automatic',
         planningOnly: 'Reusable phase sequences. Load a copy in Session Timer to run it.', phases: 'Phases', phaseTitleLabel: 'Phase title', phaseTitlePlaceholder: 'Enter phase title',
         durationLabel: 'Duration (min)', actions: 'Actions', up: 'Move up', down: 'Move down', removePhase: 'Remove phase', add: '+ Add phase',
-        reposition: 'Reposition phase', position: 'Position', move: 'Move', close: 'Close',
+        reposition: 'Reposition phase', position: 'Position', move: 'Move', close: 'Close', insertPosition: 'Optional: Choose insert position', beforePhase: (position, title) => `Before ${position} · ${title}`,
         save: 'Save', cancel: 'Cancel', total: 'Total planned duration', phaseCount: count => `${count} ${count === 1 ? 'phase' : 'phases'}`,
         deleteConfirm: name => `Delete “${name}”?`, discard: 'Discard unsaved changes?', reload: 'Reload saved templates', saved: 'Template saved.', deleted: 'Template deleted.',
         name: 'Enter a workshop name containing 1–120 characters.', phaseTitle: 'Each phase needs a title containing 1–120 characters.',
@@ -24,7 +24,7 @@ const copy = {
         edit: 'Bearbeiten', remove: 'Löschen', templateName: 'Workshopname', transition: 'Phasenübergänge', manual: 'Manuell', automatic: 'Automatisch',
         planningOnly: 'Wiederverwendbare Phasenabläufe. Lade eine Kopie im Session-Timer.', phases: 'Phasen', phaseTitleLabel: 'Phasentitel', phaseTitlePlaceholder: 'Phasentitel eingeben',
         durationLabel: 'Dauer (min)', actions: 'Aktionen', up: 'Nach oben', down: 'Nach unten', removePhase: 'Phase entfernen', add: '+ Phase hinzufügen',
-        reposition: 'Phase verschieben', position: 'Position', move: 'Verschieben', close: 'Schließen',
+        reposition: 'Phase verschieben', position: 'Position', move: 'Verschieben', close: 'Schließen', insertPosition: 'Optional: Einfügeposition wählen', beforePhase: (position, title) => `Vor ${position} · ${title}`,
         save: 'Speichern', cancel: 'Abbrechen', total: 'Geplante Gesamtdauer', phaseCount: count => `${count} ${count === 1 ? 'Phase' : 'Phasen'}`,
         deleteConfirm: name => `„${name}“ löschen?`, discard: 'Ungespeicherte Änderungen verwerfen?', reload: 'Gespeicherte Vorlagen neu laden', saved: 'Vorlage gespeichert.', deleted: 'Vorlage gelöscht.',
         name: 'Einen Workshopnamen mit 1–120 Zeichen eingeben.', phaseTitle: 'Jede Phase benötigt einen Titel mit 1–120 Zeichen.',
@@ -115,6 +115,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
     let review = null;
     let fileReadId = 0;
     let repositionId = null;
+    let insertionTargetId = null;
     const popover = element('div', undefined, 'phase-reposition-popover');
     popover.id = 'phase-reposition-popover';
     popover.hidden = true;
@@ -308,6 +309,23 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
         if (!output || !draft) return;
         try { output.textContent = `${t().total}: ${clock(totalDuration(materialize().phases))}`; }
         catch { output.textContent = `${t().total}: —`; }
+    }
+    function insertionOptionText(phase) {
+        const index = draft.phases.findIndex(item => item.id === phase.id);
+        return t().beforePhase(index + 1, phase.title || index + 1);
+    }
+    function updateInsertionOption(phase) {
+        const option = root.querySelector(`.insert-position option[value="${CSS.escape(phase.id)}"]`);
+        if (option) option.textContent = insertionOptionText(phase);
+    }
+    function addPhase() {
+        const phase = { id: crypto.randomUUID(), title: '', minutes: '10' };
+        const targetIndex = draft.phases.findIndex(item => item.id === insertionTargetId);
+        if (insertionTargetId && targetIndex >= 0) draft.phases.splice(targetIndex, 0, phase);
+        else draft.phases.push(phase);
+        insertionTargetId = null;
+        render();
+        document.getElementById(`phase-${phase.id}-title`).focus();
     }
     async function save() {
         try {
@@ -523,7 +541,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
             const row = element('li');
             row.dataset.phaseId = phase.id;
             const number = element('span', String(index + 1), 'phase-number'); number.setAttribute('aria-hidden', 'true');
-            const title = inputField(text.phaseTitleLabel, phase.title, `phase-${phase.id}-title`, value => { phase.title = value; });
+            const title = inputField(text.phaseTitleLabel, phase.title, `phase-${phase.id}-title`, value => { phase.title = value; updateInsertionOption(phase); });
             title.querySelector('input').placeholder = text.phaseTitlePlaceholder;
             title.className = 'phase-title';
             const duration = inputField(text.durationLabel, phase.minutes, `phase-${phase.id}-minutes`, value => { phase.minutes = value; }, true);
@@ -536,14 +554,27 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
             reposition.setAttribute('aria-controls', popover.id);
             controls.append(reposition);
             controls.append(phaseAction(`${text.removePhase}: ${phase.title || index + 1}`, 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6m4-6v6', () => {
+                if (insertionTargetId === phase.id) insertionTargetId = null;
                 draft.phases = draft.phases.filter(p => p.id !== phase.id); render(); root.querySelector('.add-phase').focus();
             }));
             row.append(duration, controls); list.append(row);
         });
-        form.append(list, button(text.add, () => {
-            const phase = { id: crypto.randomUUID(), title: '', minutes: '10' };
-            draft.phases.push(phase); render(); document.getElementById(`phase-${phase.id}-title`).focus();
-        }, 'add-phase'));
+        form.append(list);
+        if (!draft.phases.some(phase => phase.id === insertionTargetId)) insertionTargetId = null;
+        const addControls = element('div', undefined, 'phase-add-controls');
+        addControls.append(button(text.add, addPhase, 'add-phase'));
+        const insertLabel = element('label', undefined, 'insert-position-label');
+        const insertSelect = element('select', undefined, 'insert-position');
+        const placeholder = element('option', text.insertPosition); placeholder.value = '';
+        insertSelect.append(placeholder);
+        draft.phases.forEach(phase => {
+            const option = element('option', insertionOptionText(phase)); option.value = phase.id; insertSelect.append(option);
+        });
+        insertSelect.value = insertionTargetId || '';
+        insertSelect.disabled = draft.phases.length === 0;
+        insertSelect.setAttribute('aria-label', text.insertPosition);
+        insertSelect.addEventListener('change', () => { insertionTargetId = insertSelect.value || null; });
+        insertLabel.append(insertSelect); addControls.append(insertLabel); form.append(addControls);
         const total = element('p'); total.id = 'planner-total'; total.setAttribute('aria-live', 'polite'); form.append(total);
         const actions = element('div', undefined, 'planner-actions');
         const saveButton = element('button', text.save, 'primary'); saveButton.type = 'submit';

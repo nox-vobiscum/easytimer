@@ -25,7 +25,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 
 | ID | Idea | Priority | Main dependency / note |
 | --- | --- | --- | --- |
-| PLAN-001 | Insert a new phase directly at a chosen position | Candidate | Compact Session Planner finalized |
+| PLAN-001 | Insert a new phase directly at a chosen position | Locally functionally and visually accepted — awaiting release | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Someday | Presentation-only refinement |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
 | SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](archive/investigations/SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
@@ -34,6 +34,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
 | UX-015 | Timer View Typography & Information Hierarchy | Later — visual polishing | Reuse UX-013 utility labels; preserve timer semantics and minimal presentation views |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
+| SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
 | ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
 | QT-002 | Optional manual Quick Timer duration entry | Later | Subtraction and contextual controls are delivered; preserve current one-timer simplicity |
@@ -42,6 +43,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | PRES-001 | Moderator View + Audience View on one device | Someday (low) | One authoritative timer; two synchronized windows |
 | REMOTE-001 | Cross-device timer control/display | Someday / Spike | Separate architecture and security review |
 | LIVE-001 | Shared Live Timer & Remote Control | Low / Someday-Maybe | After current UX, sync productization and production-release priorities; related to REMOTE-001, separate from Drive backup/sync |
+| VIS-001 | Alternative Timer Visualizations | Candidate / Design Review | Alternate views of the existing timer; visual and overtime behavior remain open |
 | CUSTOM-001 | Optional presentation customization | Someday | Stable core UI and audience-display requirements |
 | AI-001 | Image-to-Rundown conversion | Someday (low priority) | DATA-001 portability; separate design/feasibility review |
 
@@ -49,11 +51,11 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 
 ### PLAN-001 — Insert a phase at a specific position
 
-**Idea:** Add a new phase immediately before/after an existing phase, rather than always appending it at the end and then moving it.
+**Idea:** Insert a **new** phase immediately before or after a selected existing phase, rather than always appending the new phase at the end. This does not concern moving an existing phase: existing phases can already be repositioned through the implemented move controls and position selector.
 
 **Desired outcome:** A facilitator can build or adjust a long workshop rundown with minimal unnecessary reordering. Keep stable phase IDs, draft-only changes until Save, accessible controls, and the existing validation/storage rules. The exact UI is undecided; reuse the compact phase interface rather than adding permanent visual clutter.
 
-**Status:** Candidate, not approved for implementation.
+**Status:** Implemented and locally functionally and visually accepted by the product owner on the PLAN-001 feature branch. Staging and production release remain pending.
 
 ### PLAN-002 — Human-readable workshop total
 
@@ -107,6 +109,14 @@ The append-only immutable snapshot architecture remains the accepted approach. S
 The following packages are **already covered in more detail** by the ET-001 decision register in [`EASYTIMER_UX_KONZEPT_v2.md`](EASYTIMER_UX_KONZEPT_v2.md). These entries are navigational reminders, **not a second specification**; check the canonical decisions before planning each epic.
 
 Delivered Session Timer, Session Editor, recovery and navigation increments are summarized in the [changelog](../CHANGELOG.md). Historical implementation records remain under [`archive/implementation/`](archive/implementation/), including [ST-002B](archive/implementation/ST-002B_AUTOMATIC_SESSION_TIMER.md), [UX-011](archive/implementation/UX-011_SAFE_SESSION_NAVIGATION.md), [UX-014](archive/implementation/UX-014_REFRESH_SAFE_NAVIGATION.md), [UX-016](archive/implementation/UX-016_SHIFT_SUBTRACTION.md) and [UX-018](archive/implementation/UX-018_CONTEXTUAL_TIMEBOX_CONTROLS.md). UX-012 (`cfdf609`), UX-013 (`68c79cd`), REL-001A (`5503987`), REL-001B (`f3ad90c`), UX-014 (`0f48f06`) and UX-016 (`4b2de24`) are ancestors of the verified v60 production release. UX-018 shipped in v61 and UX-011 in v62. Unresolved follow-ups remain below under their own IDs.
+
+### SW-001 — Stopwatch with Time Marks
+
+**Priority:** Candidate / Design Review. **Status:** Future optional mode; no implementation authorized.
+
+Add an optional third timer mode that counts elapsed time upward until explicitly stopped. While it is running, users can record time marks. Marks may optionally receive names, but entering or editing a name must never pause or otherwise interrupt the stopwatch.
+
+Whether marks display absolute elapsed timestamps, intervals between marks, or both remains an open product decision. Interaction design, persistence and recovery behavior also require a separately approved design review. Preserve all existing Quick Timer and Session Timer functionality, and do not introduce this mode by changing their timing semantics.
 
 ### ST-003 — Editing and statistics during a session
 
@@ -192,6 +202,14 @@ No infrastructure is selected and no implementation or experiment starts with th
 
 ## Appearance and customization
 
+### VIS-001 — Alternative Timer Visualizations
+
+**Priority:** Candidate / Design Review. **Status:** Future optional views; no implementation authorized.
+
+Keep the existing digital countdown as the default. Explore two optional presentations of the same authoritative timer: a moderation-clock view with a red circular remaining-time segment that shrinks as time elapses, and a simplified hourglass view.
+
+These are visualizations, not independent timers. They must reuse the current timer state, transitions, persistence and recovery rather than introducing another timing engine or duplicate state. Detailed visual design and the representation of zero and overtime remain open product decisions. Evaluate a lightweight CSS/SVG implementation without new dependencies before approving implementation.
+
 ### UX-015 — Timer View Typography & Information Hierarchy
 
 **Priority:** Later — visual polishing, not part of UX-013. **Status:** Future requirement only; no implementation authorized. No existing dedicated timer-view typography item was identified; CUSTOM-001 remains separate optional user customization.
@@ -264,5 +282,5 @@ production artifact or PWA v62.
 - If implemented, record the actual status and commit/release reference, then remove it from active future-work lists or retain only a concise historical reference when justified. Never remove unresolved requirements silently.
 - Preserve unrelated concurrent or uncommitted owner edits and do not use maintenance work to expand implementation scope.
 - Keep accepted product rules in `EASYTIMER_UX_KONZEPT_v2.md`; avoid copying its full ET-001 decision register here.
-- Keep delivered ST-001 functionality separate from future planner improvements; direct insertion at a chosen position (PLAN-001) remains unimplemented.
+- Keep delivered ST-001 functionality separate from future planner improvements; direct insertion at a chosen position (PLAN-001) is locally accepted and awaiting release.
 - Changes to code, branches, commits, pushes, merges, or deployment always require explicit owner approval.

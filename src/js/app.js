@@ -1,6 +1,6 @@
 import { mountApplicationHeader } from './header.mjs?v=59';
 import { createTimer, formatOvertime, formatTime, timeBudget, transition, adjustmentError } from './timer.mjs?v=54';
-import { createPlanner } from './planner.js?v=55';
+import { createPlanner } from './planner.js?v=63';
 import { prepareSession, transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=54';
 import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=54';

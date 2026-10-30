@@ -6,7 +6,11 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-No committed application changes are currently awaiting production release.
+PLAN-001 is the current locally accepted application change awaiting release.
+
+- **PLAN-001 (locally accepted, unreleased):** the Session Editor can optionally insert a
+  new phase immediately before a selected existing phase while retaining the
+  established append behavior, stable phase identities and draft-only editing.
 
 - **CI-001 (local, uncommitted):** documentation-only pushes no longer trigger
   staging. The conservative path allowlist still covers application sources,
