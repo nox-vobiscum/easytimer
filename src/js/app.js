@@ -478,6 +478,7 @@ function render() {
     if ($('status').textContent !== status) $('status').textContent = status;
     const primary = session ? (['RUNNING', 'FINISHED'].includes(timer.status) ? 'pause' : paused ? 'resume' : 'start')
         : timer.status === 'RUNNING' ? 'pause' : timer.status === 'PAUSED' ? 'resume' : timer.status === 'FINISHED' ? 'newRun' : 'start';
+    $('primary').dataset.action = primary;
     $('primary').hidden = timer.status === 'OVERTIME_STOPPED';
     $('primary-label').textContent = t[primary];
     $('primary-icon').setAttribute('d', primary === 'pause' ? 'M7 4v16M17 4v16' : 'm8 4 12 8-12 8Z');

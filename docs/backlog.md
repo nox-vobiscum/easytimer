@@ -21,18 +21,18 @@ Capture deferred product ideas and small quality-of-life improvements without lo
 
 ## Ideas at a glance
 
-Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked active or archived implementation records. In particular, INFO-001 and the v60 baseline, UX-018 in v61, and UX-011 in v62 are verified production releases. Earlier delivered Session Editor, Session Timer, recovery, navigation and subtraction increments are ancestors of the verified v60 production release. They are not future backlog items.
+Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked active or archived implementation records. In particular, INFO-001 and the v60 baseline, UX-018 in v61, UX-011 in v62, and PLAN-001 in v63 are verified production releases. Earlier delivered Session Editor, Session Timer, recovery, navigation and subtraction increments are ancestors of the verified v60 production release. They are not future backlog items.
 
 | ID | Idea | Priority | Main dependency / note |
 | --- | --- | --- | --- |
-| PLAN-001 | Insert a new phase directly at a chosen position | Locally functionally and visually accepted — awaiting release | Compact Session Planner finalized |
+| PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Someday | Presentation-only refinement |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
 | SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](archive/investigations/SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
 | SYNC-003A | Optional Drive integration in the application | Local application integration implemented and owner-validated with real Google Drive. Production NO-GO. | [Owner acceptance and release blockers](archive/implementation/SYNC-003A_LOCAL_APPLICATION.md); normal/private Firefox, no physical second-device or iOS acceptance |
 | SYNC-003B | Minimal explicit conflict resolution | Functionally accepted in local development with real Google Drive. Production NO-GO. | [Implementation and manual acceptance](archive/implementation/SYNC-003B_CONFLICT_RESOLUTION.md); exactly two heads, explicit A / B / Keep Both |
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
-| UX-019 | Subtle Start/Resume and Stop Button Accents | High — small, high-impact UX improvement | Approved design direction; implementation pending |
+| UX-019 | Subtle Start/Resume and Stop Button Accents | High — small, high-impact UX improvement | Locally implemented, verified and owner-accepted in PWA v64; release pending |
 | UX-015 | Timer View Typography & Information Hierarchy | Later — visual polishing | Reuse UX-013 utility labels; preserve timer semantics and minimal presentation views |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
@@ -56,7 +56,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 
 **Desired outcome:** A facilitator can build or adjust a long workshop rundown with minimal unnecessary reordering. Keep stable phase IDs, draft-only changes until Save, accessible controls, and the existing validation/storage rules. The exact UI is undecided; reuse the compact phase interface rather than adding permanent visual clutter.
 
-**Status:** Implemented and locally functionally and visually accepted by the product owner on the PLAN-001 feature branch. Staging and production release remain pending.
+**Status:** Released to staging and production in PWA v63 at commit `00eb4a462b02961b7caac8c73fdffaea0ca9db04`; verified production workflow run `41069275190`.
 
 ### PLAN-002 — Human-readable workshop total
 
@@ -205,7 +205,7 @@ No infrastructure is selected and no implementation or experiment starts with th
 
 ### UX-019 — Subtle Start/Resume and Stop Button Accents
 
-**Priority:** High — small, high-impact UX improvement. **Status:** Approved design direction; implementation pending. No implementation is authorized by this backlog entry.
+**Priority:** High — small, high-impact UX improvement. **Status:** Locally implemented, automatically verified and visually accepted by the product owner in PWA v64; staging and production release remain pending.
 
 Improve action recognition and visual hierarchy, particularly on mobile where the primary Start action can have approximately the same prominence as Timebox and runtime-adjustment controls. Apply a subtle sage-green accent only to actions whose actual current function is to start or resume/continue a countdown in Quick Timer or Session Timer. Apply a restrained muted coral-red accent only to Stop, preferring a tinted surface and/or border over a strong alarm-red fill. Preserve all existing labels, icons, confirmation behavior, keyboard focus and touch targets.
 
@@ -293,5 +293,5 @@ production artifact or PWA v62.
 - If implemented, record the actual status and commit/release reference, then remove it from active future-work lists or retain only a concise historical reference when justified. Never remove unresolved requirements silently.
 - Preserve unrelated concurrent or uncommitted owner edits and do not use maintenance work to expand implementation scope.
 - Keep accepted product rules in `EASYTIMER_UX_KONZEPT_v2.md`; avoid copying its full ET-001 decision register here.
-- Keep delivered ST-001 functionality separate from future planner improvements; direct insertion at a chosen position (PLAN-001) is locally accepted and awaiting release.
+- Keep delivered ST-001 functionality separate from future planner improvements; direct insertion at a chosen position (PLAN-001) was released in PWA v63.
 - Changes to code, branches, commits, pushes, merges, or deployment always require explicit owner approval.

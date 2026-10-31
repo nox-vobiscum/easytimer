@@ -5,6 +5,22 @@ import { join } from 'node:path';
 import { createVirtualClock } from './virtual-clock.mjs';
 
 export async function checkSession({ evaluate, click, text, cdp, configure }) {
+    const hexRgb = hex => {
+        const compact = hex.trim().replace('#', '');
+        const value = compact.length === 3 ? [...compact].map(channel => channel + channel).join('') : compact;
+        return `rgb(${parseInt(value.slice(0,2),16)}, ${parseInt(value.slice(2,4),16)}, ${parseInt(value.slice(4,6),16)})`;
+    };
+    const actionStyle = selector => evaluate(`(()=>{const button=document.querySelector(${JSON.stringify(selector)}),style=getComputedStyle(button),root=getComputedStyle(document.documentElement);return {action:button.dataset.action||'',background:style.backgroundColor,color:style.color,border:style.borderTopColor,accent:root.getPropertyValue('--accent').trim(),onAccent:root.getPropertyValue('--on-accent').trim(),startBackground:root.getPropertyValue('--action-start-bg').trim(),startColor:root.getPropertyValue('--action-start-text').trim(),startBorder:root.getPropertyValue('--action-start-border').trim(),stopBackground:root.getPropertyValue('--action-stop-bg').trim(),stopColor:root.getPropertyValue('--action-stop-text').trim(),stopBorder:root.getPropertyValue('--action-stop-border').trim()};})()`);
+    const assertTone = async (selector, tone, action = '') => {
+        const style = await actionStyle(selector);
+        if (action) assert.equal(style.action, action);
+        assert.deepEqual([style.background,style.color,style.border],[hexRgb(style[`${tone}Background`]),hexRgb(style[`${tone}Color`]),hexRgb(style[`${tone}Border`])]);
+    };
+    const assertBluePrimary = async action => {
+        const style = await actionStyle('#primary');
+        assert.equal(style.action, action);
+        assert.deepEqual([style.background,style.color,style.border],[hexRgb(style.accent),hexRgb(style.onAccent),hexRgb(style.accent)]);
+    };
     const baseline = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     const library = {schemaVersion:1,templates:[
         {id:'manual-run',name:'Workshop <safe>',transitionMode:'manual',phases:[
@@ -75,6 +91,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await evaluate(`document.activeElement.matches(':focus-visible')&&parseFloat(getComputedStyle(document.activeElement).outlineWidth)>=3`),true);
         await key('Enter','Enter',13);
         assert.equal(await text('#time'),'01:00'); assert.equal(await text('#status'),'Ready');
+        await assertTone('#primary','start','start');
         assert.equal(await text('#phase-number'),'Phase 1 of 2'); assert.match(await text('#time-budget'),/06:00/);
         assert.equal(await evaluate('document.activeElement.id'),'primary');
         assert.equal(await text('#workshop-name'),library.templates[0].name);
@@ -87,7 +104,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         const phaseTitle = await text('#current-phase');
         await evaluate(`const data=JSON.parse(localStorage.getItem('easyTimerTemplates'));data.templates[0].phases[0].title='Changed stored title';data.templates[0].phases[0].durationSeconds=120;localStorage.setItem('easyTimerTemplates',JSON.stringify(data));`);
         const storedDuringRun = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
-        await click('#primary'); await tick(10000);
+        await click('#primary'); await assertBluePrimary('pause'); await assertTone('#stop','stop'); await tick(10000);
         await capture('running');
         assert.equal(await text('#time'),'00:50'); assert.equal(await text('#current-phase'),phaseTitle,'Run is isolated from source changes');
         await menu('#open-planner'); await action('Edit'); await field('#template-name','Unsaved planner draft');
@@ -96,12 +113,12 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await evaluate(`document.querySelector('#template-name').value`),'Unsaved planner draft');
         await click('#menu-toggle'); await action('Back to timer');
         assert.equal(await text('#time'),'00:50','Planner remains a view over the running Session clock');
-        await click('#primary'); await tick(120000); assert.equal(await text('#time'),'00:50');
+        await click('#primary'); await assertTone('#primary','start','resume'); await tick(120000); assert.equal(await text('#time'),'00:50');
         await capture('paused');
         await click('#primary'); await tick(55000);
         assert.match(await text('#time'), /^\+/); assert.equal(await text('#time'),'+00:05');
         assert.equal(await text('#phase-number'),'Phase 1 of 2');
-        await click('#primary'); await tick(60000); assert.equal(await text('#time'),'+00:05');
+        await assertBluePrimary('pause'); await click('#primary'); await assertTone('#primary','start','resume'); await tick(60000); assert.equal(await text('#time'),'+00:05');
         assert.match(await evaluate('document.title'),/\+00:05 ⏸/);
         await click('#primary'); await tick(2000); assert.equal(await text('#time'),'+00:07');
         await capture('phase-overtime');
@@ -126,9 +143,11 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await evaluate(`document.querySelector('#next').hidden&&document.querySelector('#next').disabled`),true,'No phase advance after completion');
         await capture('final-overtime');
         assert.equal(await text('#time'),'+00:00'); assert.match(await text('#time-budget'),/00:00/);
-        await tick(9000); await click('#primary'); await tick(50000);
+        await tick(9000); await click('#primary'); await assertTone('#primary','start','resume'); await tick(50000);
         assert.equal(await text('#time'),'+00:09');
-        await click('#primary'); await tick(5000); await click('#stop-overtime');
+        await click('#primary'); await assertBluePrimary('pause'); await tick(5000);
+        assert.notEqual((await actionStyle('#stop-overtime')).background,hexRgb((await actionStyle('#stop-overtime')).stopBackground),'Stop overtime remains neutral');
+        await click('#stop-overtime');
         assert.equal(await text('#time'),'+00:14'); assert.match(await text('#status'),/Overtime stopped/);
         await capture('final-overtime-stopped');
         await tick(999999); assert.equal(await text('#time'),'+00:14');
@@ -157,6 +176,8 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
                 await click(`[data-language="${lang}"]`);
                 for (const theme of ['light','dark','system']) {
                     await click(`[data-theme="${theme}"]`);
+                    await assertBluePrimary('pause'); await assertTone('#stop','stop');
+                    assert.notEqual((await actionStyle('#next')).background,hexRgb((await actionStyle('#next')).stopBackground),'Next remains neutral');
                     assert.equal(await text('#time'),'02:00','View changes retain the source snapshot and clock');
                     const geometry = await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const status=document.querySelector('#status').getBoundingClientRect();const next=document.querySelector('#next').getBoundingClientRect();const controls=document.querySelector('.control-bar').getBoundingClientRect();return {overflow:document.documentElement.scrollWidth>innerWidth,timeFits:r.left>=0&&r.right<=innerWidth&&r.bottom<=status.top+1,previewFits:next.top>=controls.bottom-1&&next.bottom<=document.querySelector('#progress').getBoundingClientRect().top+1&&next.width>=44&&next.height>=44,targets:Array.from(document.querySelectorAll('.actions button:not([hidden])')).every(button=>{const b=button.getBoundingClientRect();return b.width>=44&&b.height>=44&&button.getAttribute('aria-label')&&b.left>=0&&b.right<=innerWidth})};})()`);
                     assert.deepEqual(geometry,{overflow:false,timeFits:true,previewFits:true,targets:true},`${width}x${height} ${lang}/${theme}: ${JSON.stringify(geometry)}`);

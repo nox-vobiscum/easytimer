@@ -6,11 +6,12 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-PLAN-001 is the current locally accepted application change awaiting release.
+UX-019 is the current locally implemented and owner-accepted application change awaiting release.
 
-- **PLAN-001 (locally accepted, unreleased):** the Session Editor can optionally insert a
-  new phase immediately before a selected existing phase while retaining the
-  established append behavior, stable phase identities and draft-only editing.
+- **UX-019 (locally implemented and owner-accepted, unreleased):** Start and Resume actions use a
+  restrained sage-green accent, while the regular Stop action uses a muted
+  coral-red accent. Pause, Restart, Stop overtime and unrelated actions retain
+  their established styling.
 
 - **CI-001 (local, uncommitted):** documentation-only pushes no longer trigger
   staging. The conservative path allowlist still covers application sources,
@@ -19,6 +20,18 @@ PLAN-001 is the current locally accepted application change awaiting release.
 - **DOC-001:** documentation consolidation was committed as `3069802` and
   published to `develop` and `main`. It did not change the application, the
   production artifact or PWA v62.
+
+## PWA v63 — 2026-10-31
+
+- Production release commit: `00eb4a462b02961b7caac8c73fdffaea0ca9db04`
+- Implementation commit: `00eb4a462b02961b7caac8c73fdffaea0ca9db04`
+- Verified production workflow run: `41069275190`
+
+### Changed
+
+- **PLAN-001:** The Session Editor can insert a new phase immediately before a
+  selected existing phase while retaining append behavior, stable phase
+  identities and draft-only editing.
 
 ## PWA v62 — 2026-10-30
 
