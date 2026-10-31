@@ -32,6 +32,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | SYNC-003A | Optional Drive integration in the application | Local application integration implemented and owner-validated with real Google Drive. Production NO-GO. | [Owner acceptance and release blockers](archive/implementation/SYNC-003A_LOCAL_APPLICATION.md); normal/private Firefox, no physical second-device or iOS acceptance |
 | SYNC-003B | Minimal explicit conflict resolution | Functionally accepted in local development with real Google Drive. Production NO-GO. | [Implementation and manual acceptance](archive/implementation/SYNC-003B_CONFLICT_RESOLUTION.md); exactly two heads, explicit A / B / Keep Both |
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
+| UX-019 | Subtle Start/Resume and Stop Button Accents | High — small, high-impact UX improvement | Approved design direction; implementation pending |
 | UX-015 | Timer View Typography & Information Hierarchy | Later — visual polishing | Reuse UX-013 utility labels; preserve timer semantics and minimal presentation views |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
@@ -201,6 +202,16 @@ Independent visual/audio preferences, with audio off by default, event-specific 
 No infrastructure is selected and no implementation or experiment starts with this entry.
 
 ## Appearance and customization
+
+### UX-019 — Subtle Start/Resume and Stop Button Accents
+
+**Priority:** High — small, high-impact UX improvement. **Status:** Approved design direction; implementation pending. No implementation is authorized by this backlog entry.
+
+Improve action recognition and visual hierarchy, particularly on mobile where the primary Start action can have approximately the same prominence as Timebox and runtime-adjustment controls. Apply a subtle sage-green accent only to actions whose actual current function is to start or resume/continue a countdown in Quick Timer or Session Timer. Apply a restrained muted coral-red accent only to Stop, preferring a tinted surface and/or border over a strong alarm-red fill. Preserve all existing labels, icons, confirmation behavior, keyboard focus and touch targets.
+
+Keep Pause, Reset, duration presets, runtime adjustments, Save, navigation and unrelated primary buttons unchanged; the established blue primary-action treatment remains everywhere else. Scope future styling by actual button action/state rather than one fixed text label. Define appropriate separate Light and Dark values, let System follow the established theme behavior, and preserve the existing blue focus indicators. Verify text and UI contrast and never rely on color alone to convey purpose.
+
+This is a color-treatment-only increment: no button dimension or layout changes, new controls or settings, timer/Session behavior changes, overtime-color changes, global palette redesign, global primary-button recoloring or new dependencies. Before implementation, inspect actual Start, Resume/Continue and Stop rendering in both timer modes, identify the smallest scoped CSS change, evaluate Light/Dark/System on mobile and desktop, and present a focused visual comparison for owner acceptance. Implementation requires separate authorization.
 
 ### VIS-001 — Alternative Timer Visualizations
 
