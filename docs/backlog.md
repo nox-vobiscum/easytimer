@@ -32,7 +32,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | SYNC-003A | Optional Drive integration in the application | Local application integration implemented and owner-validated with real Google Drive. Production NO-GO. | [Owner acceptance and release blockers](archive/implementation/SYNC-003A_LOCAL_APPLICATION.md); normal/private Firefox, no physical second-device or iOS acceptance |
 | SYNC-003B | Minimal explicit conflict resolution | Functionally accepted in local development with real Google Drive. Production NO-GO. | [Implementation and manual acceptance](archive/implementation/SYNC-003B_CONFLICT_RESOLUTION.md); exactly two heads, explicit A / B / Keep Both |
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
-| UX-019 | Subtle Start/Resume and Stop Button Accents | High — small, high-impact UX improvement | Locally implemented, verified and owner-accepted in PWA v64; release pending |
+| UX-019 | Subtle Start/Resume and Stop Button Accents | Released in PWA v64 | Owner-accepted semantic Start/Resume and Stop accents |
 | UX-015 | Timer View Typography & Information Hierarchy | Later — visual polishing | Reuse UX-013 utility labels; preserve timer semantics and minimal presentation views |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
@@ -205,7 +205,7 @@ No infrastructure is selected and no implementation or experiment starts with th
 
 ### UX-019 — Subtle Start/Resume and Stop Button Accents
 
-**Priority:** High — small, high-impact UX improvement. **Status:** Locally implemented, automatically verified and visually accepted by the product owner in PWA v64; staging and production release remain pending.
+**Priority:** High — small, high-impact UX improvement. **Status:** Released to staging and production in PWA v64 at commit `81882746101db90a426397d92a761c9f8b13512f`; verified production workflow run [`41236581208`](https://github.com/nox-vobiscum/easytimer/actions/runs/41236581208).
 
 Improve action recognition and visual hierarchy, particularly on mobile where the primary Start action can have approximately the same prominence as Timebox and runtime-adjustment controls. Apply a subtle sage-green accent only to actions whose actual current function is to start or resume/continue a countdown in Quick Timer or Session Timer. Apply a restrained muted coral-red accent only to Stop, preferring a tinted surface and/or border over a strong alarm-red fill. Preserve all existing labels, icons, confirmation behavior, keyboard focus and touch targets.
 

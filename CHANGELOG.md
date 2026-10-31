@@ -6,13 +6,6 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-UX-019 is the current locally implemented and owner-accepted application change awaiting release.
-
-- **UX-019 (locally implemented and owner-accepted, unreleased):** Start and Resume actions use a
-  restrained sage-green accent, while the regular Stop action uses a muted
-  coral-red accent. Pause, Restart, Stop overtime and unrelated actions retain
-  their established styling.
-
 - **CI-001 (local, uncommitted):** documentation-only pushes no longer trigger
   staging. The conservative path allowlist still covers application sources,
   release tooling, tests, workflows/actions, package metadata and Git attribute
@@ -20,6 +13,20 @@ UX-019 is the current locally implemented and owner-accepted application change 
 - **DOC-001:** documentation consolidation was committed as `3069802` and
   published to `develop` and `main`. It did not change the application, the
   production artifact or PWA v62.
+
+## PWA v64 — 2026-10-31
+
+- Production release commit: `81882746101db90a426397d92a761c9f8b13512f`
+- Implementation commit: `81882746101db90a426397d92a761c9f8b13512f`
+- Verified production workflow run: [`41236581208`](https://github.com/nox-vobiscum/easytimer/actions/runs/41236581208)
+
+### Changed
+
+- **UX-019:** Start and Resume actions use a restrained sage-green accent,
+  while the regular Stop action uses a muted coral-red accent. Pause, Restart,
+  Stop overtime and unrelated actions retain their established styling.
+- PWA v64 was verified on staging and production with the deterministic 24-file
+  package and isolated browser smoke tests.
 
 ## PWA v63 — 2026-10-31
 
