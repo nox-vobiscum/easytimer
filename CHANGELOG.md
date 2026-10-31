@@ -6,13 +6,18 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-- **CI-001 (local, uncommitted):** documentation-only pushes no longer trigger
-  staging. The conservative path allowlist still covers application sources,
-  release tooling, tests, workflows/actions, package metadata and Git attribute
-  changes.
-- **DOC-001:** documentation consolidation was committed as `3069802` and
-  published to `develop` and `main`. It did not change the application, the
-  production artifact or PWA v62.
+No unreleased changes.
+
+## Repository maintenance — 2026-10-30
+
+- **CI-001:** documentation-only pushes no longer trigger staging. The
+  conservative path allowlist still covers application sources, release
+  tooling, tests, workflows/actions, package metadata and Git attribute
+  changes. The change was committed as `30cc98723eb7e041d7e3663f1673ecb9b25c8322`
+  and published to `develop` and `main`.
+- **DOC-001:** documentation consolidation was committed as
+  `3069802633d44e8216f83fd8e546b9a7d1b6ff3a` and published to `develop` and
+  `main`. It did not change the application, production artifact or PWA v62.
 
 ## PWA v64 — 2026-10-31
 
