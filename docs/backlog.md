@@ -34,7 +34,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | SYNC-003B | Minimal explicit conflict resolution | Functionally accepted in local development with real Google Drive. Production NO-GO. | [Implementation and manual acceptance](archive/implementation/SYNC-003B_CONFLICT_RESOLUTION.md); exactly two heads, explicit A / B / Keep Both |
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
 | UX-019 | Subtle Start/Resume and Stop Button Accents | Released in PWA v64 | Owner-accepted semantic Start/Resume and Stop accents |
-| UX-015 | Timer View Typography & Information Hierarchy | Partially implemented locally; acceptance pending | UX-015A lower Session footer accepted; UX-015B upper hierarchy pending acceptance; Quick Timer and compact-landscape menu remain open |
+| UX-015 | Timer View Typography & Information Hierarchy | Session hierarchy released in PWA v66; remaining work open | Quick Timer typography and compact-landscape menu remain open |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
@@ -230,7 +230,7 @@ These are visualizations, not independent timers. They must reuse the current ti
 
 ### UX-015 — Timer View Typography & Information Hierarchy
 
-**Priority:** Later — visual polishing, not part of UX-013. **Status:** UX-015A lower Session Timer information area and UX-015B upper Session hierarchy are locally implemented and visually accepted for PWA v66; release pending. The borderless Next Phase control is included. Quick Timer typography and the compact-landscape menu observation remain open. CUSTOM-001 remains separate optional user customization.
+**Priority:** Later — visual polishing, not part of UX-013. **Status:** UX-015A lower Session Timer information area and UX-015B upper Session hierarchy were released in PWA v66 at commit `33635ea44939187cc4e7be834fad0eb70fb4f6a1`; verified production workflow run [`41317875158`](https://github.com/nox-vobiscum/easytimer/actions/runs/41317875158). The borderless Next Phase control is included. Quick Timer typography and the compact-landscape menu observation remain open. CUSTOM-001 remains separate optional user customization.
 
 **Goal:** Extend UX-013's restrained RBS-inspired utility-label language to Quick Timer and Session Timer, improving information hierarchy and consistency without unnecessary UI elements. The large countdown remains the undisputed visual focus.
 

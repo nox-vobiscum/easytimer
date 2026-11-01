@@ -6,11 +6,24 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+No unreleased changes.
+
+## PWA v66 — 2026-11-01
+
+- Production release commit: `33635ea44939187cc4e7be834fad0eb70fb4f6a1`
+- Implementation commit: `00323c5bb6e56c4f4dad6fbb559150aced46fc12`
+- Verified production workflow run: [`41317875158`](https://github.com/nox-vobiscum/easytimer/actions/runs/41317875158)
+
+### Changed
+
 - **UX-015A/B:** the Session Timer footer presents workshop remaining time and
   the upcoming phase as matching two-line label/value groups, with a borderless
-  Next Phase control. The upper context now distinguishes the subdued workshop
+  Next Phase control. The upper context distinguishes the subdued workshop
   name, prominent current phase and utility-label phase progress. Timing,
   progress and next-phase behavior remain unchanged.
+- PWA v66 was verified on staging and production with the deterministic 24-file
+  package and direct checks of the deployed service worker, styles and app
+  module.
 
 ## PWA v65 — 2026-11-01
 
