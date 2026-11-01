@@ -14,6 +14,10 @@ This is a focused evolution of easyTimer, **not** an attempt to recreate Session
 
 Give the Session Editor more space and a clearer identity as a first-class feature rather than a compact settings panel. Keep the default workflow approachable; richer details should be available on demand.
 
+**Editor layout decision — expandable phases:** Use a compact phase list with on-demand expandable details (accordion pattern), not a permanently split list/detail layout. Responsive behavior is a high priority, including practical editing on mobile devices. Optimize for typical team days and workshops with roughly 10–12 units rather than complex training schedules with 30+ sessions. Keep the collapsed list easy to scan; the details do not need to be visible all the time.
+
+**Editable rundown metainfo — concept addition:** Allow freely editable information associated with the whole Rundown, independently of individual phases (for example workshop goals, a day agenda, general orientation or welcome text). The precise fields and presentation are still open design questions. As a separate *future idea*, this content might later appear as a welcome screen while the Session Timer is READY (for example on a projector as participants arrive), potentially with optional branding such as a company logo. Neither a welcome screen nor branding is part of the current implementation scope; existing timer behavior must remain unchanged.
+
 Potential information to prepare:
 
 - **Rundown:** title, ordered phases, and rundown-level facilitation notes.
@@ -70,7 +74,7 @@ These increments may be split or reordered after the detailed UX review. Nothing
 
 ## 6. Questions for the later design review
 
-- How should the expanded Editor be arranged (phase list plus optional detail pane, full-width workspace, or another compact approach)?
+- For the decided expandable-phase layout, which fields remain visible when collapsed, and how should expanded details behave on mobile?
 - Plain text or limited formatting for prepared notes? How many labeled links per phase, and how should URLs be validated/opened?
 - Which notes belong to a phase versus the full rundown? What happens on phase changes, reload, recovery, and Session completion?
 - Should a running Session's notes be exportable separately before any template transfer?
