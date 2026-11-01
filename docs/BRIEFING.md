@@ -104,6 +104,17 @@ git rev-parse origin/develop
 git log --oneline --decorate -20
 ```
 
+Before each new implementation increment, compare the checked-out branch with
+its relevant remote tracking branch after fetching. A fetch alone does not
+update the local working tree. If the local branch is behind, synchronize it
+with the intended remote branch before implementation, but only when the
+working tree is clean and the update is a safe fast-forward.
+
+Do not blindly pull, merge, rebase, reset, stash or overwrite local work. If
+there are uncommitted changes, diverging histories, branch ambiguity or
+conflicts, report the situation and obtain explicit direction before
+integrating changes.
+
 Then compare [`CHANGELOG.md`](../CHANGELOG.md), [`backlog.md`](backlog.md), the
 current implementation, recent test evidence and GitHub Actions deployment runs.
 
