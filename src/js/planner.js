@@ -81,9 +81,11 @@ Object.assign(copy.de, {
     exportFailed: 'Der Download konnte nicht vorbereitet werden. Bitte gespeicherte Daten prüfen und erneut versuchen.', exportMissing: 'Dieser Rundown ist nicht mehr gespeichert. Bitte die Liste aktualisieren.',
     exportStarted: 'Download angefordert. Bewahre die JSON-Datei als Sicherung auf.',
 });
-const clock = seconds => {
-    const parts = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
-    return (parts[0] ? parts : parts.slice(1)).map(v => String(v).padStart(2, '0')).join(':');
+export const formatPlannedDuration = seconds => {
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    return [hours ? `${hours} h` : '', remainder || !hours ? `${remainder} min` : ''].filter(Boolean).join(' ');
 };
 function element(tag, text, className) {
     const node = document.createElement(tag);
@@ -307,7 +309,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
     function updateTotal() {
         const output = root.querySelector('#planner-total');
         if (!output || !draft) return;
-        try { output.textContent = `${t().total}: ${clock(totalDuration(materialize().phases))}`; }
+        try { output.textContent = `${t().total}: ${formatPlannedDuration(totalDuration(materialize().phases))}`; }
         catch { output.textContent = `${t().total}: —`; }
     }
     function insertionOptionText(phase) {
@@ -396,7 +398,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
         const collisions = rundownCollisions(review.data, library);
         review.data.templates.forEach((item, i) => {
             const row = element('li');
-            row.append(element('h3', item.name), element('p', `${text.phaseCount(item.phases.length)} · ${clock(totalDuration(item.phases))} · ${text[item.transitionMode]}`));
+            row.append(element('h3', item.name), element('p', `${text.phaseCount(item.phases.length)} · ${formatPlannedDuration(totalDuration(item.phases))} · ${text[item.transitionMode]}`));
             const warnings = [collisions[i].id ? text.idCollision : '', collisions[i].name ? text.nameCollision : ''].filter(Boolean);
             if (warnings.length) row.append(element('p', warnings.join(' · '), 'import-collision'));
             list.append(row);
@@ -478,7 +480,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
             for (const item of library.templates) {
                 const row = element('li');
                 const info = element('div');
-                info.append(element('h3', item.name), element('p', `${text.phaseCount(item.phases.length)} · ${clock(totalDuration(item.phases))}`));
+                info.append(element('h3', item.name), element('p', `${text.phaseCount(item.phases.length)} · ${formatPlannedDuration(totalDuration(item.phases))}`));
                 const actions = element('div', undefined, 'planner-actions rundown-actions');
                 const edit = phaseAction(`${text.edit}: ${item.name}`, 'm16 3 5 5-12 12H4v-5L16 3Zm-2 2 5 5', () => begin(item));
                 edit.className = 'rundown-icon rundown-edit';

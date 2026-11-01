@@ -30,7 +30,7 @@ export async function checkPlanner({ evaluate, click, text, cdp, configure }) {
     await action('Save'); assert.match(await text('.planner-feedback'), /phase needs a title/);
     await field('.phase-list input[type="text"]', 'Introduction');
     await field('.phase-list input[id$="-minutes"]', '60');
-    assert.match(await text('#planner-total'), /01:00:00/);
+    assert.match(await text('#planner-total'), /1 h/);
     await click('.phase-actions button:first-child');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.reposition-steps button')).every(button=>button.disabled)&&document.activeElement.id==='phase-position'`), true, 'A single phase has no step moves and focuses the native selector');
     await click('#phase-reposition-popover > button:last-child');
@@ -278,8 +278,8 @@ async function checkCompactPlanner({ evaluate, click, text, cdp }) {
     ]}));window.compactConfirm=window.confirm;window.confirm=()=>true;`);
     try {
         await click('#menu-toggle'); await click('#open-planner');
-        assert.match(await text('.template-library li:nth-child(2)'), /100:00:00/);
-        assert.match(await text('.template-library li:nth-child(3)'), /1000:00:00/);
+        assert.match(await text('.template-library li:nth-child(2)'), /100 h/);
+        assert.match(await text('.template-library li:nth-child(3)'), /1000 h/);
         await action('Edit');
         assert.equal(await evaluate(`document.querySelectorAll('.phase-duration input').length`), 12);
         assert.equal(await evaluate(`document.querySelectorAll('.phase-list input').length`), 24, 'One title and one minute input per phase');

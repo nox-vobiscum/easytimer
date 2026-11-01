@@ -6,7 +6,10 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-No unreleased changes.
+- **PLAN-002:** planned workshop totals in the Session Editor, Rundown library
+  and import review use concise `h` and `min` labels instead of clock-style
+  values. Calculations, stored durations and live countdown formatting are
+  unchanged.
 
 ## Repository maintenance — 2026-10-30
 
