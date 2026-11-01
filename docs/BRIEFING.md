@@ -88,8 +88,8 @@ application/PWA version bump by itself.
 
 ## Current project state and reconstruction
 
-The verified production and staging release is PWA v62 at commit
-`62531d9012f9c72d5a7b905a18ffac47f8b1bd18` (2026-10-30). Production is
+The verified production and staging release is PWA v66 at commit
+`33635ea44939187cc4e7be834fad0eb70fb4f6a1` (2026-11-01). Production is
 [easytimer.at](https://easytimer.at/); staging is
 [et.rbsnet.at](https://et.rbsnet.at/). Both deployments were verified after the
 UX-011 release. Treat this snapshot as orientation, then obtain live state:

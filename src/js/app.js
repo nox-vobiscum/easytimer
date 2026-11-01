@@ -18,7 +18,7 @@ const copy = {
         manual: 'Manual', automatic: 'Automatic', endsAutomatically: 'Workshop ends automatically',
         runNote: 'Saved sequences stay unchanged.',
         pageReloadNote: 'This run is saved locally for recovery after reload. Unsaved editor changes are not restored.',
-        prepare: 'Load', reloadTemplates: 'Refresh list', chooseTemplate: 'Select …',
+        prepare: 'Start Session', reloadTemplates: 'Refresh list', chooseTemplate: 'Select …',
         emptyTemplates: 'No Rundowns saved yet. Create a new Rundown below.', loadTemplatesError: 'Rundowns could not be loaded. Saved data has not been changed. Try reloading Rundowns.',
         next: 'Next phase', complete: 'Complete workshop',
         stopWorkshop: 'Stop workshop', stopOvertime: 'Stop overtime', workshopComplete: 'Workshop complete', overtimeStopped: 'Overtime stopped',
@@ -29,7 +29,7 @@ const copy = {
         switchToSessionConfirm: 'Leave the current Quick Timer and open Session Timer? The current Quick Timer progress will be discarded.',
         replaceQuickConfirm: 'Replace the current Quick Timer with the selected Rundown? The current Quick Timer progress will be discarded. The Rundown will remain Ready until you start it.',
         replaceSessionConfirm: 'Replace the current Rundown with the selected Rundown? The current Session progress will be discarded. The replacement will remain Ready until you start it.',
-        stopWorkshopConfirm: 'Stop this workshop and reset all phases and overtime to phase 1?',
+        stopWorkshopConfirm: 'Stop this workshop and reset all phases and overtime to phase 1?', cancel: 'Cancel',
         countdown: 'Countdown', light: 'Light', dark: 'Dark', system: 'System', theme: 'Appearance', language: 'Language',
         de: 'German', en: 'English', duration: 'Timebox', resetTimebox: 'Reset timebox to 00:00',
         start: 'Start', pause: 'Pause', resume: 'Resume', stop: 'Stop',
@@ -52,7 +52,7 @@ const copy = {
         manual: 'Manuell', automatic: 'Automatisch', endsAutomatically: 'Workshop endet automatisch',
         runNote: 'Gespeicherte Abläufe bleiben unverändert.',
         pageReloadNote: 'Dieser Durchlauf wird lokal zur Wiederherstellung nach dem Neuladen gespeichert. Ungespeicherte Editor-Änderungen werden nicht wiederhergestellt.',
-        prepare: 'Laden', reloadTemplates: 'Liste aktualisieren', chooseTemplate: 'Auswählen …',
+        prepare: 'Session starten', reloadTemplates: 'Liste aktualisieren', chooseTemplate: 'Auswählen …',
         emptyTemplates: 'Noch keine Rundowns gespeichert. Unten kannst du einen neuen Rundown erstellen.', loadTemplatesError: 'Rundowns konnten nicht geladen werden. Gespeicherte Daten bleiben unverändert. Bitte Rundowns neu laden.',
         next: 'Nächste Phase', complete: 'Workshop abschließen',
         stopWorkshop: 'Workshop stoppen', stopOvertime: 'Überzeit stoppen', workshopComplete: 'Workshop abgeschlossen', overtimeStopped: 'Überzeit gestoppt',
@@ -63,7 +63,7 @@ const copy = {
         switchToSessionConfirm: 'Aktuellen Quick-Timer verlassen und den Session-Timer öffnen? Der Fortschritt des Quick-Timers wird verworfen.',
         replaceQuickConfirm: 'Aktuellen Quick-Timer durch den ausgewählten Rundown ersetzen? Der Fortschritt des Quick-Timers wird verworfen. Der Rundown bleibt bereit, bis du ihn startest.',
         replaceSessionConfirm: 'Aktuellen Rundown durch den ausgewählten Rundown ersetzen? Der Fortschritt dieser Session wird verworfen. Der neue Rundown bleibt bereit, bis du ihn startest.',
-        stopWorkshopConfirm: 'Workshop stoppen und alle Phasen und Überzeiten auf Phase 1 zurücksetzen?',
+        stopWorkshopConfirm: 'Workshop stoppen und alle Phasen und Überzeiten auf Phase 1 zurücksetzen?', cancel: 'Abbrechen',
         countdown: 'Countdown', light: 'Hell', dark: 'Dunkel', system: 'System', theme: 'Darstellung', language: 'Sprache',
         de: 'Deutsch', en: 'Englisch', duration: 'Timebox', resetTimebox: 'Timebox auf 00:00 zurücksetzen',
         start: 'Starten', pause: 'Pausieren', resume: 'Fortsetzen', stop: 'Stoppen',
@@ -528,11 +528,37 @@ $('primary').addEventListener('click', () => {
     else if (timer.status === 'PAUSED') dispatch({ type: 'RESUME' });
     else dispatch({ type: 'START' });
 });
+const stopWorkshopDialog = $('stop-workshop-dialog');
+let stopWorkshopReturnFocus = null;
+function openStopWorkshopDialog() {
+    if (!run || stopWorkshopDialog.open) return;
+    stopWorkshopReturnFocus = $('stop');
+    $('stop-workshop-dialog-title').textContent = copy[language].stopWorkshop;
+    $('stop-workshop-dialog-message').textContent = copy[language].stopWorkshopConfirm;
+    $('stop-workshop-cancel').textContent = copy[language].cancel;
+    $('stop-workshop-confirm').textContent = copy[language].stopWorkshop;
+    stopWorkshopDialog.returnValue = 'cancel';
+    stopWorkshopDialog.showModal();
+    $('stop-workshop-cancel').focus({ preventScroll: true });
+}
+stopWorkshopDialog.addEventListener('close', () => {
+    const confirmed = stopWorkshopDialog.returnValue === 'confirm';
+    if (confirmed && mode === 'session' && run) {
+        dispatch({ type: 'TICK' });
+        dispatch({ type: 'STOP_WORKSHOP' });
+        $('primary').focus({ preventScroll: true });
+    } else {
+        dispatch({ type: 'TICK' });
+        const target = stopWorkshopReturnFocus?.hidden ? $('primary') : stopWorkshopReturnFocus;
+        target?.focus({ preventScroll: true });
+    }
+    stopWorkshopReturnFocus = null;
+});
 $('stop').addEventListener('click', () => {
     if (mode === 'session') {
         dispatch({ type: 'TICK' });
-        if (!run || !window.confirm(copy[language].stopWorkshopConfirm)) { dispatch({ type: 'TICK' }); return; }
-        dispatch({ type: 'STOP_WORKSHOP' }); $('primary').focus({ preventScroll: true }); return;
+        openStopWorkshopDialog();
+        return;
     }
     const restoreFocus = document.activeElement === $('stop');
     limitExceeded = false;

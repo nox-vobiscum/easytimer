@@ -6,7 +6,13 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-No unreleased changes.
+- **Fullscreen Workshop Stop confirmation:** the regular Session Stop action now
+  uses a document-modal confirmation that remains visible in Firefox and Chrome
+  fullscreen. Cancel and Escape preserve the active Session and fullscreen;
+  confirmation retains the existing workshop reset semantics.
+- **Consistent Session launch wording:** the Rundown picker now uses
+  `Session starten` / `Start Session`; it still prepares the selected Rundown in
+  READY and never starts the countdown automatically.
 
 ## PWA v66 — 2026-11-01
 
