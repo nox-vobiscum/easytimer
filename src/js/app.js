@@ -23,7 +23,7 @@ const copy = {
         next: 'Next phase', complete: 'Complete workshop',
         stopWorkshop: 'Stop workshop', stopOvertime: 'Stop overtime', workshopComplete: 'Workshop complete', overtimeStopped: 'Overtime stopped',
         OVERTIME_PAUSED: 'Overtime paused', phaseExpired: 'Phase time elapsed', phaseOvertime: 'Phase overtime', finalOvertime: 'Workshop overtime',
-        workshopRemaining: 'Workshop remaining', phaseCount: (n, total) => `Phase ${n} of ${total}`, upNext: 'Up next',
+        workshopRemaining: 'Workshop remaining', phaseCount: (n, total) => `Phase ${n} of ${total}`, upNext: 'Next Phase',
         switchConfirm: 'Leave this timer and discard its run progress? The destination will not start automatically.',
         switchToQuickConfirm: 'End the current Rundown and switch to Quick Timer? The current Session progress will be discarded.',
         switchToSessionConfirm: 'Leave the current Quick Timer and open Session Timer? The current Quick Timer progress will be discarded.',
@@ -57,7 +57,7 @@ const copy = {
         next: 'Nächste Phase', complete: 'Workshop abschließen',
         stopWorkshop: 'Workshop stoppen', stopOvertime: 'Überzeit stoppen', workshopComplete: 'Workshop abgeschlossen', overtimeStopped: 'Überzeit gestoppt',
         OVERTIME_PAUSED: 'Überzeit pausiert', phaseExpired: 'Phasenzeit abgelaufen', phaseOvertime: 'Phasenüberzeit', finalOvertime: 'Workshop-Überzeit',
-        workshopRemaining: 'Workshop-Restzeit', phaseCount: (n, total) => `Phase ${n} von ${total}`, upNext: 'Als Nächstes',
+        workshopRemaining: 'Workshop-Restzeit', phaseCount: (n, total) => `Phase ${n} von ${total}`, upNext: 'Nächste Phase',
         switchConfirm: 'Diesen Timer verlassen und seinen Fortschritt verwerfen? Der Zielmodus startet nicht automatisch.',
         switchToQuickConfirm: 'Aktuellen Rundown beenden und zum Quick-Timer wechseln? Der Fortschritt dieser Session wird verworfen.',
         switchToSessionConfirm: 'Aktuellen Quick-Timer verlassen und den Session-Timer öffnen? Der Fortschritt des Quick-Timers wird verworfen.',
@@ -507,9 +507,12 @@ function render() {
     $('stop-overtime').setAttribute('aria-label', t.stopOvertime); $('stop-overtime').title = t.stopOvertime;
     document.querySelectorAll('[data-adjustment]').forEach(button => button.setAttribute('aria-label', t.addTime(Number(button.dataset.adjustment) / 1000)));
     $('adjustment-shortcut').textContent = t.adjustmentShortcut;
-    const budget = session ? `${t.workshopRemaining} ${formatTime(sessionRemaining(run, timer))}`
+    const budget = session ? formatTime(sessionRemaining(run, timer))
         : `${t.total} ${formatTime(totalMs)}${adjustmentMs ? ` · ${t.planned} ${formatTime(plannedMs)} ${adjustmentMs < 0 ? '−' : '+'} ${formatTime(Math.abs(adjustmentMs))}` : ''}`;
-    if ($('time-budget').textContent !== budget) $('time-budget').textContent = budget;
+    $('workshop-remaining-label').hidden = !session;
+    $('workshop-remaining-label').textContent = session ? t.workshopRemaining : '';
+    if ($('time-budget-value').textContent !== budget) $('time-budget-value').textContent = budget;
+    $('time-budget').setAttribute('aria-label', session ? `${t.workshopRemaining}: ${budget}` : budget);
     const help = limitExceeded ? t[limitExceeded] : '';
     if ($('help').textContent !== help) $('help').textContent = help;
     $('help').dataset.error = String(Boolean(limitExceeded));

@@ -6,7 +6,11 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-No unreleased changes.
+- **UX-015A/B:** the Session Timer footer presents workshop remaining time and
+  the upcoming phase as matching two-line label/value groups, with a borderless
+  Next Phase control. The upper context now distinguishes the subdued workshop
+  name, prominent current phase and utility-label phase progress. Timing,
+  progress and next-phase behavior remain unchanged.
 
 ## PWA v65 — 2026-11-01
 

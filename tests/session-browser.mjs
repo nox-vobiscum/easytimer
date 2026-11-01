@@ -96,7 +96,9 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await evaluate('document.activeElement.id'),'primary');
         assert.equal(await text('#workshop-name'),library.templates[0].name);
         assert.equal(await text('#next-phase'),library.templates[0].phases[1].title);
-        assert.equal(await evaluate(`document.querySelector('#next').getAttribute('aria-label')`),'Up next: '+library.templates[0].phases[1].title);
+        assert.equal(await evaluate(`document.querySelector('#next').getAttribute('aria-label')`),'Next Phase: '+library.templates[0].phases[1].title);
+        assert.equal(await evaluate(`getComputedStyle(document.querySelector('#next')).borderTopColor`),'rgba(0, 0, 0, 0)','Next Phase has no resting border');
+        assert.equal(await evaluate(`(()=>{const workshop=getComputedStyle(document.querySelector('#workshop-name'));const phase=getComputedStyle(document.querySelector('#current-phase'));const progress=getComputedStyle(document.querySelector('#phase-number'));return parseFloat(workshop.fontSize)<parseFloat(phase.fontSize)&&Number(workshop.fontWeight)<Number(phase.fontWeight)&&progress.textTransform==='uppercase'&&Number(progress.fontWeight)>=600&&parseFloat(progress.letterSpacing)>0;})()`),true,'Session context has a workshop, phase and progress hierarchy');
         assert.equal(await evaluate(`document.querySelectorAll('button#next').length===1&&!document.querySelector('.actions #next')`),true,'One contextual advance action, no duplicate');
         await capture('ready');
         assert.equal(await evaluate(`getComputedStyle(document.querySelector('.duration-config')).display==='none'&&getComputedStyle(document.querySelector('.duration-adjustments')).display==='none'`),true);
@@ -182,8 +184,8 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
                     const geometry = await evaluate(`(()=>{const r=document.querySelector('#time').getBoundingClientRect();const status=document.querySelector('#status').getBoundingClientRect();const next=document.querySelector('#next').getBoundingClientRect();const controls=document.querySelector('.control-bar').getBoundingClientRect();return {overflow:document.documentElement.scrollWidth>innerWidth,timeFits:r.left>=0&&r.right<=innerWidth&&r.bottom<=status.top+1,previewFits:next.top>=controls.bottom-1&&next.bottom<=document.querySelector('#progress').getBoundingClientRect().top+1&&next.width>=44&&next.height>=44,targets:Array.from(document.querySelectorAll('.actions button:not([hidden])')).every(button=>{const b=button.getBoundingClientRect();return b.width>=44&&b.height>=44&&button.getAttribute('aria-label')&&b.left>=0&&b.right<=innerWidth})};})()`);
                     assert.deepEqual(geometry,{overflow:false,timeFits:true,previewFits:true,targets:true},`${width}x${height} ${lang}/${theme}: ${JSON.stringify(geometry)}`);
                     assert.equal(await text('#phase-number'),lang==='de'?'Phase 1 von 2':'Phase 1 of 2');
-                    assert.equal(await text('#next-label'),lang==='de'?'Als Nächstes':'Up next');
-                    assert.equal(await evaluate(`document.querySelector('#next').getAttribute('aria-label')`),(lang==='de'?'Als Nächstes: ':'Up next: ')+library.templates[0].phases[1].title);
+                    assert.equal(await text('#next-label'),lang==='de'?'Nächste Phase':'Next Phase');
+                    assert.equal(await evaluate(`document.querySelector('#next').getAttribute('aria-label')`),(lang==='de'?'Nächste Phase: ':'Next Phase: ')+library.templates[0].phases[1].title);
                 }
             }
             if (process.env.EASYTIMER_SCREENSHOT_DIR) {

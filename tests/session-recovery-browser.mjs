@@ -50,7 +50,8 @@ export async function checkSessionRecovery({ evaluate, click, text, cdp }) {
         assert.equal(await text('#time'), '00:40'); assert.equal((await record()).clock.status, 'PAUSED');
         await click('#primary'); await reload(base + 360000);
         assert.equal(await text('#time'), '+00:20'); assert.equal((await record()).run.currentIndex, 0);
-        assert.equal(await text('#time-budget'), 'Workshop remaining 03:00');
+        assert.equal(await text('#workshop-remaining-label'), 'Workshop remaining');
+        assert.equal(await text('#time-budget-value'), '03:00');
         await click('#primary'); await reload(base + 400000);
         assert.equal(await text('#time'), '+00:20'); assert.equal((await record()).clock.status, 'OVERTIME_PAUSED');
         await click('#next'); await reload(base + 450000);

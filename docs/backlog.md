@@ -27,13 +27,14 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | --- | --- | --- | --- |
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
+| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — design pending | Future preparation workspace, notes/resources and on-demand facilitator reference |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
 | SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](archive/investigations/SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
 | SYNC-003A | Optional Drive integration in the application | Local application integration implemented and owner-validated with real Google Drive. Production NO-GO. | [Owner acceptance and release blockers](archive/implementation/SYNC-003A_LOCAL_APPLICATION.md); normal/private Firefox, no physical second-device or iOS acceptance |
 | SYNC-003B | Minimal explicit conflict resolution | Functionally accepted in local development with real Google Drive. Production NO-GO. | [Implementation and manual acceptance](archive/implementation/SYNC-003B_CONFLICT_RESOLUTION.md); exactly two heads, explicit A / B / Keep Both |
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
 | UX-019 | Subtle Start/Resume and Stop Button Accents | Released in PWA v64 | Owner-accepted semantic Start/Resume and Stop accents |
-| UX-015 | Timer View Typography & Information Hierarchy | Later — visual polishing | Reuse UX-013 utility labels; preserve timer semantics and minimal presentation views |
+| UX-015 | Timer View Typography & Information Hierarchy | Partially implemented locally; acceptance pending | UX-015A lower Session footer accepted; UX-015B upper hierarchy pending acceptance; Quick Timer and compact-landscape menu remain open |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
@@ -65,6 +66,12 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 **Guardrails:** Cosmetic only; never alter minute inputs, duration semantics, calculations, or stored integer seconds. Handle very long workshops (including 100+ hours) and DE/EN cleanly. Only planned totals use `h` and `min`; live countdowns retain their clock-style representation.
 
 **Status:** Released to staging and production in PWA v65 at commit `56e02b5bc989359b3e1e15f817ec1b3886a7667b`; verified production workflow run [`41302013099`](https://github.com/nox-vobiscum/easytimer/actions/runs/41302013099).
+
+### EDITOR-001 — Session Editor Evolution & Facilitator Panel
+
+**Priority:** High / Near-term — strategic product direction. **Status:** Concept direction accepted; detailed design and implementation pending.
+
+Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability and simplicity. No initial file uploads, own backend/accounts, confidentiality model or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private or role-specific notes. See the [concept and open design questions](SESSION_EDITOR_EVOLUTION.md).
 
 ## Template portability and optional synchronization
 
@@ -223,7 +230,7 @@ These are visualizations, not independent timers. They must reuse the current ti
 
 ### UX-015 — Timer View Typography & Information Hierarchy
 
-**Priority:** Later — visual polishing, not part of UX-013. **Status:** Future requirement only; no implementation authorized. No existing dedicated timer-view typography item was identified; CUSTOM-001 remains separate optional user customization.
+**Priority:** Later — visual polishing, not part of UX-013. **Status:** UX-015A lower Session Timer information area and UX-015B upper Session hierarchy are locally implemented and visually accepted for PWA v66; release pending. The borderless Next Phase control is included. Quick Timer typography and the compact-landscape menu observation remain open. CUSTOM-001 remains separate optional user customization.
 
 **Goal:** Extend UX-013's restrained RBS-inspired utility-label language to Quick Timer and Session Timer, improving information hierarchy and consistency without unnecessary UI elements. The large countdown remains the undisputed visual focus.
 
@@ -234,7 +241,7 @@ These are visualizations, not independent timers. They must reuse the current ti
 | Area | First line: subtle utility label, visually uppercase | Second line: more prominent actual value/title |
 | --- | --- | --- |
 | Left: workshop remaining time | DE: WORKSHOP-RESTZEIT; EN: WORKSHOP REMAINING | Remaining time, e.g. `20:00` |
-| Right: upcoming phase | DE: ALS NÄCHSTES; EN: UP NEXT | Upcoming phase title, e.g. `Discussion` |
+| Right: upcoming phase | DE: NÄCHSTE PHASE; EN: NEXT PHASE | Upcoming phase title, e.g. `Discussion` |
 
 Use localized mixed-case semantic text with uppercase applied through CSS, reusing the same small, semibold, subtly letter-spaced utility style from UX-013. Clearly distinguish labels from values. Align both areas cleanly above the progress bar with balanced spacing rather than rigid column symmetry; keep them compact and unobtrusive. Preserve existing next-phase navigation and its arrow, including the existing state/mode-specific behavior. Handle long phase titles, unavailable next phases and narrow screens gracefully. No extra boxes, cards, borders or decoration. Do not change the meaning or calculation of remaining time, overtime or progress.
 

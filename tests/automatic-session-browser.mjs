@@ -66,7 +66,8 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
         assert.deepEqual(await evaluate('window.autoRenderTimes'),['00:40']);
         assert.deepEqual(await evaluate('window.autoRenderPhases'),[template.phases[2].title]);
         await evaluate('window.autoTimeObserver.disconnect();window.autoPhaseObserver.disconnect()');
-        assert.equal(await text('#time-budget'),'Workshop remaining 00:40');
+        assert.equal(await text('#workshop-remaining-label'),'Workshop remaining');
+        assert.equal(await text('#time-budget-value'),'00:40');
         await evaluate(`const stored=JSON.parse(localStorage.getItem('easyTimerTemplates'));stored.templates[0].transitionMode='manual';stored.templates[0].phases[2].durationSeconds=600;localStorage.setItem('easyTimerTemplates',JSON.stringify(stored))`);
         await clock.advance('40s');assert.equal(await text('#status'),'Workshop complete','Stored template edits cannot change the active automatic snapshot');
         await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(saved)})`);
@@ -103,7 +104,7 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
             await clock.advance('10s');assert.equal(await text('#time'),'02:00');assert.equal(await evaluate(`document.querySelector('#time').dataset.visualState`),'NORMAL');
             for(const lang of ['de','en']) {
                 await click(`[data-language="${lang}"]`);
-                assert.equal(await text('#automatic-next-label'),lang==='de'?'Als Nächstes':'Up next');
+                assert.equal(await text('#automatic-next-label'),lang==='de'?'Nächste Phase':'Next Phase');
                 assert.equal(await text('#time'),'02:00');
             }
             assert.equal(await evaluate(`(()=>{const r=document.querySelector('#automatic-preview').getBoundingClientRect(),t=document.querySelector('#time').getBoundingClientRect(),s=document.querySelector('#status').getBoundingClientRect(),a=document.querySelector('.control-bar').getBoundingClientRect(),p=document.querySelector('#progress').getBoundingClientRect();return document.documentElement.scrollWidth<=innerWidth&&t.left>=0&&t.right<=innerWidth&&t.bottom<=s.top+1&&s.bottom<=a.top+1&&a.bottom<=r.top+1&&r.bottom<=p.top+1;})()`),true,'Automatic information fits without overlap or overflow');
