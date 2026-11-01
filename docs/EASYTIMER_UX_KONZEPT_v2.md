@@ -1,7 +1,7 @@
 # easyTimer — Product, UX and MVP Concept v2
 
-> **Current context (2026-10-30):** Production and staging run PWA v62 at
-> `62531d9012f9c72d5a7b905a18ffac47f8b1bd18`. This document remains the
+> **Current context (2026-11-01):** Production and staging run PWA v67 at
+> `72b2d28435ebb6b6e77739c454add57a49eee0f7`. This document remains the
 > canonical detailed product/UX decision record. Increment-specific delivery
 > statements below are preserved as historical context; use
 > [`BRIEFING.md`](BRIEFING.md) and [`../CHANGELOG.md`](../CHANGELOG.md) for the

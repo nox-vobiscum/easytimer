@@ -6,6 +6,16 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+No unreleased changes.
+
+## PWA v67 — 2026-11-01
+
+- Production release and implementation commit:
+  `72b2d28435ebb6b6e77739c454add57a49eee0f7`
+- Verified staging workflow run:
+  [`41322924175`](https://github.com/nox-vobiscum/easytimer/actions/runs/41322924175)
+- Verified production workflow run:
+  [`41323065346`](https://github.com/nox-vobiscum/easytimer/actions/runs/41323065346)
 - **Fullscreen Workshop Stop confirmation:** the regular Session Stop action now
   uses a document-modal confirmation that remains visible in Firefox and Chrome
   fullscreen. Cancel and Escape preserve the active Session and fullscreen;

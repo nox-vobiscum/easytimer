@@ -35,7 +35,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
 | UX-019 | Subtle Start/Resume and Stop Button Accents | Released in PWA v64 | Owner-accepted semantic Start/Resume and Stop accents |
 | UX-015 | Timer View Typography & Information Hierarchy | Session hierarchy released in PWA v66; remaining work open | Quick Timer typography and compact-landscape menu remain open |
-| BUG-001 | Fullscreen-safe Workshop Stop confirmation | Implemented locally for PWA v67; release pending | Document-modal confirmation replaces the browser-native prompt |
+| BUG-001 | Fullscreen-safe Workshop Stop confirmation | Released in PWA v67 | Document-modal confirmation replaces the browser-native prompt |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
@@ -264,7 +264,9 @@ UX-008 endgame highlighting is implemented locally and always enabled in both ti
 
 ### BUG-001 — Fullscreen-safe Workshop Stop confirmation
 
-**Status:** Implemented locally for PWA v67; staging and production release pending.
+**Status:** Released to staging and production in PWA v67 at commit
+`72b2d28435ebb6b6e77739c454add57a49eee0f7`; verified production workflow run
+[`41323065346`](https://github.com/nox-vobiscum/easytimer/actions/runs/41323065346).
 
 Firefox can hide a browser-native `window.confirm()` prompt behind its fullscreen
 surface, leaving Workshop Stop visibly blocked until fullscreen is exited. The
