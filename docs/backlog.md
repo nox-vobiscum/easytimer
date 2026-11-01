@@ -26,7 +26,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | ID | Idea | Priority | Main dependency / note |
 | --- | --- | --- | --- |
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
-| PLAN-002 | Friendlier planned-total formatting | Implemented locally; release pending | Presentation-only refinement |
+| PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
 | SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](archive/investigations/SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
 | SYNC-003A | Optional Drive integration in the application | Local application integration implemented and owner-validated with real Google Drive. Production NO-GO. | [Owner acceptance and release blockers](archive/implementation/SYNC-003A_LOCAL_APPLICATION.md); normal/private Firefox, no physical second-device or iOS acceptance |
@@ -62,9 +62,9 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 
 **Idea:** Consider `1 h 50 min` / an appropriate localized form instead of `01:50:00` for *planned total* in the editor or template library.
 
-**Guardrails:** Cosmetic only; never alter minute inputs, duration semantics, calculations, or stored integer seconds. Handle very long workshops (including 100+ hours) and DE/EN cleanly. The clock-like representation is acceptable for now.
+**Guardrails:** Cosmetic only; never alter minute inputs, duration semantics, calculations, or stored integer seconds. Handle very long workshops (including 100+ hours) and DE/EN cleanly. Only planned totals use `h` and `min`; live countdowns retain their clock-style representation.
 
-**Status:** Implemented locally for PWA v65; owner acceptance and release pending.
+**Status:** Released to staging and production in PWA v65 at commit `56e02b5bc989359b3e1e15f817ec1b3886a7667b`; verified production workflow run [`41302013099`](https://github.com/nox-vobiscum/easytimer/actions/runs/41302013099).
 
 ## Template portability and optional synchronization
 

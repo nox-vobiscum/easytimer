@@ -6,10 +6,22 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+No unreleased changes.
+
+## PWA v65 — 2026-11-01
+
+- Production release commit: `56e02b5bc989359b3e1e15f817ec1b3886a7667b`
+- Implementation commit: `56e02b5bc989359b3e1e15f817ec1b3886a7667b`
+- Verified production workflow run: [`41302013099`](https://github.com/nox-vobiscum/easytimer/actions/runs/41302013099)
+
+### Changed
+
 - **PLAN-002:** planned workshop totals in the Session Editor, Rundown library
   and import review use concise `h` and `min` labels instead of clock-style
-  values. Calculations, stored durations and live countdown formatting are
+  values. Calculations, stored durations and live countdown formatting remain
   unchanged.
+- PWA v65 was verified on staging and production with the deterministic 24-file
+  package and direct checks of the deployed service worker and Planner module.
 
 ## Repository maintenance — 2026-10-30
 
