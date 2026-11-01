@@ -79,8 +79,11 @@ These increments may be split or reordered after the detailed UX review. Nothing
 
 ## Suggested entry for `docs/backlog.md`
 
-**EDITOR-001 — Session Editor Evolution & Facilitator Panel**  
-**Priority:** High / Near-term — strategic product direction  
-**Status:** Concept direction accepted; detailed design and implementation pending.  
-**Summary:** Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links, and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability, and simplicity. No initial file uploads, own backend/accounts, confidentiality model, or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private/role-specific notes.  
+**EDITOR-001 — Session Editor Evolution & Facilitator Panel**
+
+**Priority:** High / Near-term — strategic product direction
+
+**Status:** Concept direction accepted; detailed design and implementation pending.
+
+**Summary:** Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links, and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability, and simplicity. No initial file uploads, own backend/accounts, confidentiality model, or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private/role-specific notes.
 **Detail:** [`SESSION_EDITOR_EVOLUTION.md`](SESSION_EDITOR_EVOLUTION.md)
