@@ -63,6 +63,16 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 - Keep a subtle entry point to the built-in example rundowns in the **Templates** area rather than requiring a permanently visible third main tab or a large gallery. Exact placement remains open.
 - **Library search** is a desirable **later enhancement**, not a requirement of this initial library layout. Do not add filters, advanced navigation or other features by implication.
 
+### Template library actions — agreed hybrid UX
+
+- Provide **two separate, directly accessible entry points** on each user template: **Start Session** / **Session starten** (the primary action) and **Plan Execution** / **Durchführung planen** (a quieter secondary action). The latter must not be buried in an overflow menu.
+- **Start Session** creates an **independent execution**, opens the existing Session Timer at phase 1 **READY**, and does not start the countdown. Preserve the current protected replacement flow when another active Session Run would be replaced. This future library change must not alter countdown, transition or ownership behavior.
+- **Plan Execution** starts an **independent workshop-specific draft** based on the template and opens it for editing before launch. It must not modify the source template; discarding an unsaved planning draft must not silently create an unwanted saved execution. Exact creation/persistence timing belongs to the later data-contract review.
+- Use a **hybrid action layout** for template rows: primary Start Session plus a directly accessible but visually subordinate Plan Execution; place **Edit Template**, **Export**, and **Delete** in a clearly labeled, accessible contextual/overflow menu. Deliberate editing of the original must be unmistakably distinguished from planning a copy. Preserve explicit deletion confirmation and existing unsaved-change safeguards.
+- Both entry points must remain readily discoverable on **mobile and desktop**, with readable labels, keyboard access, visible focus and adequate touch targets (at least the established 44px standard). Exact action placement, narrow-screen wrapping, icons and menu interaction require review against the actual UI; do not commit to a fixed row layout here.
+- **Built-in examples** must likewise be usable for quick launch or planning without changing their originals; original-edit/delete actions are not appropriate for immutable built-ins. Actions for **planned, running and completed executions** are a separate UX-review item, not implicitly decided by these template-row rules.
+- This is a **future UI specification only**, not authorization to change the existing released direct-action row or any runtime/storage implementation.
+
 ### Predefined categories for rundowns and phases — agreed direction
 
 - **Category fields belong in the future data model for both rundowns and individual phases**, irrespective of whether the user explicitly chooses a category. A neutral predefined fallback (such as “uncategorized” / “standard”) must be present in the persisted JSON when none is chosen; the final identifiers and schema migration are not yet selected.
