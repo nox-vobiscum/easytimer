@@ -138,6 +138,14 @@ recommended action.
   presentation views without sacrificing readable touch targets.
 - German/English and Light/Dark/System conventions remain consistent.
 - Keyboard operation, visible focus and semantic controls are required.
+- In ambiguous or consequential dialogs, explain the concrete effect of each
+  choice in plain language, optionally using a short, visually subordinate line
+  under a descriptive action label. Distinguish similar verbs (e.g. delete,
+  discard, remove, cancel) by their actual outcomes; never make users guess
+  whether data, progress or a prepared plan will survive. Keep simple,
+  self-explanatory confirmations concise: no compulsory extra descriptions,
+  additional steps or repetitive warning text. Ensure DE/EN parity and
+  accessible reading/keyboard behavior on desktop and mobile.
 - Local-first operation and offline PWA behavior are the default.
 - No backend or user account is mandatory; hosting remains free-first.
 - One authoritative timer state uses wall-clock deadlines for accurate elapsed
