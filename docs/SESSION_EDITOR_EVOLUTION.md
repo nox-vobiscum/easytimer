@@ -27,6 +27,17 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 - Avoid alarming colors, notification dots, badges, or extra buttons. Provide a sufficiently large touch target, keyboard operation, and accessible labels/expanded state.
 - **Exact placement within the existing phase action area and responsive layout remain open** until evaluated against the real editor UI; do not prescribe button order or positioning at the concept stage.
 
+### Expanded phase content and editing — agreed UX direction
+
+- The expanded phase displays **two clearly labeled sections, both visible at a glance**: **Notes** and **Links & Resources**. Do not nest accordions or add file uploads.
+- **Notes:** When empty, show a subtle clickable placeholder (“Notiz hinzufügen…” / appropriate English equivalent). Both clicking the preview/placeholder and a separate minimal edit button open the same lightweight text editor.
+- Display long notes as a **two- or three-line clamped preview with ellipsis**, not a fully expanded wall of text. Opening the editor reveals the complete content. Support only basic formatting such as emphasis and lists; exact editing and serialization technology remain undecided.
+- **Links & Resources:** A single initial section for labeled URLs to websites, boards, presentations, images, documents, videos and other externally hosted material. Each item has display text and a URL; the read view shows only its linked label with a link icon. Clicking the label opens the URL in a **new tab**; a separate minimal edit button edits the entry. When empty, show “Link/URL hinzufügen…” / appropriate English equivalent.
+- **Edit actions:** Minimal icon buttons for **Save (checkmark), Cancel and Delete**. Save accepts the current edit into the editor's rundown draft (not an automatic library/template save). Cancel exits editing and restores the last saved state for the item; deleting a note removes its content and returns its section to the empty placeholder. Clicking outside the editor causes **no action**: no implicit save, cancel or delete.
+- All these action buttons use a **minimal monochrome icon style**: no signal colors or emoji, with accessible names, keyboard operation, and minimum usable touch-target sizes. Exact placement and responsive spacing remain subject to real-layout review.
+- A future richer Google Drive/file integration may justify separating Links from Resources; **not part of the initial version**. Similarly, separately intended **public/presentable vs. moderator-reference notes** are a future concept only. The initial version has no privacy, role or owner-only enforcement; a truly confidential view would need its own later security and access-control design.
+- The data contract for basic formatting, storage/validation, JSON import/export, recovery and optional sync requires a separate explicit review; no library or persistence format is selected by this UI decision.
+
 Potential information to prepare:
 
 - **Rundown:** title, ordered phases, and rundown-level facilitation notes.
