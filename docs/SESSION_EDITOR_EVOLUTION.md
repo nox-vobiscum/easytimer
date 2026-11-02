@@ -69,6 +69,18 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 - Storage, recovery/ownership, JSON compatibility and crash safety need explicit design and tests before implementation. The current single-context runtime recovery is **not** already a durable multi-suspended-execution library. This concept requires no account or cloud as a prerequisite.
 - Exact actions/buttons for planned, active and suspended execution rows still require dedicated layout/UX review; lifecycle semantics here are agreed independently of their placement.
 
+
+### Switching away from an active execution — explicit plain-language choices (agreed UX)
+
+- When starting or activating another execution while one is **Im Timer aktiv**, present a clear, **plain-language decision dialog**. Identify the current execution by name and state that continuing with the new selection requires a decision about its current progress. Avoid opaque abbreviations, unexplained icon-only actions, and generic confirmation wording such as “Replace?”.
+- Show each available action with its **full, descriptive button label** and a **short, smaller explanatory line directly beneath it**. Both belong together visually and semantically; the explanation must remain legible on narrow/mobile screens and available to assistive technology. Example German copy (refine DE/EN wording in the later copy review):
+  - **Unterbrechen & speichern** — “Der Rundown wird im aktuellen Zustand gespeichert und kann zu einem späteren Zeitpunkt an derselben Stelle fortgesetzt werden.”
+  - **Durchlauf verwerfen** — “Der aktuelle Durchlauf wird zum Startpunkt zurückgesetzt. Der bisherige Fortschritt wird verworfen; die geplante Durchführung bleibt erhalten.”
+  - **Zurück zur aktuellen Session** — “Es wird nichts verändert. Die aktuelle Durchführung bleibt im Timer aktiv.”
+- Suspend/save and discard/reset are **distinct decisions**; neither is the same as pausing, completing, or deleting a rundown. Discard is potentially destructive: the user must make an unambiguous conscious choice, consistent with the explicit confirmation guardrail above. Whether a second confirmation is necessary or the fully explained selection itself suffices is a later interaction-design review, not a default to add extra dialogs.
+- Switching must happen **only after** the chosen suspend/save or discard/reset operation succeeds. A save failure must leave the current execution active, with its progress intact and a clear error message. Cancel, Escape, or closing the decision dialog must not silently change the run or timer.
+- Keep option wording and descriptions more important than compactness or iconography. Exact controls/spacing, ordering, focus and keyboard interactions are to be tested against desktop/mobile; do not preselect the final widget or visual styling here.
+
 ### Completed executions — immutable record and one post-session note (agreed UX)
 
 - A completed execution remains in the user's library as an **immutable record of its actual course**. Its phase sequence, recorded durations/overtime, prepared and run-time notes, links, and other execution history are **read-only after completion**; do not retroactively alter the documented workshop.
