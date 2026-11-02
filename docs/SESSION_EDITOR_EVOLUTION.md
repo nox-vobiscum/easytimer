@@ -38,6 +38,15 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 - A future richer Google Drive/file integration may justify separating Links from Resources; **not part of the initial version**. Similarly, separately intended **public/presentable vs. moderator-reference notes** are a future concept only. The initial version has no privacy, role or owner-only enforcement; a truly confidential view would need its own later security and access-control design.
 - The data contract for basic formatting, storage/validation, JSON import/export, recovery and optional sync requires a separate explicit review; no library or persistence format is selected by this UI decision.
 
+### Responsive overlay editors — agreed MVP UX
+
+- Edit both **Notes** and **Links & Resources** in an overlay instead of expanding editable controls inline within the phase. On desktop, use a spacious dialog; on mobile, use a near-full-screen overlay to maximize usable editing space.
+- The Notes overlay exposes the complete note and only basic formatting controls. The Links & Resources overlay can edit **multiple/all labeled URL entries in one session** rather than requiring a separate dialog per link; scroll its contents when needed.
+- The mobile layout must adapt to the **actually visible viewport when the on-screen keyboard is open**, keeping the active field usable and actions reachable with scrolling where necessary. Verify actual behavior on mobile devices/browsers; no universal keyboard/viewport behavior is assumed.
+- Saving applies the overlay edits to the rundown **draft**, closes the overlay, and refreshes the expanded phase preview. Final persistence remains governed by the existing explicit Rundown Save flow.
+- **Cancel/close must guard against accidental loss of edits with a confirmation dialog when there are unsaved changes.** Confirmed discard restores the pre-edit contents; declining the confirmation returns to editing. The earlier rule remains: tapping/clicking outside the overlay does nothing.
+- Keep Save, Cancel and Delete as restrained monochrome icon actions with accessible names and adequate touch targets. Exact visual layout and the behavior of Delete within the multi-link overlay remain for later layout/interaction review; this concept does not select an editor library or a serialization format.
+
 Potential information to prepare:
 
 - **Rundown:** title, ordered phases, and rundown-level facilitation notes.
