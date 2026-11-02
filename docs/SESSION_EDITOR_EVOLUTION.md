@@ -56,18 +56,26 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 - Retain the execution's actual changes, phase outcomes, overtime and other relevant history with that execution when completed (precise historical data and retention contract to be designed). **Optionally** allow its *reusable planning content* to be applied to the originating template, but only via an unambiguous, deliberate confirmation. The template must never be silently overwritten; the owner wants **recoverable version history** if template replacement is offered. The replacement dialog, versioning, restore flow, selection of transferable fields, and treatment of actual runtime statistics require a separate UX/data-contract review.
 - Account-free local use and JSON portability remain important. Google Drive, cross-device persistence and any potential server/database service are **separate future architectural evaluations**, not prerequisites or decisions of this library concept.
 
-### Optional categories for rundowns and phases — concept addition
+### Predefined categories for rundowns and phases — agreed direction
 
-- Consider an **optional semantic category** for a whole rundown (examples: workshop, conference/congress, meeting, training) and independently for each phase (examples: talk/presentation, discussion, breakout, break).
-- Do **not** confuse a rundown's **library role** (template versus individual execution) with its **event category** (workshop, training, etc.): they describe different dimensions.
-- Once categories have an approved data contract, they may later inform restrained icons, colors, grouping or other semantic/presentation cues. **No category-driven timer logic**, mandatory tagging, or fixed taxonomy is decided here.
-- The initial category set, edit affordance, persistence/portability behavior and any optional visual treatment remain open for a separate concept review. This extends the earlier optional phase-type idea without authorizing its implementation.
+- **Category fields belong in the future data model for both rundowns and individual phases**, irrespective of whether the user explicitly chooses a category. A neutral predefined fallback (such as “uncategorized” / “standard”) must be present in the persisted JSON when none is chosen; the final identifiers and schema migration are not yet selected.
+- Categories come from **fixed, application-defined lists**, not user-defined or customizable taxonomies. Possible rundown examples: workshop, congress/conference, meeting, training. Possible phase examples: talk/presentation, discussion, breakout, break. Exact initial lists and labels still require a separate review.
+- **Choosing a category remains optional in the UI**. Do not impose a classification step on users who just want to create and run a timer.
+- Distinguish a rundown's **library role** (template vs. individual execution), its **lifecycle status** (planned/active/completed), and its **category** (workshop/training/etc.); these are independent concepts.
+- Categories may later inform restrained iconography, colors, filtering or semantic cues; no category-specific timer behavior or visual treatment is approved yet. Import/export and backward compatibility with existing category-free JSON must be addressed in the separately approved data contract.
+
+### Built-in example rundowns — agreed product direction
+
+- Supply a **small, curated set of predefined example rundowns/templates**, such as a retrospective and selected project-management meetings. They demonstrate how a rundown is structured and offer a quick start for spontaneous meetings without requiring users to enter phases manually.
+- A user may use an example unchanged or adapt it for a specific execution. In either case, **starting it produces a distinct execution**, preserving the source example just as for any other template.
+- Make built-in examples recognizable and distinguishable from the user's own saved templates and executions. Whether examples are shown inline, behind an entry point, or can be copied into personal templates is a subsequent library-UX decision; the precise catalog, phase contents, and maintenance/versioning model are not yet agreed.
+- Keep this possible without an account, and avoid mandatory onboarding or a large preset gallery.
 
 Potential information to prepare:
 
 - **Rundown:** title, ordered phases, and rundown-level facilitation notes.
 - **Each phase:** existing title and duration, phase-specific facilitation notes, and a small set of **labeled external links** (e.g. Miro board, presentation, document, image, video, or other resource).
-- **Optional phase type:** e.g. presentation, discussion, exercise, break, group work, breakout. A subtle color and/or icon may aid recognition in both Editor and Timer, without changing timer behavior.
+- **Predefined phase category:** stored with a neutral fallback even when not explicitly selected (for example presentation, discussion, group work, breakout, break); optional visual cues may follow later without changing timer behavior.
 
 No file uploads or embedded multimedia storage are planned. Links/shortcuts to resources are sufficient for the initial scope. A direct integration with Miro is explicitly out of scope for now; links to Miro boards are in scope.
 
