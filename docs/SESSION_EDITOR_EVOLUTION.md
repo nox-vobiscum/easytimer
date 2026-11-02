@@ -47,6 +47,22 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 - **Cancel/close must guard against accidental loss of edits with a confirmation dialog when there are unsaved changes.** Confirmed discard restores the pre-edit contents; declining the confirmation returns to editing. The earlier rule remains: tapping/clicking outside the overlay does nothing.
 - Keep Save, Cancel and Delete as restrained monochrome icon actions with accessible names and adequate touch targets. Exact visual layout and the behavior of Delete within the multi-link overlay remain for later layout/interaction review; this concept does not select an editor library or a serialization format.
 
+### Rundown library: templates and independent executions — agreed product direction
+
+- Distinguish **reusable templates** from **individual workshop rundowns / executions** in the user's library. A user may create and deliberately edit templates, then prepare a separate workshop-specific rundown from one (with or without customization). Starting an unchanged template still creates an **independent execution entity**, not a modification of the original.
+- An execution progresses from planned to active to completed. **Each completed execution remains independently available in the user's library**, rather than disappearing or being silently merged into its source template. The exact library organization and completion/archive UX still require review.
+- Make the distinction **unmistakable in the UI** through a meaningful icon and/or a short text label; don't rely on subtle iconography alone when template edits might be mistaken for changes to an individual execution. Decide the exact placement against real desktop/mobile layouts.
+- An ongoing execution may evolve without retroactively changing completed phases. Edits to **current and upcoming phases** must respect the already accepted ET-001 decisions 39–43, 45–48, 53–56: completed phases remain protected; the current phase cannot be deleted/reordered, but its allowed title/duration adjustments are governed by the existing explicitly approved timing/conflict rules; upcoming phases may be changed. **No timer or recovery behavior change is authorized by this concept document.** Runtime-edit implementation remains separately scoped under ST-003.
+- Retain the execution's actual changes, phase outcomes, overtime and other relevant history with that execution when completed (precise historical data and retention contract to be designed). **Optionally** allow its *reusable planning content* to be applied to the originating template, but only via an unambiguous, deliberate confirmation. The template must never be silently overwritten; the owner wants **recoverable version history** if template replacement is offered. The replacement dialog, versioning, restore flow, selection of transferable fields, and treatment of actual runtime statistics require a separate UX/data-contract review.
+- Account-free local use and JSON portability remain important. Google Drive, cross-device persistence and any potential server/database service are **separate future architectural evaluations**, not prerequisites or decisions of this library concept.
+
+### Optional categories for rundowns and phases — concept addition
+
+- Consider an **optional semantic category** for a whole rundown (examples: workshop, conference/congress, meeting, training) and independently for each phase (examples: talk/presentation, discussion, breakout, break).
+- Do **not** confuse a rundown's **library role** (template versus individual execution) with its **event category** (workshop, training, etc.): they describe different dimensions.
+- Once categories have an approved data contract, they may later inform restrained icons, colors, grouping or other semantic/presentation cues. **No category-driven timer logic**, mandatory tagging, or fixed taxonomy is decided here.
+- The initial category set, edit affordance, persistence/portability behavior and any optional visual treatment remain open for a separate concept review. This extends the earlier optional phase-type idea without authorizing its implementation.
+
 Potential information to prepare:
 
 - **Rundown:** title, ordered phases, and rundown-level facilitation notes.
