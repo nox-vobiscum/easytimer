@@ -56,6 +56,14 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 - Retain the execution's actual changes, phase outcomes, overtime and other relevant history with that execution when completed (precise historical data and retention contract to be designed). **Optionally** allow its *reusable planning content* to be applied to the originating template, but only via an unambiguous, deliberate confirmation. The template must never be silently overwritten; the owner wants **recoverable version history** if template replacement is offered. The replacement dialog, versioning, restore flow, selection of transferable fields, and treatment of actual runtime statistics require a separate UX/data-contract review.
 - Account-free local use and JSON portability remain important. Google Drive, cross-device persistence and any potential server/database service are **separate future architectural evaluations**, not prerequisites or decisions of this library concept.
 
+### Completed executions — immutable record and one post-session note (agreed UX)
+
+- A completed execution remains in the user's library as an **immutable record of its actual course**. Its phase sequence, recorded durations/overtime, prepared and run-time notes, links, and other execution history are **read-only after completion**; do not retroactively alter the documented workshop.
+- Provide exactly **one separate, optional post-session reflection/annotation field per completed execution**, not one field per phase and not a collection of note cards or stickies. It is distinct from the frozen original run notes and may be edited after completion.
+- The post-session field keeps **one current saved value only**. Replacing or clearing it deliberately discards the previous content: **no per-edit version history, append-only log or restoration requirement** for this field. Standard explicit edit/save/cancel safeguards can be reviewed with the UI; no extra note-management feature is implied.
+- This decision does **not** remove the separately requested, recoverable **template versioning** for an explicit replacement of a reusable source template. Completed-run records and template replacement are different concerns.
+- Exact positioning of the reflection field and the remaining actions for completed executions belong to the later library UX review. This concept authorizes no runtime or storage implementation.
+
 ### Library navigation — agreed two-tab layout
 
 - Use **one Rundown library with two distinct tabs**: **My Templates** / **Meine Vorlagen** and **My Executions** / **Meine Durchführungen**. Do not place both lists in one long stacked view. This is a deliberate responsive choice, particularly valuable on mobile, but applies to desktop too.
