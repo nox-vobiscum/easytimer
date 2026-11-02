@@ -50,11 +50,18 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 ### Rundown library: templates and independent executions — agreed product direction
 
 - Distinguish **reusable templates** from **individual workshop rundowns / executions** in the user's library. A user may create and deliberately edit templates, then prepare a separate workshop-specific rundown from one (with or without customization). Starting an unchanged template still creates an **independent execution entity**, not a modification of the original.
-- An execution progresses from planned to active to completed. **Each completed execution remains independently available in the user's library**, rather than disappearing or being silently merged into its source template. The exact library organization and completion/archive UX still require review.
+- An execution progresses from planned to active to completed. **Each completed execution remains independently available in the user's library**, rather than disappearing or being silently merged into its source template. The completion/archive UX still requires review; the top-level library navigation is decided below.
 - Make the distinction **unmistakable in the UI** through a meaningful icon and/or a short text label; don't rely on subtle iconography alone when template edits might be mistaken for changes to an individual execution. Decide the exact placement against real desktop/mobile layouts.
 - An ongoing execution may evolve without retroactively changing completed phases. Edits to **current and upcoming phases** must respect the already accepted ET-001 decisions 39–43, 45–48, 53–56: completed phases remain protected; the current phase cannot be deleted/reordered, but its allowed title/duration adjustments are governed by the existing explicitly approved timing/conflict rules; upcoming phases may be changed. **No timer or recovery behavior change is authorized by this concept document.** Runtime-edit implementation remains separately scoped under ST-003.
 - Retain the execution's actual changes, phase outcomes, overtime and other relevant history with that execution when completed (precise historical data and retention contract to be designed). **Optionally** allow its *reusable planning content* to be applied to the originating template, but only via an unambiguous, deliberate confirmation. The template must never be silently overwritten; the owner wants **recoverable version history** if template replacement is offered. The replacement dialog, versioning, restore flow, selection of transferable fields, and treatment of actual runtime statistics require a separate UX/data-contract review.
 - Account-free local use and JSON portability remain important. Google Drive, cross-device persistence and any potential server/database service are **separate future architectural evaluations**, not prerequisites or decisions of this library concept.
+
+### Library navigation — agreed two-tab layout
+
+- Use **one Rundown library with two distinct tabs**: **My Templates** / **Meine Vorlagen** and **My Executions** / **Meine Durchführungen**. Do not place both lists in one long stacked view. This is a deliberate responsive choice, particularly valuable on mobile, but applies to desktop too.
+- Keep reusable templates and individual planned/active/completed executions visually and semantically distinct within their respective tabs. The exact per-item controls, lifecycle indicators and sorting remain for the next UX review.
+- Keep a subtle entry point to the built-in example rundowns in the **Templates** area rather than requiring a permanently visible third main tab or a large gallery. Exact placement remains open.
+- **Library search** is a desirable **later enhancement**, not a requirement of this initial library layout. Do not add filters, advanced navigation or other features by implication.
 
 ### Predefined categories for rundowns and phases — agreed direction
 
