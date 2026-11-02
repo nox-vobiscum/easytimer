@@ -18,6 +18,15 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 
 **Editable rundown metainfo — concept addition:** Allow freely editable information associated with the whole Rundown, independently of individual phases (for example workshop goals, a day agenda, general orientation or welcome text). The precise fields and presentation are still open design questions. As a separate *future idea*, this content might later appear as a welcome screen while the Session Timer is READY (for example on a projector as participants arrive), potentially with optional branding such as a company logo. Neither a welcome screen nor branding is part of the current implementation scope; existing timer behavior must remain unchanged.
 
+### Phase detail disclosure — agreed UX direction
+
+- Keep the phase list compact and use **expandable/collapsible phase details** (accordion pattern), with responsive/mobile use as a strong consideration. This is intended for typical workshops or team days of roughly 10–12 phases, not large-scale session-planning software.
+- Provide **one subtle disclosure button** combining a list/agenda icon with a chevron. The same button both indicates whether optional phase information is present and opens/closes the details.
+- **Outline list icon:** no optional prepared information exists for the phase. **Subtly filled/solid list icon:** at least one optional item exists, whether a note, labeled resource link, or another future optional detail. Do not distinguish content categories or counts through additional markers.
+- The chevron communicates only expansion state (down = collapsed, up = expanded); the outline/solid treatment communicates only content presence. These two states are independent.
+- Avoid alarming colors, notification dots, badges, or extra buttons. Provide a sufficiently large touch target, keyboard operation, and accessible labels/expanded state.
+- **Exact placement within the existing phase action area and responsive layout remain open** until evaluated against the real editor UI; do not prescribe button order or positioning at the concept stage.
+
 Potential information to prepare:
 
 - **Rundown:** title, ordered phases, and rundown-level facilitation notes.
