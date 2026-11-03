@@ -186,21 +186,21 @@ Requirements and boundaries:
 
 - Collapsed by default; no automatic disclosure of notes.
 - Must not disrupt, pause, reset, or otherwise influence the running timer.
-- No duplicated timer controls, phase-editing UI, or management dashboard.
+- No duplicated timer controls, full phase-editing UI, or management dashboard. The separately agreed **lightweight contextual note capture** is an intentional narrow exception to the panel's otherwise read-only/reference character; it must not turn the panel into another Session Editor.
 - Appropriate desktop/mobile behavior to be designed later; avoid disturbing fullscreen or minimal display modes.
 - The content is **not confidential by design**. If a shared screen or accessible view exposes the panel, notes may be visible. Do not rely on hiding the panel for security.
 
 Separate moderator/audience views are a possible future enhancement, **not** a dependency for the first panel.
 
-## 3. Small notes captured during a workshop
+## 3. Contextual notes captured during facilitation — confirmed user-value case
 
-An optional, lightweight input may record spontaneous reminders or observations during a run, such as a topic to revisit, a useful URL, or a suggestion for the next training.
+**Concrete facilitator need (agreed):** During longer workshops, especially while a group independently works in a breakout, a facilitator may want to capture a spontaneous observation or reminder **about the current or a coming phase** in the same tool that holds the agenda and timekeeping. This avoids a context/tool switch to paper, PowerPoint presenter notes, Miro sticky notes or another note app, and allows the observation to be found later **in its workshop/phase context**. This need may be negligible for a short one-hour session but valuable over a full workshop day; do not impose note-taking on every run.
 
-- Notes may be associated with the **current phase** or the **whole rundown**; the exact UX and storage model require a later decision.
-- **Prepared notes** and **notes captured during a run** remain conceptually distinct.
-- Captured notes should remain available when the panel is closed; persistence and recovery rules require explicit design.
-- Moving a captured note into the saved Rundown is **optional and explicit**. Never silently overwrite a template or mutate an active run's original definition.
-- Keep capture intentionally simple: no task tracking, chat, collaboration, or elaborate note editor.
+- Provide **lightweight contextual note capture for the current and upcoming phases** during facilitation. Do not restrict the concept to one undifferentiated session-wide scratchpad; which other destinations, if any, should be supported is still open.
+- Capture must be **optional and quick**, with no forced phase transition, timer pause/resume, navigation to another app, or disturbance of the authoritative timekeeping state. Exact placement in or beside the Facilitator Panel and narrow-screen interaction remain for UX review; the panel must not become a full rundown editor.
+- **Prepared facilitator notes** and **observations captured during an execution** remain conceptually distinct for historical accuracy. Clearly associate a captured observation with its intended phase and the individual execution, including when a facilitator adds a note about a *future* phase while the *current* phase is running. Persist it safely across panel close/recovery and allow later review; do not silently mutate the originating reusable template.
+- How captured observations appear in an archived completed execution, and whether/how they are kept when choosing **Nur den Ablaufplan behalten** (which intentionally discards execution results), require an explicit retention/data-contract decision. Do not silently lose meaningful notes or mistake runtime observations for planned facilitator instructions.
+- Transferring a captured observation into reusable planning notes or a saved template must remain **deliberate**, not automatic. Keep the MVP minimal: no new note library, task tracking, tags, chat, collaboration, or elaborate note editor. No mandatory note capture or audit/version history.
 
 ## 4. Architecture and scope guardrails
 
