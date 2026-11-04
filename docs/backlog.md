@@ -28,6 +28,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
 | EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — design pending | Future preparation workspace, notes/resources and on-demand facilitator reference |
+| EDITOR-002 | Restore unsaved Workshop-Notizen after reload/crash | Someday / Spike — „für lange Winternächte“ | Explicitly deferred; at most a tiny feasibility spike if a safe, simple approach appears |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
 | SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](archive/investigations/SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
 | SYNC-003A | Optional Drive integration in the application | Local application integration implemented and owner-validated with real Google Drive. Production NO-GO. | [Owner acceptance and release blockers](archive/implementation/SYNC-003A_LOCAL_APPLICATION.md); normal/private Firefox, no physical second-device or iOS acceptance |
@@ -73,6 +74,16 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 **Priority:** High / Near-term — strategic product direction. **Status:** Concept direction accepted; detailed design and implementation pending.
 
 Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability and simplicity. No initial file uploads, own backend/accounts, confidentiality model or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private or role-specific notes. See the [concept and open design questions](SESSION_EDITOR_EVOLUTION.md).
+
+### EDITOR-002 — Unsaved Workshop-Notizen draft recovery („Für lange Winternächte“)
+
+**Priority:** Someday / low — intentionally deferred. **Status:** Open idea, not approved for implementation; optional small feasibility spike only after separate approval.
+
+**User need:** When the browser unexpectedly reloads, crashes or gets terminated on mobile while the Facilitator Panel contains **started but not yet saved** Workshop-Notizen in one or several phases or the Rundown area, it would be useful to restore those drafts without silently losing the text or disrupting the timer.
+
+**Scope boundary:** This is **not** a mandate for autosave on typing, periodic background storage, a second recovery engine, cross-device sync, draft versioning or an additional notes library. The explicitly accepted save behavior on phase/Panel close, navigation into the Session Editor, suspend and archive remains **part of EDITOR-001**, along with safe storage and recovery of already committed note content and timer progress. Unexpected-reload recovery of **uncommitted drafts only** is deferred; do not promise it currently works.
+
+**Optional mini-spike:** If a genuinely small and safe local approach appears plausible, a separately approved, narrowly scoped feasibility check may examine multi-phase draft ownership, conflict/staleness protection, explicit discard/reset/exit rules, browser reload/mobile PWA behavior and the interaction with authoritative timer recovery. Require a concrete low-complexity design and credible tests before proposing implementation. **If it is not clearly manageable, stop; leave this item parked for a long winter evening.** No delivery date or hidden dependency for EDITOR-001.
 
 ## Template portability and optional synchronization
 
