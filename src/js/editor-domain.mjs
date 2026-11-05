@@ -168,13 +168,13 @@ function validateSource(source) {
     return { kind: source.kind, id: identity(source.id) };
 }
 
-export function validatePlannedExecution(execution) {
+function validateExecution(execution, lifecycle, validateAttempt) {
     exactFields(execution, [
         'schemaVersion', 'kind', 'id', 'revision', 'runtimeRevision', 'source', 'lifecycle',
         'currentPlan', 'workshopNotes', 'attempt',
     ]);
-    if (execution.schemaVersion !== EDITOR_SCHEMA_VERSION || execution.kind !== EDITOR_KINDS.EXECUTION
-        || execution.lifecycle !== EXECUTION_LIFECYCLES.PLANNED || execution.attempt !== null) fail('invalidData');
+    if (execution.schemaVersion !== EDITOR_SCHEMA_VERSION || execution.kind !== EDITOR_KINDS.EXECUTION) fail('invalidData');
+    if (execution.lifecycle !== lifecycle) fail('invalidLifecycle');
     const normalizedRevision = revision(execution.revision, 'invalidRevision');
     const normalizedRuntimeRevision = revision(execution.runtimeRevision, 'invalidRuntimeRevision');
     if (normalizedRevision < 1 || normalizedRuntimeRevision > normalizedRevision) fail('invalidRevision');
@@ -186,11 +186,44 @@ export function validatePlannedExecution(execution) {
         revision: normalizedRevision,
         runtimeRevision: normalizedRuntimeRevision,
         source: validateSource(execution.source),
-        lifecycle: EXECUTION_LIFECYCLES.PLANNED,
+        lifecycle,
         currentPlan,
         workshopNotes: validateWorkshopNotes(execution.workshopNotes, currentPlan),
-        attempt: null,
+        attempt: validateAttempt(execution.attempt),
     };
+}
+
+const absentAttempt = attempt => {
+    if (attempt !== null) fail('invalidAttempt');
+    return null;
+};
+
+function validateAttempt(attempt) {
+    if (!isObject(attempt)) fail('invalidAttempt');
+    exactFields(attempt, ['id', 'startedAt', 'startSnapshot']);
+    if (!Number.isSafeInteger(attempt.startedAt) || attempt.startedAt < 0) fail('invalidAttempt');
+    return {
+        id: identity(attempt.id),
+        startedAt: attempt.startedAt,
+        startSnapshot: validateRundownPlan(attempt.startSnapshot),
+    };
+}
+
+function nextRevision(value) {
+    if (!Number.isSafeInteger(value) || value >= Number.MAX_SAFE_INTEGER) fail('invalidRevision');
+    return value + 1;
+}
+
+export function validatePlannedExecution(execution) {
+    return validateExecution(execution, EXECUTION_LIFECYCLES.PLANNED, absentAttempt);
+}
+
+export function validateReadyExecution(execution) {
+    return validateExecution(execution, EXECUTION_LIFECYCLES.ACTIVE, absentAttempt);
+}
+
+export function validateStartedExecution(execution) {
+    return validateExecution(execution, EXECUTION_LIFECYCLES.ACTIVE, validateAttempt);
 }
 
 export function createPlannedExecution(template, executionId = crypto.randomUUID()) {
@@ -206,5 +239,31 @@ export function createPlannedExecution(template, executionId = crypto.randomUUID
         currentPlan: validTemplate.plan,
         workshopNotes: { rundown: '', phases: [] },
         attempt: null,
+    });
+}
+
+export function activatePlannedExecution(execution) {
+    const planned = validatePlannedExecution(execution);
+    return validateReadyExecution({
+        ...planned,
+        revision: nextRevision(planned.revision),
+        runtimeRevision: nextRevision(planned.runtimeRevision),
+        lifecycle: EXECUTION_LIFECYCLES.ACTIVE,
+    });
+}
+
+export function startActiveExecution(execution, attemptId, startedAt) {
+    if (execution?.lifecycle !== EXECUTION_LIFECYCLES.ACTIVE) fail('invalidLifecycle');
+    if (execution.attempt !== null) return validateStartedExecution(execution);
+    const ready = validateReadyExecution(execution);
+    return validateStartedExecution({
+        ...ready,
+        revision: nextRevision(ready.revision),
+        runtimeRevision: nextRevision(ready.runtimeRevision),
+        attempt: {
+            id: attemptId,
+            startedAt,
+            startSnapshot: ready.currentPlan,
+        },
     });
 }

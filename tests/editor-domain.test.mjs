@@ -10,9 +10,13 @@ import {
     MAX_TOTAL_SECONDS,
     PHASE_CATEGORIES,
     RUNDOWN_CATEGORIES,
+    activatePlannedExecution,
     createPlannedExecution,
+    startActiveExecution,
     validatePlannedExecution,
+    validateReadyExecution,
     validateRundownPlan,
+    validateStartedExecution,
     validateTemplate,
 } from '../src/js/editor-domain.mjs';
 
@@ -191,4 +195,67 @@ test('execution creation makes an independent planned copy and never mutates or 
     assert.notEqual(execution.currentPlan, source.plan);
     assert.notEqual(execution.currentPlan.phases[0], source.plan.phases[0]);
     assert.notEqual(execution.currentPlan.phases[0].resources[0], source.plan.phases[0].resources[0]);
+});
+
+test('activation changes a planned execution to active READY without creating an attempt', () => {
+    const planned = createPlannedExecution(template(), 'execution-1');
+    const before = structuredClone(planned);
+    const ready = activatePlannedExecution(planned);
+    assert.equal(ready.lifecycle, 'active');
+    assert.equal(ready.attempt, null);
+    assert.equal(ready.revision, planned.revision + 1);
+    assert.equal(ready.runtimeRevision, planned.runtimeRevision + 1);
+    assert.deepEqual(planned, before);
+    assert.deepEqual(validateReadyExecution(ready), ready);
+    assert.throws(() => validateStartedExecution(ready), /invalidAttempt/);
+});
+
+test('the first actual start creates one deterministic attempt and an isolated planning baseline', () => {
+    const sourceTemplate = template();
+    const templateBefore = structuredClone(sourceTemplate);
+    const ready = activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1'));
+    const readyBefore = structuredClone(ready);
+    const started = startActiveExecution(ready, 'attempt-1', 1_700_000_000_000);
+    assert.equal(started.lifecycle, 'active');
+    assert.equal(started.attempt.id, 'attempt-1');
+    assert.equal(started.attempt.startedAt, 1_700_000_000_000);
+    assert.deepEqual(started.attempt.startSnapshot, ready.currentPlan);
+    assert.notEqual(started.attempt.startSnapshot, started.currentPlan);
+    assert.notEqual(started.attempt.startSnapshot.phases[0], started.currentPlan.phases[0]);
+    assert.equal(started.revision, ready.revision + 1);
+    assert.equal(started.runtimeRevision, ready.runtimeRevision + 1);
+    assert.deepEqual(ready, readyBefore);
+    assert.deepEqual(sourceTemplate, templateBefore);
+    assert.deepEqual(validateStartedExecution(started), started);
+
+    started.currentPlan.name = 'Changed after start';
+    started.currentPlan.phases[0].notes = 'Changed after start';
+    started.currentPlan.phases[0].resources[0].label = 'Changed after start';
+    assert.equal(started.attempt.startSnapshot.name, 'Workshop');
+    assert.equal(started.attempt.startSnapshot.phases[0].notes, '*Welcome* everyone.');
+    assert.equal(started.attempt.startSnapshot.phases[0].resources[0].label, 'Board');
+});
+
+test('later timer starts preserve the original attempt, baseline and revisions', () => {
+    const first = startActiveExecution(
+        activatePlannedExecution(createPlannedExecution(template(), 'execution-1')),
+        'attempt-1',
+        1_700_000_000_000,
+    );
+    const before = structuredClone(first);
+    const second = startActiveExecution(first, 'attempt-2', 1_800_000_000_000);
+    assert.deepEqual(second, before);
+    assert.notEqual(second, first);
+    assert.notEqual(second.attempt, first.attempt);
+    assert.notEqual(second.attempt.startSnapshot, first.attempt.startSnapshot);
+});
+
+test('activation and first start reject invalid lifecycle transitions and attempt inputs', () => {
+    const planned = createPlannedExecution(template(), 'execution-1');
+    const ready = activatePlannedExecution(planned);
+    assert.throws(() => activatePlannedExecution(ready), /invalidLifecycle/);
+    assert.throws(() => startActiveExecution(planned, 'attempt-1', 1000), /invalidLifecycle/);
+    assert.throws(() => startActiveExecution({ ...ready, lifecycle: 'suspended' }, 'attempt-1', 1000), /invalidLifecycle/);
+    assert.throws(() => startActiveExecution(ready, '', 1000), /invalidData/);
+    assert.throws(() => startActiveExecution(ready, 'attempt-1', -1), /invalidAttempt/);
 });
