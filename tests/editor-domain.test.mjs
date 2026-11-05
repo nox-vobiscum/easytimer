@@ -14,6 +14,7 @@ import {
     createPlannedExecution,
     retainCurrentPlan,
     resumeReadyExecution,
+    resumeStartedExecution,
     startActiveExecution,
     suspendStartedExecution,
     suspendReadyExecution,
@@ -502,6 +503,59 @@ test('suspending STARTED rejects READY, other lifecycles and revision overflow',
     }), /invalidRevision/);
     assert.throws(() => suspendStartedExecution({
         ...started,
+        revision: Number.MAX_SAFE_INTEGER,
+        runtimeRevision: Number.MAX_SAFE_INTEGER,
+    }), /invalidRevision/);
+});
+
+test('resuming STARTED preserves attempt, plan and notes while incrementing both revisions', () => {
+    const sourceTemplate = template();
+    const sourceBefore = structuredClone(sourceTemplate);
+    const started = startActiveExecution(
+        activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1')),
+        'attempt-1',
+        1000,
+    );
+    started.currentPlan.name = 'Current execution plan';
+    started.workshopNotes = {
+        rundown: 'Saved observation',
+        phases: [{ phaseId: 'phase-1', text: 'Saved phase observation' }],
+    };
+    const suspended = suspendStartedExecution(started);
+    const before = structuredClone(suspended);
+    const resumed = resumeStartedExecution(suspended);
+    assert.equal(resumed.lifecycle, 'active');
+    assert.equal(resumed.id, suspended.id);
+    assert.deepEqual(resumed.source, suspended.source);
+    assert.deepEqual(resumed.currentPlan, suspended.currentPlan);
+    assert.deepEqual(resumed.workshopNotes, suspended.workshopNotes);
+    assert.deepEqual(resumed.attempt, suspended.attempt);
+    assert.equal(resumed.revision, suspended.revision + 1);
+    assert.equal(resumed.runtimeRevision, suspended.runtimeRevision + 1);
+    assert.deepEqual(validateStartedExecution(resumed), resumed);
+    assert.deepEqual(suspended, before);
+    assert.deepEqual(sourceTemplate, sourceBefore);
+    assert.notEqual(resumed.currentPlan, suspended.currentPlan);
+    assert.notEqual(resumed.workshopNotes, suspended.workshopNotes);
+    assert.notEqual(resumed.attempt, suspended.attempt);
+    assert.notEqual(resumed.attempt.startSnapshot, suspended.attempt.startSnapshot);
+});
+
+test('resuming STARTED rejects READY, active, planned, completed and revision overflow', () => {
+    const planned = createPlannedExecution(template(), 'execution-1');
+    const ready = activatePlannedExecution(planned);
+    const started = startActiveExecution(ready, 'attempt-1', 1000);
+    const suspended = suspendStartedExecution(started);
+    assert.throws(() => resumeStartedExecution({ ...ready, lifecycle: 'suspended' }), /invalidAttempt/);
+    assert.throws(() => resumeStartedExecution(started), /invalidLifecycle/);
+    assert.throws(() => resumeStartedExecution(planned), /invalidLifecycle/);
+    assert.throws(() => resumeStartedExecution({ ...started, lifecycle: 'completed' }), /invalidLifecycle/);
+    assert.throws(() => resumeStartedExecution({
+        ...suspended,
+        revision: Number.MAX_SAFE_INTEGER,
+    }), /invalidRevision/);
+    assert.throws(() => resumeStartedExecution({
+        ...suspended,
         revision: Number.MAX_SAFE_INTEGER,
         runtimeRevision: Number.MAX_SAFE_INTEGER,
     }), /invalidRevision/);

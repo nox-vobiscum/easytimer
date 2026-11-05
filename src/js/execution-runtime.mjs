@@ -1,4 +1,5 @@
 import {
+    resumeStartedExecution,
     suspendStartedExecution,
     validateStartedExecution,
     validateSuspendedStartedExecution,
@@ -82,4 +83,15 @@ export function suspendStartedExecutionWithCheckpoint(execution, checkpoint) {
         runtimeRevision: suspended.runtimeRevision,
     }, suspended);
     return { execution: suspended, checkpoint: rebound };
+}
+
+export function resumeStartedExecutionWithCheckpoint(execution, checkpoint) {
+    const suspended = validateSuspendedStartedExecution(execution);
+    const frozen = validateExecutionRuntimeCheckpoint(checkpoint, suspended);
+    const active = resumeStartedExecution(suspended);
+    const rebound = validateExecutionRuntimeCheckpoint({
+        ...frozen,
+        runtimeRevision: active.runtimeRevision,
+    }, active);
+    return { execution: active, checkpoint: rebound };
 }

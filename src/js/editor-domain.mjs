@@ -322,3 +322,13 @@ export function suspendStartedExecution(execution) {
         lifecycle: EXECUTION_LIFECYCLES.SUSPENDED,
     });
 }
+
+export function resumeStartedExecution(execution) {
+    const suspended = validateSuspendedStartedExecution(execution);
+    return validateStartedExecution({
+        ...suspended,
+        revision: nextRevision(suspended.revision),
+        runtimeRevision: nextRevision(suspended.runtimeRevision),
+        lifecycle: EXECUTION_LIFECYCLES.ACTIVE,
+    });
+}
