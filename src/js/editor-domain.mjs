@@ -230,6 +230,10 @@ export function validateSuspendedReadyExecution(execution) {
     return validateExecution(execution, EXECUTION_LIFECYCLES.SUSPENDED, absentAttempt);
 }
 
+export function validateSuspendedStartedExecution(execution) {
+    return validateExecution(execution, EXECUTION_LIFECYCLES.SUSPENDED, validateAttempt);
+}
+
 export function createPlannedExecution(template, executionId = crypto.randomUUID()) {
     const validTemplate = validateTemplate(template);
     return validatePlannedExecution({
@@ -306,5 +310,15 @@ export function resumeReadyExecution(execution) {
         revision: nextRevision(suspended.revision),
         runtimeRevision: nextRevision(suspended.runtimeRevision),
         lifecycle: EXECUTION_LIFECYCLES.ACTIVE,
+    });
+}
+
+export function suspendStartedExecution(execution) {
+    const started = validateStartedExecution(execution);
+    return validateSuspendedStartedExecution({
+        ...started,
+        revision: nextRevision(started.revision),
+        runtimeRevision: nextRevision(started.runtimeRevision),
+        lifecycle: EXECUTION_LIFECYCLES.SUSPENDED,
     });
 }

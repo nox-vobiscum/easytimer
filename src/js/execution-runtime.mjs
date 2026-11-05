@@ -1,4 +1,8 @@
-import { validateStartedExecution } from './editor-domain.mjs';
+import {
+    suspendStartedExecution,
+    validateStartedExecution,
+    validateSuspendedStartedExecution,
+} from './editor-domain.mjs';
 import { validateRuntime } from './recovery.mjs';
 import { transitionSession } from './session.mjs';
 
@@ -16,7 +20,9 @@ function exactFields(value, fields) {
 }
 
 export function validateExecutionRuntimeCheckpoint(checkpoint, execution) {
-    const started = validateStartedExecution(execution);
+    const started = execution?.lifecycle === 'suspended'
+        ? validateSuspendedStartedExecution(execution)
+        : validateStartedExecution(execution);
     exactFields(checkpoint, [
         'schemaVersion', 'kind', 'executionId', 'attemptId', 'runtimeRevision', 'capturedAt', 'run', 'clock',
     ]);
@@ -65,4 +71,15 @@ export function captureExecutionRuntimeCheckpoint(execution, run, clock, now) {
         run: frozen.run,
         clock: frozen.clock,
     }, started);
+}
+
+export function suspendStartedExecutionWithCheckpoint(execution, checkpoint) {
+    const started = validateStartedExecution(execution);
+    const frozen = validateExecutionRuntimeCheckpoint(checkpoint, started);
+    const suspended = suspendStartedExecution(started);
+    const rebound = validateExecutionRuntimeCheckpoint({
+        ...frozen,
+        runtimeRevision: suspended.runtimeRevision,
+    }, suspended);
+    return { execution: suspended, checkpoint: rebound };
 }

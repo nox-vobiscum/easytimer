@@ -9,6 +9,7 @@ import {
     EXECUTION_RUNTIME_CHECKPOINT_KIND,
     EXECUTION_RUNTIME_CHECKPOINT_SCHEMA_VERSION,
     captureExecutionRuntimeCheckpoint,
+    suspendStartedExecutionWithCheckpoint,
     validateExecutionRuntimeCheckpoint,
 } from '../src/js/execution-runtime.mjs';
 import { prepareSession, transitionSession } from '../src/js/session.mjs';
@@ -208,4 +209,85 @@ test('capturing never changes the attempt, its start snapshot or a later current
     checkpoint.run.phases[0].title = 'Checkpoint-only mutation';
     assert.equal(running.run.phases[0].title, 'Opening');
     assert.deepEqual(execution.attempt, before.attempt);
+});
+
+test('started execution and frozen checkpoint suspend as one consistently rebound result', () => {
+    const execution = startedExecution();
+    execution.currentPlan.name = 'Current execution plan';
+    execution.workshopNotes = {
+        rundown: 'Saved observation',
+        phases: [{ phaseId: 'phase-1', text: 'Saved phase observation' }],
+    };
+    const running = act(runtime(), 'START', 1000);
+    const checkpoint = captureExecutionRuntimeCheckpoint(execution, running.run, running.clock, 21_000);
+    const executionBefore = structuredClone(execution);
+    const checkpointBefore = structuredClone(checkpoint);
+    const result = suspendStartedExecutionWithCheckpoint(execution, checkpoint);
+    assert.equal(result.execution.lifecycle, 'suspended');
+    assert.equal(result.execution.revision, execution.revision + 1);
+    assert.equal(result.execution.runtimeRevision, execution.runtimeRevision + 1);
+    assert.equal(result.checkpoint.runtimeRevision, result.execution.runtimeRevision);
+    assert.equal(result.checkpoint.executionId, execution.id);
+    assert.equal(result.checkpoint.attemptId, execution.attempt.id);
+    assert.equal(result.checkpoint.capturedAt, checkpoint.capturedAt);
+    assert.deepEqual(result.checkpoint.run, checkpoint.run);
+    assert.deepEqual(result.checkpoint.clock, checkpoint.clock);
+    assert.deepEqual(result.execution.currentPlan, execution.currentPlan);
+    assert.deepEqual(result.execution.workshopNotes, execution.workshopNotes);
+    assert.deepEqual(result.execution.attempt, execution.attempt);
+    assert.deepEqual(validateExecutionRuntimeCheckpoint(result.checkpoint, result.execution), result.checkpoint);
+    assert.deepEqual(execution, executionBefore);
+    assert.deepEqual(checkpoint, checkpointBefore);
+    assert.notEqual(result.execution.currentPlan, execution.currentPlan);
+    assert.notEqual(result.execution.workshopNotes, execution.workshopNotes);
+    assert.notEqual(result.execution.attempt, execution.attempt);
+    assert.notEqual(result.execution.attempt.startSnapshot, execution.attempt.startSnapshot);
+    assert.notEqual(result.checkpoint.run, checkpoint.run);
+    assert.notEqual(result.checkpoint.clock, checkpoint.clock);
+});
+
+test('suspending with a checkpoint preserves every supported frozen clock status', () => {
+    const execution = startedExecution();
+    const started = act(runtime(), 'START', 1000);
+    const paused = act(started, 'PAUSE', 11_000);
+    const overtimePaused = act(started, 'PAUSE', 66_000);
+    let stopped = act(runtime(), 'NEXT', 1000);
+    stopped = act(stopped, 'NEXT', 1000);
+    stopped = act(stopped, 'COMPLETE', 2000);
+    stopped = act(stopped, 'STOP_OVERTIME', 7000);
+    const ready = act(started, 'NEXT', 21_000);
+    for (const [state, now, status] of [
+        [ready, 21_000, 'READY'],
+        [paused, 11_000, 'PAUSED'],
+        [overtimePaused, 66_000, 'OVERTIME_PAUSED'],
+        [stopped, 7000, 'OVERTIME_STOPPED'],
+    ]) {
+        const checkpoint = captureExecutionRuntimeCheckpoint(execution, state.run, state.clock, now);
+        const result = suspendStartedExecutionWithCheckpoint(execution, checkpoint);
+        assert.equal(result.checkpoint.clock.status, status);
+        assert.deepEqual(result.checkpoint.run, checkpoint.run);
+        assert.deepEqual(result.checkpoint.clock, checkpoint.clock);
+    }
+});
+
+test('suspending with a checkpoint rejects stale, foreign and invalid execution inputs', () => {
+    const execution = startedExecution();
+    const running = act(runtime(), 'START', 1000);
+    const checkpoint = captureExecutionRuntimeCheckpoint(execution, running.run, running.clock, 21_000);
+    for (const change of [
+        value => { value.runtimeRevision -= 1; },
+        value => { value.executionId = 'foreign-execution'; },
+        value => { value.attemptId = 'foreign-attempt'; },
+    ]) {
+        const invalid = structuredClone(checkpoint);
+        change(invalid);
+        assert.throws(() => suspendStartedExecutionWithCheckpoint(execution, invalid), /invalidCheckpointBinding/);
+    }
+    const ready = activatePlannedExecution(createPlannedExecution(template(), 'ready-execution'));
+    assert.throws(() => suspendStartedExecutionWithCheckpoint(ready, checkpoint), /invalidAttempt/);
+    assert.throws(() => suspendStartedExecutionWithCheckpoint({ ...execution, lifecycle: 'planned' }, checkpoint), /invalidLifecycle/);
+    assert.throws(() => suspendStartedExecutionWithCheckpoint({
+        ...execution,
+        revision: Number.MAX_SAFE_INTEGER,
+    }, checkpoint), /invalidRevision/);
 });

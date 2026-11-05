@@ -15,12 +15,14 @@ import {
     retainCurrentPlan,
     resumeReadyExecution,
     startActiveExecution,
+    suspendStartedExecution,
     suspendReadyExecution,
     validatePlannedExecution,
     validateReadyExecution,
     validateRundownPlan,
     validateStartedExecution,
     validateSuspendedReadyExecution,
+    validateSuspendedStartedExecution,
     validateTemplate,
 } from '../src/js/editor-domain.mjs';
 
@@ -453,4 +455,54 @@ test('the first actual start after resuming READY creates one new isolated attem
     assert.notEqual(started.attempt.startSnapshot, started.currentPlan);
     assert.notEqual(started.attempt.startSnapshot.phases[0], started.currentPlan.phases[0]);
     assert.deepEqual(startActiveExecution(started, 'attempt-2', 3000), started);
+});
+
+test('suspending STARTED preserves attempt, plan and notes while incrementing both revisions', () => {
+    const sourceTemplate = template();
+    const sourceBefore = structuredClone(sourceTemplate);
+    const started = startActiveExecution(
+        activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1')),
+        'attempt-1',
+        1000,
+    );
+    started.currentPlan.name = 'Current execution plan';
+    started.workshopNotes = {
+        rundown: 'Saved observation',
+        phases: [{ phaseId: 'phase-1', text: 'Saved phase observation' }],
+    };
+    const before = structuredClone(started);
+    const suspended = suspendStartedExecution(started);
+    assert.equal(suspended.lifecycle, 'suspended');
+    assert.equal(suspended.id, started.id);
+    assert.deepEqual(suspended.source, started.source);
+    assert.deepEqual(suspended.currentPlan, started.currentPlan);
+    assert.deepEqual(suspended.workshopNotes, started.workshopNotes);
+    assert.deepEqual(suspended.attempt, started.attempt);
+    assert.equal(suspended.revision, started.revision + 1);
+    assert.equal(suspended.runtimeRevision, started.runtimeRevision + 1);
+    assert.deepEqual(validateSuspendedStartedExecution(suspended), suspended);
+    assert.deepEqual(started, before);
+    assert.deepEqual(sourceTemplate, sourceBefore);
+    assert.notEqual(suspended.currentPlan, started.currentPlan);
+    assert.notEqual(suspended.workshopNotes, started.workshopNotes);
+    assert.notEqual(suspended.attempt, started.attempt);
+    assert.notEqual(suspended.attempt.startSnapshot, started.attempt.startSnapshot);
+});
+
+test('suspending STARTED rejects READY, other lifecycles and revision overflow', () => {
+    const planned = createPlannedExecution(template(), 'execution-1');
+    const ready = activatePlannedExecution(planned);
+    const started = startActiveExecution(ready, 'attempt-1', 1000);
+    assert.throws(() => suspendStartedExecution(ready), /invalidAttempt/);
+    assert.throws(() => suspendStartedExecution(planned), /invalidLifecycle/);
+    assert.throws(() => suspendStartedExecution({ ...started, lifecycle: 'suspended' }), /invalidLifecycle/);
+    assert.throws(() => suspendStartedExecution({
+        ...started,
+        revision: Number.MAX_SAFE_INTEGER,
+    }), /invalidRevision/);
+    assert.throws(() => suspendStartedExecution({
+        ...started,
+        revision: Number.MAX_SAFE_INTEGER,
+        runtimeRevision: Number.MAX_SAFE_INTEGER,
+    }), /invalidRevision/);
 });
