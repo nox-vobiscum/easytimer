@@ -14,10 +14,12 @@ import {
     createPlannedExecution,
     retainCurrentPlan,
     startActiveExecution,
+    suspendReadyExecution,
     validatePlannedExecution,
     validateReadyExecution,
     validateRundownPlan,
     validateStartedExecution,
+    validateSuspendedReadyExecution,
     validateTemplate,
 } from '../src/js/editor-domain.mjs';
 
@@ -337,4 +339,55 @@ test('retaining the current plan rejects non-active lifecycle states', () => {
     for (const lifecycle of ['suspended', 'completed']) {
         assert.throws(() => retainCurrentPlan({ ...planned, lifecycle }), /invalidLifecycle/);
     }
+});
+
+test('suspending READY preserves its plan, identity, source and all saved workshop notes', () => {
+    const sourceTemplate = template();
+    const templateBefore = structuredClone(sourceTemplate);
+    const ready = activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1'));
+    ready.currentPlan.name = 'Prepared individual execution';
+    ready.currentPlan.phases[0].notes = 'Prepared execution-only information';
+    ready.workshopNotes = {
+        rundown: 'Saved rundown observation',
+        phases: [
+            { phaseId: 'phase-1', text: 'Saved opening observation' },
+            { phaseId: 'phase-2', text: 'Saved discussion observation' },
+        ],
+    };
+    const before = structuredClone(ready);
+    const suspended = suspendReadyExecution(ready);
+    assert.equal(suspended.lifecycle, 'suspended');
+    assert.equal(suspended.attempt, null);
+    assert.equal(suspended.id, ready.id);
+    assert.deepEqual(suspended.source, ready.source);
+    assert.deepEqual(suspended.currentPlan, ready.currentPlan);
+    assert.deepEqual(suspended.workshopNotes, ready.workshopNotes);
+    assert.equal(suspended.revision, ready.revision + 1);
+    assert.equal(suspended.runtimeRevision, ready.runtimeRevision + 1);
+    assert.deepEqual(validateSuspendedReadyExecution(suspended), suspended);
+    assert.deepEqual(ready, before);
+    assert.deepEqual(sourceTemplate, templateBefore);
+    assert.notEqual(suspended.source, ready.source);
+    assert.notEqual(suspended.currentPlan, ready.currentPlan);
+    assert.notEqual(suspended.currentPlan.phases[0], ready.currentPlan.phases[0]);
+    assert.notEqual(suspended.workshopNotes, ready.workshopNotes);
+    assert.notEqual(suspended.workshopNotes.phases[0], ready.workshopNotes.phases[0]);
+});
+
+test('suspending READY rejects planned, completed and already-started executions', () => {
+    const planned = createPlannedExecution(template(), 'execution-1');
+    const ready = activatePlannedExecution(planned);
+    const started = startActiveExecution(ready, 'attempt-1', 1000);
+    assert.throws(() => suspendReadyExecution(planned), /invalidLifecycle/);
+    assert.throws(() => suspendReadyExecution({ ...planned, lifecycle: 'completed' }), /invalidLifecycle/);
+    assert.throws(() => suspendReadyExecution(started), /invalidAttempt/);
+});
+
+test('suspending READY validates workshop note references instead of retaining invalid data', () => {
+    const ready = activatePlannedExecution(createPlannedExecution(template(), 'execution-1'));
+    ready.workshopNotes = {
+        rundown: 'Valid rundown note',
+        phases: [{ phaseId: 'missing-phase', text: 'Invalid phase note' }],
+    };
+    assert.throws(() => suspendReadyExecution(ready), /invalidNotes/);
 });

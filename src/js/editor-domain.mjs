@@ -226,6 +226,10 @@ export function validateStartedExecution(execution) {
     return validateExecution(execution, EXECUTION_LIFECYCLES.ACTIVE, validateAttempt);
 }
 
+export function validateSuspendedReadyExecution(execution) {
+    return validateExecution(execution, EXECUTION_LIFECYCLES.SUSPENDED, absentAttempt);
+}
+
 export function createPlannedExecution(template, executionId = crypto.randomUUID()) {
     const validTemplate = validateTemplate(template);
     return validatePlannedExecution({
@@ -280,5 +284,16 @@ export function retainCurrentPlan(execution) {
         lifecycle: EXECUTION_LIFECYCLES.PLANNED,
         workshopNotes: { rundown: '', phases: [] },
         attempt: null,
+    });
+}
+
+export function suspendReadyExecution(execution) {
+    if (execution?.lifecycle !== EXECUTION_LIFECYCLES.ACTIVE) fail('invalidLifecycle');
+    const ready = validateReadyExecution(execution);
+    return validateSuspendedReadyExecution({
+        ...ready,
+        revision: nextRevision(ready.revision),
+        runtimeRevision: nextRevision(ready.runtimeRevision),
+        lifecycle: EXECUTION_LIFECYCLES.SUSPENDED,
     });
 }
