@@ -267,3 +267,18 @@ export function startActiveExecution(execution, attemptId, startedAt) {
         },
     });
 }
+
+export function retainCurrentPlan(execution) {
+    if (execution?.lifecycle !== EXECUTION_LIFECYCLES.ACTIVE) fail('invalidLifecycle');
+    const active = execution.attempt === null
+        ? validateReadyExecution(execution)
+        : validateStartedExecution(execution);
+    return validatePlannedExecution({
+        ...active,
+        revision: nextRevision(active.revision),
+        runtimeRevision: nextRevision(active.runtimeRevision),
+        lifecycle: EXECUTION_LIFECYCLES.PLANNED,
+        workshopNotes: { rundown: '', phases: [] },
+        attempt: null,
+    });
+}

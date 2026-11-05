@@ -12,6 +12,7 @@ import {
     RUNDOWN_CATEGORIES,
     activatePlannedExecution,
     createPlannedExecution,
+    retainCurrentPlan,
     startActiveExecution,
     validatePlannedExecution,
     validateReadyExecution,
@@ -258,4 +259,82 @@ test('activation and first start reject invalid lifecycle transitions and attemp
     assert.throws(() => startActiveExecution({ ...ready, lifecycle: 'suspended' }, 'attempt-1', 1000), /invalidLifecycle/);
     assert.throws(() => startActiveExecution(ready, '', 1000), /invalidData/);
     assert.throws(() => startActiveExecution(ready, 'attempt-1', -1), /invalidAttempt/);
+});
+
+test('retaining a READY execution keeps its current plan and identity while clearing workshop notes', () => {
+    const sourceTemplate = template();
+    const templateBefore = structuredClone(sourceTemplate);
+    const ready = activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1'));
+    ready.currentPlan.name = 'Latest workshop plan';
+    ready.currentPlan.phases[0].notes = 'Latest prepared note';
+    ready.workshopNotes = {
+        rundown: 'Discard this run note',
+        phases: [{ phaseId: 'phase-1', text: 'Discard this phase note' }],
+    };
+    const before = structuredClone(ready);
+    const planned = retainCurrentPlan(ready);
+    assert.equal(planned.lifecycle, 'planned');
+    assert.equal(planned.attempt, null);
+    assert.equal(planned.id, ready.id);
+    assert.deepEqual(planned.source, ready.source);
+    assert.equal(planned.currentPlan.name, 'Latest workshop plan');
+    assert.equal(planned.currentPlan.phases[0].notes, 'Latest prepared note');
+    assert.deepEqual(planned.workshopNotes, { rundown: '', phases: [] });
+    assert.equal(planned.revision, ready.revision + 1);
+    assert.equal(planned.runtimeRevision, ready.runtimeRevision + 1);
+    assert.deepEqual(ready, before);
+    assert.deepEqual(sourceTemplate, templateBefore);
+    assert.notEqual(planned.source, ready.source);
+    assert.notEqual(planned.currentPlan, ready.currentPlan);
+    assert.notEqual(planned.currentPlan.phases[0], ready.currentPlan.phases[0]);
+});
+
+test('retaining a started execution discards its attempt but never restores its baseline or template plan', () => {
+    const sourceTemplate = template();
+    const started = startActiveExecution(
+        activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1')),
+        'attempt-1',
+        1_700_000_000_000,
+    );
+    started.currentPlan.name = 'Adapted during workshop';
+    started.currentPlan.phases[0].durationSeconds = 900;
+    started.currentPlan.phases[0].resources.push({ label: 'New board', url: 'https://example.test/new' });
+    started.workshopNotes = {
+        rundown: 'Discarded observation',
+        phases: [{ phaseId: 'phase-2', text: 'Discarded discussion note' }],
+    };
+    const before = structuredClone(started);
+    const planned = retainCurrentPlan(started);
+    assert.equal(planned.attempt, null);
+    assert.equal(planned.currentPlan.name, 'Adapted during workshop');
+    assert.equal(planned.currentPlan.phases[0].durationSeconds, 900);
+    assert.equal(planned.currentPlan.phases[0].resources.at(-1).label, 'New board');
+    assert.notEqual(planned.currentPlan.name, before.attempt.startSnapshot.name);
+    assert.notEqual(planned.currentPlan.phases[0].durationSeconds, before.attempt.startSnapshot.phases[0].durationSeconds);
+    assert.notEqual(planned.currentPlan.name, sourceTemplate.plan.name.trim());
+    assert.deepEqual(planned.workshopNotes, { rundown: '', phases: [] });
+    assert.deepEqual(started, before);
+});
+
+test('a retained plan can be activated and started later with a fresh attempt and baseline', () => {
+    const first = startActiveExecution(
+        activatePlannedExecution(createPlannedExecution(template(), 'execution-1')),
+        'attempt-1',
+        1000,
+    );
+    first.currentPlan.name = 'Plan for the next attempt';
+    const retained = retainCurrentPlan(first);
+    const second = startActiveExecution(activatePlannedExecution(retained), 'attempt-2', 2000);
+    assert.equal(second.attempt.id, 'attempt-2');
+    assert.equal(second.attempt.startedAt, 2000);
+    assert.equal(second.attempt.startSnapshot.name, 'Plan for the next attempt');
+    assert.notDeepEqual(second.attempt.startSnapshot, first.attempt.startSnapshot);
+});
+
+test('retaining the current plan rejects non-active lifecycle states', () => {
+    const planned = createPlannedExecution(template(), 'execution-1');
+    assert.throws(() => retainCurrentPlan(planned), /invalidLifecycle/);
+    for (const lifecycle of ['suspended', 'completed']) {
+        assert.throws(() => retainCurrentPlan({ ...planned, lifecycle }), /invalidLifecycle/);
+    }
 });
