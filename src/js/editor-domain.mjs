@@ -200,11 +200,12 @@ const absentAttempt = attempt => {
 
 function validateAttempt(attempt) {
     if (!isObject(attempt)) fail('invalidAttempt');
-    exactFields(attempt, ['id', 'startedAt', 'startSnapshot']);
+    exactFields(attempt, ['id', 'startedAt', 'runtimeRunId', 'startSnapshot']);
     if (!Number.isSafeInteger(attempt.startedAt) || attempt.startedAt < 0) fail('invalidAttempt');
     return {
         id: identity(attempt.id),
         startedAt: attempt.startedAt,
+        runtimeRunId: identity(attempt.runtimeRunId),
         startSnapshot: validateRundownPlan(attempt.startSnapshot),
     };
 }
@@ -260,9 +261,13 @@ export function activatePlannedExecution(execution) {
     });
 }
 
-export function startActiveExecution(execution, attemptId, startedAt) {
+export function startActiveExecution(execution, attemptId, startedAt, runtimeRunId) {
     if (execution?.lifecycle !== EXECUTION_LIFECYCLES.ACTIVE) fail('invalidLifecycle');
-    if (execution.attempt !== null) return validateStartedExecution(execution);
+    if (execution.attempt !== null) {
+        const started = validateStartedExecution(execution);
+        if (identity(runtimeRunId) !== started.attempt.runtimeRunId) fail('invalidAttemptBinding');
+        return started;
+    }
     const ready = validateReadyExecution(execution);
     return validateStartedExecution({
         ...ready,
@@ -271,6 +276,7 @@ export function startActiveExecution(execution, attemptId, startedAt) {
         attempt: {
             id: attemptId,
             startedAt,
+            runtimeRunId,
             startSnapshot: ready.currentPlan,
         },
     });

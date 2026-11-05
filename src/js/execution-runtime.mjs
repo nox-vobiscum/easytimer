@@ -31,7 +31,8 @@ export function validateExecutionRuntimeCheckpoint(checkpoint, execution) {
         || checkpoint.kind !== EXECUTION_RUNTIME_CHECKPOINT_KIND
         || checkpoint.executionId !== started.id
         || checkpoint.attemptId !== started.attempt.id
-        || checkpoint.runtimeRevision !== started.runtimeRevision) fail('invalidCheckpointBinding');
+        || checkpoint.runtimeRevision !== started.runtimeRevision
+        || checkpoint.run?.runId !== started.attempt.runtimeRunId) fail('invalidCheckpointBinding');
     const runtime = validateRuntime({
         schemaVersion: 1,
         contextId: CHECKPOINT_CONTEXT_ID,

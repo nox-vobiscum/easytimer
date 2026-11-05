@@ -37,6 +37,7 @@ const startedExecution = (transitionMode = 'manual') => startActiveExecution(
     activatePlannedExecution(createPlannedExecution(template(transitionMode), 'execution-1')),
     'attempt-1',
     1000,
+    'runtime-run-distinct-from-domain-ids',
 );
 
 const runtimeTemplate = transitionMode => ({
@@ -152,6 +153,33 @@ test('checkpoint validation rejects invalid execution, bindings and runtime data
     const invalidRuntime = structuredClone(checkpoint);
     invalidRuntime.clock.durationMs = 120_000;
     assert.throws(() => validateExecutionRuntimeCheckpoint(invalidRuntime, execution), /INVALID_SESSION_CLOCK/);
+});
+
+test('executions from the same template remain bound to their own runtime runs', () => {
+    const first = startedExecution();
+    const second = startActiveExecution(
+        activatePlannedExecution(createPlannedExecution(template(), 'execution-2')),
+        'attempt-2',
+        2000,
+        'runtime-run-2',
+    );
+    const firstState = act(runtime('manual', 'runtime-run-distinct-from-domain-ids'), 'START', 1000);
+    const secondState = act(runtime('manual', 'runtime-run-2'), 'START', 2000);
+    const firstCheckpoint = captureExecutionRuntimeCheckpoint(first, firstState.run, firstState.clock, 21_000);
+    const secondCheckpoint = captureExecutionRuntimeCheckpoint(second, secondState.run, secondState.clock, 22_000);
+    assert.equal(first.source.id, second.source.id);
+    assert.equal(firstCheckpoint.run.sourceTemplateId, secondCheckpoint.run.sourceTemplateId);
+    assert.notEqual(firstCheckpoint.run.runId, secondCheckpoint.run.runId);
+    assert.throws(
+        () => captureExecutionRuntimeCheckpoint(first, secondState.run, secondState.clock, 22_000),
+        /invalidCheckpointBinding/,
+    );
+    assert.throws(() => validateExecutionRuntimeCheckpoint({
+        ...firstCheckpoint,
+        run: secondCheckpoint.run,
+        clock: secondCheckpoint.clock,
+        capturedAt: secondCheckpoint.capturedAt,
+    }, first), /invalidCheckpointBinding/);
 });
 
 test('checkpoint validation rejects otherwise consistent running and finished clocks', () => {

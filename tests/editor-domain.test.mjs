@@ -222,10 +222,11 @@ test('the first actual start creates one deterministic attempt and an isolated p
     const templateBefore = structuredClone(sourceTemplate);
     const ready = activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1'));
     const readyBefore = structuredClone(ready);
-    const started = startActiveExecution(ready, 'attempt-1', 1_700_000_000_000);
+    const started = startActiveExecution(ready, 'attempt-1', 1_700_000_000_000, 'runtime-run-1');
     assert.equal(started.lifecycle, 'active');
     assert.equal(started.attempt.id, 'attempt-1');
     assert.equal(started.attempt.startedAt, 1_700_000_000_000);
+    assert.equal(started.attempt.runtimeRunId, 'runtime-run-1');
     assert.deepEqual(started.attempt.startSnapshot, ready.currentPlan);
     assert.notEqual(started.attempt.startSnapshot, started.currentPlan);
     assert.notEqual(started.attempt.startSnapshot.phases[0], started.currentPlan.phases[0]);
@@ -248,23 +249,45 @@ test('later timer starts preserve the original attempt, baseline and revisions',
         activatePlannedExecution(createPlannedExecution(template(), 'execution-1')),
         'attempt-1',
         1_700_000_000_000,
+        'runtime-run-1',
     );
     const before = structuredClone(first);
-    const second = startActiveExecution(first, 'attempt-2', 1_800_000_000_000);
+    const second = startActiveExecution(first, 'attempt-2', 1_800_000_000_000, 'runtime-run-1');
     assert.deepEqual(second, before);
     assert.notEqual(second, first);
     assert.notEqual(second.attempt, first.attempt);
     assert.notEqual(second.attempt.startSnapshot, first.attempt.startSnapshot);
 });
 
+test('attempt validation requires a non-empty immutable runtime run binding', () => {
+    const started = startActiveExecution(
+        activatePlannedExecution(createPlannedExecution(template(), 'execution-1')),
+        'attempt-1',
+        1000,
+        'runtime-run-1',
+    );
+    for (const runtimeRunId of [undefined, '', '   ', null, 7]) {
+        const invalid = structuredClone(started);
+        if (runtimeRunId === undefined) delete invalid.attempt.runtimeRunId;
+        else invalid.attempt.runtimeRunId = runtimeRunId;
+        assert.throws(() => validateStartedExecution(invalid), /invalidData/);
+    }
+    assert.deepEqual(startActiveExecution(started, 'ignored-attempt', 2000, 'runtime-run-1'), started);
+    assert.throws(
+        () => startActiveExecution(started, 'ignored-attempt', 2000, 'runtime-run-2'),
+        /invalidAttemptBinding/,
+    );
+});
+
 test('activation and first start reject invalid lifecycle transitions and attempt inputs', () => {
     const planned = createPlannedExecution(template(), 'execution-1');
     const ready = activatePlannedExecution(planned);
     assert.throws(() => activatePlannedExecution(ready), /invalidLifecycle/);
-    assert.throws(() => startActiveExecution(planned, 'attempt-1', 1000), /invalidLifecycle/);
-    assert.throws(() => startActiveExecution({ ...ready, lifecycle: 'suspended' }, 'attempt-1', 1000), /invalidLifecycle/);
-    assert.throws(() => startActiveExecution(ready, '', 1000), /invalidData/);
-    assert.throws(() => startActiveExecution(ready, 'attempt-1', -1), /invalidAttempt/);
+    assert.throws(() => startActiveExecution(planned, 'attempt-1', 1000, 'runtime-run-1'), /invalidLifecycle/);
+    assert.throws(() => startActiveExecution({ ...ready, lifecycle: 'suspended' }, 'attempt-1', 1000, 'runtime-run-1'), /invalidLifecycle/);
+    assert.throws(() => startActiveExecution(ready, '', 1000, 'runtime-run-1'), /invalidData/);
+    assert.throws(() => startActiveExecution(ready, 'attempt-1', -1, 'runtime-run-1'), /invalidAttempt/);
+    assert.throws(() => startActiveExecution(ready, 'attempt-1', 1000, ''), /invalidData/);
 });
 
 test('retaining a READY execution keeps its current plan and identity while clearing workshop notes', () => {
@@ -301,6 +324,7 @@ test('retaining a started execution discards its attempt but never restores its 
         activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1')),
         'attempt-1',
         1_700_000_000_000,
+        'runtime-run-1',
     );
     started.currentPlan.name = 'Adapted during workshop';
     started.currentPlan.phases[0].durationSeconds = 900;
@@ -327,14 +351,17 @@ test('a retained plan can be activated and started later with a fresh attempt an
         activatePlannedExecution(createPlannedExecution(template(), 'execution-1')),
         'attempt-1',
         1000,
+        'runtime-run-1',
     );
     first.currentPlan.name = 'Plan for the next attempt';
     const retained = retainCurrentPlan(first);
-    const second = startActiveExecution(activatePlannedExecution(retained), 'attempt-2', 2000);
+    const second = startActiveExecution(activatePlannedExecution(retained), 'attempt-2', 2000, 'runtime-run-2');
     assert.equal(second.attempt.id, 'attempt-2');
     assert.equal(second.attempt.startedAt, 2000);
+    assert.equal(second.attempt.runtimeRunId, 'runtime-run-2');
     assert.equal(second.attempt.startSnapshot.name, 'Plan for the next attempt');
     assert.notDeepEqual(second.attempt.startSnapshot, first.attempt.startSnapshot);
+    assert.equal(retained.attempt, null);
 });
 
 test('retaining the current plan rejects non-active lifecycle states', () => {
@@ -381,7 +408,7 @@ test('suspending READY preserves its plan, identity, source and all saved worksh
 test('suspending READY rejects planned, completed and already-started executions', () => {
     const planned = createPlannedExecution(template(), 'execution-1');
     const ready = activatePlannedExecution(planned);
-    const started = startActiveExecution(ready, 'attempt-1', 1000);
+    const started = startActiveExecution(ready, 'attempt-1', 1000, 'runtime-run-1');
     assert.throws(() => suspendReadyExecution(planned), /invalidLifecycle/);
     assert.throws(() => suspendReadyExecution({ ...planned, lifecycle: 'completed' }), /invalidLifecycle/);
     assert.throws(() => suspendReadyExecution(started), /invalidAttempt/);
@@ -433,7 +460,7 @@ test('resuming suspended READY preserves its plan, identity, source and all save
 test('resuming READY rejects planned, active, started and contradictory suspended executions', () => {
     const planned = createPlannedExecution(template(), 'execution-1');
     const ready = activatePlannedExecution(planned);
-    const started = startActiveExecution(ready, 'attempt-1', 1000);
+    const started = startActiveExecution(ready, 'attempt-1', 1000, 'runtime-run-1');
     assert.throws(() => resumeReadyExecution(planned), /invalidLifecycle/);
     assert.throws(() => resumeReadyExecution(ready), /invalidLifecycle/);
     assert.throws(() => resumeReadyExecution(started), /invalidLifecycle/);
@@ -449,13 +476,14 @@ test('the first actual start after resuming READY creates one new isolated attem
     const suspended = suspendReadyExecution(ready);
     suspended.currentPlan.name = 'Plan resumed before first start';
     const resumed = resumeReadyExecution(suspended);
-    const started = startActiveExecution(resumed, 'attempt-1', 2000);
+    const started = startActiveExecution(resumed, 'attempt-1', 2000, 'runtime-run-1');
     assert.equal(started.attempt.id, 'attempt-1');
     assert.equal(started.attempt.startedAt, 2000);
     assert.deepEqual(started.attempt.startSnapshot, resumed.currentPlan);
     assert.notEqual(started.attempt.startSnapshot, started.currentPlan);
     assert.notEqual(started.attempt.startSnapshot.phases[0], started.currentPlan.phases[0]);
-    assert.deepEqual(startActiveExecution(started, 'attempt-2', 3000), started);
+    assert.deepEqual(startActiveExecution(started, 'attempt-2', 3000, 'runtime-run-1'), started);
+    assert.throws(() => startActiveExecution(started, 'attempt-2', 3000, 'runtime-run-2'), /invalidAttemptBinding/);
 });
 
 test('suspending STARTED preserves attempt, plan and notes while incrementing both revisions', () => {
@@ -465,6 +493,7 @@ test('suspending STARTED preserves attempt, plan and notes while incrementing bo
         activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1')),
         'attempt-1',
         1000,
+        'runtime-run-1',
     );
     started.currentPlan.name = 'Current execution plan';
     started.workshopNotes = {
@@ -493,7 +522,7 @@ test('suspending STARTED preserves attempt, plan and notes while incrementing bo
 test('suspending STARTED rejects READY, other lifecycles and revision overflow', () => {
     const planned = createPlannedExecution(template(), 'execution-1');
     const ready = activatePlannedExecution(planned);
-    const started = startActiveExecution(ready, 'attempt-1', 1000);
+    const started = startActiveExecution(ready, 'attempt-1', 1000, 'runtime-run-1');
     assert.throws(() => suspendStartedExecution(ready), /invalidAttempt/);
     assert.throws(() => suspendStartedExecution(planned), /invalidLifecycle/);
     assert.throws(() => suspendStartedExecution({ ...started, lifecycle: 'suspended' }), /invalidLifecycle/);
@@ -515,6 +544,7 @@ test('resuming STARTED preserves attempt, plan and notes while incrementing both
         activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1')),
         'attempt-1',
         1000,
+        'runtime-run-1',
     );
     started.currentPlan.name = 'Current execution plan';
     started.workshopNotes = {
@@ -544,7 +574,7 @@ test('resuming STARTED preserves attempt, plan and notes while incrementing both
 test('resuming STARTED rejects READY, active, planned, completed and revision overflow', () => {
     const planned = createPlannedExecution(template(), 'execution-1');
     const ready = activatePlannedExecution(planned);
-    const started = startActiveExecution(ready, 'attempt-1', 1000);
+    const started = startActiveExecution(ready, 'attempt-1', 1000, 'runtime-run-1');
     const suspended = suspendStartedExecution(started);
     assert.throws(() => resumeStartedExecution({ ...ready, lifecycle: 'suspended' }), /invalidAttempt/);
     assert.throws(() => resumeStartedExecution(started), /invalidLifecycle/);
