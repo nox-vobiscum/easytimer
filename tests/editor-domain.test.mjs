@@ -13,6 +13,7 @@ import {
     activatePlannedExecution,
     createPlannedExecution,
     retainCurrentPlan,
+    resumeReadyExecution,
     startActiveExecution,
     suspendReadyExecution,
     validatePlannedExecution,
@@ -390,4 +391,66 @@ test('suspending READY validates workshop note references instead of retaining i
         phases: [{ phaseId: 'missing-phase', text: 'Invalid phase note' }],
     };
     assert.throws(() => suspendReadyExecution(ready), /invalidNotes/);
+});
+
+test('resuming suspended READY preserves its plan, identity, source and all saved workshop notes', () => {
+    const sourceTemplate = template();
+    const templateBefore = structuredClone(sourceTemplate);
+    const ready = activatePlannedExecution(createPlannedExecution(sourceTemplate, 'execution-1'));
+    ready.currentPlan.name = 'Prepared individual execution';
+    ready.currentPlan.phases[0].notes = 'Prepared execution-only information';
+    ready.workshopNotes = {
+        rundown: 'Saved rundown observation',
+        phases: [
+            { phaseId: 'phase-1', text: 'Saved opening observation' },
+            { phaseId: 'phase-2', text: 'Saved discussion observation' },
+        ],
+    };
+    const suspended = suspendReadyExecution(ready);
+    const before = structuredClone(suspended);
+    const resumed = resumeReadyExecution(suspended);
+    assert.equal(resumed.lifecycle, 'active');
+    assert.equal(resumed.attempt, null);
+    assert.equal(resumed.id, suspended.id);
+    assert.deepEqual(resumed.source, suspended.source);
+    assert.deepEqual(resumed.currentPlan, suspended.currentPlan);
+    assert.deepEqual(resumed.workshopNotes, suspended.workshopNotes);
+    assert.equal(resumed.revision, suspended.revision + 1);
+    assert.equal(resumed.runtimeRevision, suspended.runtimeRevision + 1);
+    assert.deepEqual(validateReadyExecution(resumed), resumed);
+    assert.deepEqual(suspended, before);
+    assert.deepEqual(sourceTemplate, templateBefore);
+    assert.notEqual(resumed.source, suspended.source);
+    assert.notEqual(resumed.currentPlan, suspended.currentPlan);
+    assert.notEqual(resumed.currentPlan.phases[0], suspended.currentPlan.phases[0]);
+    assert.notEqual(resumed.workshopNotes, suspended.workshopNotes);
+    assert.notEqual(resumed.workshopNotes.phases[0], suspended.workshopNotes.phases[0]);
+});
+
+test('resuming READY rejects planned, active, started and contradictory suspended executions', () => {
+    const planned = createPlannedExecution(template(), 'execution-1');
+    const ready = activatePlannedExecution(planned);
+    const started = startActiveExecution(ready, 'attempt-1', 1000);
+    assert.throws(() => resumeReadyExecution(planned), /invalidLifecycle/);
+    assert.throws(() => resumeReadyExecution(ready), /invalidLifecycle/);
+    assert.throws(() => resumeReadyExecution(started), /invalidLifecycle/);
+    assert.throws(() => resumeReadyExecution({ ...started, lifecycle: 'suspended' }), /invalidAttempt/);
+
+    const suspended = suspendReadyExecution(ready);
+    suspended.workshopNotes.phases = [{ phaseId: 'missing-phase', text: 'Invalid phase note' }];
+    assert.throws(() => resumeReadyExecution(suspended), /invalidNotes/);
+});
+
+test('the first actual start after resuming READY creates one new isolated attempt baseline', () => {
+    const ready = activatePlannedExecution(createPlannedExecution(template(), 'execution-1'));
+    const suspended = suspendReadyExecution(ready);
+    suspended.currentPlan.name = 'Plan resumed before first start';
+    const resumed = resumeReadyExecution(suspended);
+    const started = startActiveExecution(resumed, 'attempt-1', 2000);
+    assert.equal(started.attempt.id, 'attempt-1');
+    assert.equal(started.attempt.startedAt, 2000);
+    assert.deepEqual(started.attempt.startSnapshot, resumed.currentPlan);
+    assert.notEqual(started.attempt.startSnapshot, started.currentPlan);
+    assert.notEqual(started.attempt.startSnapshot.phases[0], started.currentPlan.phases[0]);
+    assert.deepEqual(startActiveExecution(started, 'attempt-2', 3000), started);
 });

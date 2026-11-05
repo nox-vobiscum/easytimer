@@ -297,3 +297,14 @@ export function suspendReadyExecution(execution) {
         lifecycle: EXECUTION_LIFECYCLES.SUSPENDED,
     });
 }
+
+export function resumeReadyExecution(execution) {
+    if (execution?.lifecycle !== EXECUTION_LIFECYCLES.SUSPENDED) fail('invalidLifecycle');
+    const suspended = validateSuspendedReadyExecution(execution);
+    return validateReadyExecution({
+        ...suspended,
+        revision: nextRevision(suspended.revision),
+        runtimeRevision: nextRevision(suspended.runtimeRevision),
+        lifecycle: EXECUTION_LIFECYCLES.ACTIVE,
+    });
+}
