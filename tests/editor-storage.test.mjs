@@ -1,0 +1,315 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+    activatePlannedExecution,
+    createPlannedExecution,
+    startActiveExecution,
+    suspendReadyExecution,
+} from '../src/js/editor-domain.mjs';
+import {
+    captureExecutionRuntimeCheckpoint,
+    suspendStartedExecutionWithCheckpoint,
+} from '../src/js/execution-runtime.mjs';
+import {
+    EDITOR_STORAGE_KEY,
+    EDITOR_STORE_SCHEMA_VERSION,
+    createEditorStore,
+    validateEditorStoreRecord,
+} from '../src/js/editor-storage.mjs';
+import { prepareSession, transitionSession } from '../src/js/session.mjs';
+
+const plan = (name = 'Workshop') => ({
+    name,
+    category: 'uncategorized',
+    transitionMode: 'manual',
+    preparedInformation: '',
+    phases: [
+        { id: 'phase-1', title: 'Opening', durationSeconds: 60, category: 'uncategorized', notes: '', resources: [] },
+        { id: 'phase-2', title: 'Discussion', durationSeconds: 120, category: 'uncategorized', notes: '', resources: [] },
+    ],
+});
+
+const template = (id = 'template-1') => ({
+    schemaVersion: 2,
+    kind: 'template',
+    id,
+    revision: 1,
+    plan: plan(`Workshop ${id}`),
+});
+
+const planned = (id = 'execution-1', templateId = 'template-1') =>
+    createPlannedExecution(template(templateId), id);
+const entry = (execution, suspendedCheckpoint = null) => ({ execution, suspendedCheckpoint });
+const record = (changes = {}) => ({
+    schemaVersion: EDITOR_STORE_SCHEMA_VERSION,
+    revision: 0,
+    templates: [],
+    executions: [],
+    activeRuntime: null,
+    ...changes,
+});
+
+function session(runId = 'runtime-run-1') {
+    return prepareSession({
+        id: 'runtime-source',
+        name: 'Runtime workshop',
+        transitionMode: 'manual',
+        phases: plan().phases,
+    }, runId);
+}
+
+function activeRuntime(execution, state, savedAt = 1000) {
+    return {
+        executionId: execution.id,
+        attemptId: execution.attempt?.id ?? null,
+        runtimeRevision: execution.runtimeRevision,
+        savedAt,
+        run: state.run,
+        clock: state.clock,
+    };
+}
+
+function started(id = 'execution-1', runId = 'runtime-run-1') {
+    return startActiveExecution(activatePlannedExecution(planned(id)), `attempt-${id}`, 1000, runId);
+}
+
+function suspendedStarted(id = 'execution-1', runId = `run-${id}`) {
+    const execution = started(id, runId);
+    const running = transitionSession(session(runId).run, session(runId).clock, { type: 'START' }, 1000);
+    const checkpoint = captureExecutionRuntimeCheckpoint(execution, running.run, running.clock, 10_000);
+    return suspendStartedExecutionWithCheckpoint(execution, checkpoint);
+}
+
+function memory(raw = null) {
+    const values = new Map(raw === null ? [] : [[EDITOR_STORAGE_KEY, raw]]);
+    const state = {
+        failRead: false,
+        failWrite: null,
+        readback: undefined,
+        writes: 0,
+    };
+    return {
+        state,
+        values,
+        getItem(key) {
+            if (state.failRead) throw new Error('read failed');
+            if (state.readback !== undefined && state.writes > 0) return state.readback;
+            return values.get(key) ?? null;
+        },
+        setItem(key, value) {
+            if (state.failWrite) {
+                const error = new Error('write failed');
+                error.name = state.failWrite;
+                throw error;
+            }
+            state.writes += 1;
+            values.set(key, value);
+        },
+        removeItem(key) { values.delete(key); },
+    };
+}
+
+test('validates the empty record and multiple templates and planned executions', () => {
+    const source = record({
+        templates: [template('template-1'), template('template-2')],
+        executions: [entry(planned('execution-1')), entry(planned('execution-2', 'template-2'))],
+    });
+    const before = structuredClone(source);
+    const valid = validateEditorStoreRecord(source);
+    assert.deepEqual(source, before);
+    assert.deepEqual(valid, source);
+    assert.notEqual(valid, source);
+    assert.notEqual(valid.templates[0], source.templates[0]);
+    assert.notEqual(valid.executions[0].execution.currentPlan, source.executions[0].execution.currentPlan);
+});
+
+test('accepts multiple suspended ready executions without checkpoints', () => {
+    const executions = [
+        entry(suspendReadyExecution(activatePlannedExecution(planned('execution-1')))),
+        entry(suspendReadyExecution(activatePlannedExecution(planned('execution-2')))),
+    ];
+    assert.deepEqual(validateEditorStoreRecord(record({ executions })).executions, executions);
+});
+
+test('accepts multiple suspended started executions with independently bound checkpoints', () => {
+    const first = suspendedStarted('execution-1');
+    const second = suspendedStarted('execution-2');
+    const executions = [entry(first.execution, first.checkpoint), entry(second.execution, second.checkpoint)];
+    assert.deepEqual(validateEditorStoreRecord(record({ executions })).executions, executions);
+});
+
+test('accepts one active ready execution only with an initial READY runtime', () => {
+    const execution = activatePlannedExecution(planned());
+    const runtime = activeRuntime(execution, session());
+    const valid = validateEditorStoreRecord(record({ executions: [entry(execution)], activeRuntime: runtime }));
+    assert.deepEqual(valid.activeRuntime, runtime);
+
+    for (const changed of [
+        { ...runtime, clock: { ...runtime.clock, status: 'PAUSED' } },
+        { ...runtime, run: { ...runtime.run, currentIndex: 1 } },
+        { ...runtime, run: { ...runtime.run, phaseOvertime: { 'phase-1': 0 } } },
+    ]) assert.throws(() => validateEditorStoreRecord(record({ executions: [entry(execution)], activeRuntime: changed })));
+});
+
+test('accepts active started runtimes in running, paused, READY and overtime states', () => {
+    const execution = started();
+    let state = transitionSession(session().run, session().clock, { type: 'START' }, 1000);
+    const states = [
+        [state, 1000],
+        [transitionSession(state.run, state.clock, { type: 'PAUSE' }, 10_000), 10_000],
+        [transitionSession(state.run, state.clock, { type: 'NEXT' }, 10_000), 10_000],
+        [transitionSession(state.run, state.clock, { type: 'PAUSE' }, 70_000), 70_000],
+    ];
+    for (const [current, savedAt] of states) {
+        const valid = validateEditorStoreRecord(record({
+            executions: [entry(execution)],
+            activeRuntime: activeRuntime(execution, current, savedAt),
+        }));
+        assert.equal(valid.activeRuntime.run.runId, execution.attempt.runtimeRunId);
+    }
+});
+
+test('rejects missing, unexpected, stale and foreign checkpoints', () => {
+    const suspended = suspendedStarted();
+    const ready = suspendReadyExecution(activatePlannedExecution(planned('ready')));
+    const foreign = suspendedStarted('foreign');
+    for (const executionEntry of [
+        entry(suspended.execution),
+        entry(planned(), suspended.checkpoint),
+        entry(ready, suspended.checkpoint),
+        entry(suspended.execution, { ...suspended.checkpoint, runtimeRevision: suspended.checkpoint.runtimeRevision - 1 }),
+        entry(suspended.execution, foreign.checkpoint),
+    ]) assert.throws(() => validateEditorStoreRecord(record({ executions: [executionEntry] })));
+});
+
+test('rejects foreign active-runtime bindings and run IDs', () => {
+    const execution = started();
+    const runtime = activeRuntime(execution, session());
+    for (const changed of [
+        { ...runtime, executionId: 'foreign' },
+        { ...runtime, attemptId: 'foreign' },
+        { ...runtime, runtimeRevision: runtime.runtimeRevision - 1 },
+        { ...runtime, run: { ...runtime.run, runId: 'foreign' } },
+    ]) assert.throws(() => validateEditorStoreRecord(record({ executions: [entry(execution)], activeRuntime: changed })));
+});
+
+test('rejects duplicate IDs, multiple active executions and active-runtime mismatches', () => {
+    const active = activatePlannedExecution(planned('active'));
+    for (const invalid of [
+        record({ templates: [template(), template()] }),
+        record({ executions: [entry(planned()), entry(planned())] }),
+        record({ executions: [entry(active)] }),
+        record({ activeRuntime: activeRuntime(active, session()) }),
+        record({
+            executions: [entry(active), entry(activatePlannedExecution(planned('active-2')))],
+            activeRuntime: activeRuntime(active, session()),
+        }),
+    ]) assert.throws(() => validateEditorStoreRecord(invalid));
+});
+
+test('strictly rejects schema, fields, lifecycle and revision errors', () => {
+    const completed = { ...planned(), lifecycle: 'completed' };
+    for (const invalid of [
+        { ...record(), schemaVersion: 2 },
+        { ...record(), extra: true },
+        record({ revision: -1 }),
+        record({ revision: Number.MAX_SAFE_INTEGER + 1 }),
+        record({ executions: [entry(completed)] }),
+        record({ executions: [{ execution: planned(), suspendedCheckpoint: null, extra: true }] }),
+    ]) assert.throws(() => validateEditorStoreRecord(invalid));
+});
+
+test('load returns an isolated empty record for a missing key', () => {
+    const storage = memory();
+    const store = createEditorStore(() => storage);
+    const first = store.load();
+    assert.deepEqual(first, record());
+    first.templates.push(template());
+    assert.deepEqual(store.load(), record());
+    assert.equal(storage.values.has(EDITOR_STORAGE_KEY), false);
+});
+
+test('save requires load, exact revision progress, one write and confirmed readback', () => {
+    const storage = memory();
+    const store = createEditorStore(() => storage);
+    assert.throws(() => store.save(record({ revision: 1 }), 0), /storageBlocked/);
+    const loaded = store.load();
+    const target = { ...loaded, revision: 1, templates: [template()] };
+    const before = structuredClone(target);
+    const saved = store.save(target, 0);
+    assert.deepEqual(target, before);
+    assert.deepEqual(saved, target);
+    assert.notEqual(saved.templates[0], target.templates[0]);
+    assert.equal(storage.state.writes, 1);
+    assert.deepEqual(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY)), target);
+    saved.templates[0].plan.name = 'Changed';
+    assert.equal(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY)).templates[0].plan.name, 'Workshop template-1');
+});
+
+test('save rejects stale expected revisions, invalid jumps and changed raw snapshots', () => {
+    const storage = memory();
+    const store = createEditorStore(() => storage);
+    store.load();
+    assert.throws(() => store.save(record({ revision: 1 }), 1), /conflict/);
+    assert.throws(() => store.save(record({ revision: 2 }), 0), /invalidStoreRevision/);
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(record()));
+    assert.throws(() => store.save(record({ revision: 1 }), 0), /conflict/);
+    assert.equal(storage.state.writes, 0);
+});
+
+test('save rejects aggregate revision overflow', () => {
+    const source = record({ revision: Number.MAX_SAFE_INTEGER });
+    const storage = memory(JSON.stringify(source));
+    const store = createEditorStore(() => storage);
+    store.load();
+    assert.throws(() => store.save(source, Number.MAX_SAFE_INTEGER), /invalidStoreRevision/);
+});
+
+test('corrupt data and read failures are controlled and never treated as empty', () => {
+    for (const raw of ['{broken', 'null', JSON.stringify({ ...record(), schemaVersion: 2 })]) {
+        const storage = memory(raw);
+        assert.throws(() => createEditorStore(() => storage).load(), /storageValidation/);
+        assert.equal(storage.values.get(EDITOR_STORAGE_KEY), raw);
+    }
+    const storage = memory();
+    storage.state.failRead = true;
+    assert.throws(() => createEditorStore(() => storage).load(), /storageRead/);
+    assert.equal(storage.state.writes, 0);
+});
+
+test('write, quota and readback failures are distinct and do not delete data', () => {
+    for (const [failure, code] of [['Error', 'storageWrite'], ['QuotaExceededError', 'storageQuota']]) {
+        const storage = memory();
+        const store = createEditorStore(() => storage);
+        store.load(); storage.state.failWrite = failure;
+        assert.throws(() => store.save(record({ revision: 1 }), 0), new RegExp(code));
+        assert.equal(storage.values.has(EDITOR_STORAGE_KEY), false);
+    }
+
+    const mismatched = memory();
+    const mismatchedStore = createEditorStore(() => mismatched);
+    mismatchedStore.load(); mismatched.state.readback = JSON.stringify(record());
+    assert.throws(() => mismatchedStore.save(record({ revision: 1 }), 0), /storageReadback/);
+    assert.equal(JSON.parse(mismatched.values.get(EDITOR_STORAGE_KEY)).revision, 1);
+
+    const unreadable = memory();
+    const unreadableStore = createEditorStore(() => unreadable);
+    unreadableStore.load();
+    const originalGet = unreadable.getItem.bind(unreadable);
+    unreadable.getItem = key => {
+        if (unreadable.state.writes > 0) throw new Error('readback failed');
+        return originalGet(key);
+    };
+    assert.throws(() => unreadableStore.save(record({ revision: 1 }), 0), /storageUnconfirmed/);
+    assert.equal(JSON.parse(unreadable.values.get(EDITOR_STORAGE_KEY)).revision, 1);
+});
+
+test('validation and failed saves never remove or rewrite an existing record', () => {
+    const raw = JSON.stringify(record());
+    const storage = memory(raw);
+    const store = createEditorStore(() => storage);
+    store.load();
+    assert.throws(() => store.save({ ...record({ revision: 1 }), extra: true }, 0));
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), raw);
+    assert.equal(storage.state.writes, 0);
+});
