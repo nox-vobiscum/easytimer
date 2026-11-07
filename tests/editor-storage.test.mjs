@@ -17,6 +17,7 @@ import {
     activatePlannedExecutionInRecord,
     createEditorStore,
     startReadyExecutionInRecord,
+    suspendActiveExecutionInRecord,
     validateEditorStoreRecord,
 } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
@@ -163,6 +164,29 @@ function sessionActionOptions(source, actionType, occurredAt, changes = {}) {
         ...changes,
     };
 }
+
+function suspendOptions(source, suspendedAt, workshopNotes, changes = {}) {
+    const execution = source.executions.find(item => item.execution.lifecycle === 'active').execution;
+    return {
+        executionId: execution.id,
+        expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision,
+        expectedAttemptId: execution.attempt?.id ?? null,
+        expectedRunId: source.activeRuntime.run.runId,
+        suspendedAt,
+        workshopNotes,
+        ...changes,
+    };
+}
+
+const completeWorkshopNotes = () => ({
+    rundown: 'Complete rundown draft',
+    phases: [
+        { phaseId: 'phase-1', text: 'Opening draft' },
+        { phaseId: 'phase-2', text: 'Discussion draft' },
+    ],
+});
 
 function startedRecord(changes = {}) {
     const execution = { ...planned(), ...changes };
@@ -477,6 +501,161 @@ test('rejects unsupported, inapplicable, stale, foreign and anomalous actions wi
     }
 });
 
+test('suspends ACTIVE READY with a complete workshop-note snapshot and no checkpoint', () => {
+    const ready = activatePlannedExecutionInRecord(
+        record({ templates: [template()], executions: [entry(planned()), entry(planned('execution-2'))] }),
+        activationOptions(),
+    );
+    const notes = completeWorkshopNotes();
+    const before = structuredClone(ready);
+    const notesBefore = structuredClone(notes);
+    const result = suspendActiveExecutionInRecord(ready, suspendOptions(ready, 1500, notes));
+    const suspended = result.executions[0];
+
+    assert.equal(result.revision, ready.revision + 1);
+    assert.equal(suspended.execution.lifecycle, 'suspended');
+    assert.equal(suspended.execution.revision, ready.executions[0].execution.revision + 1);
+    assert.equal(suspended.execution.runtimeRevision, ready.executions[0].execution.runtimeRevision + 1);
+    assert.equal(suspended.execution.attempt, null);
+    assert.equal(suspended.suspendedCheckpoint, null);
+    assert.deepEqual(suspended.execution.workshopNotes, notes);
+    assert.deepEqual(suspended.execution.currentPlan, ready.executions[0].execution.currentPlan);
+    assert.deepEqual(result.templates, ready.templates);
+    assert.deepEqual(result.executions[1], ready.executions[1]);
+    assert.equal(result.activeRuntime, null);
+    assert.deepEqual(ready, before);
+    assert.deepEqual(notes, notesBefore);
+    assert.notEqual(suspended.execution.workshopNotes, notes);
+});
+
+test('suspends ACTIVE STARTED by freezing the bound runtime and preserving attempt and plan', () => {
+    const started = startedRecord();
+    started.templates.push(template());
+    started.executions.push(entry(planned('execution-2')));
+    const notes = completeWorkshopNotes();
+    const before = structuredClone(started);
+    const result = suspendActiveExecutionInRecord(started, suspendOptions(started, 12_000, notes));
+    const suspended = result.executions[0];
+
+    assert.equal(result.revision, started.revision + 1);
+    assert.equal(suspended.execution.lifecycle, 'suspended');
+    assert.equal(suspended.execution.revision, before.executions[0].execution.revision + 1);
+    assert.equal(suspended.execution.runtimeRevision, before.executions[0].execution.runtimeRevision + 1);
+    assert.deepEqual(suspended.execution.attempt, before.executions[0].execution.attempt);
+    assert.deepEqual(suspended.execution.attempt.startSnapshot, before.executions[0].execution.attempt.startSnapshot);
+    assert.deepEqual(suspended.execution.currentPlan, before.executions[0].execution.currentPlan);
+    assert.deepEqual(suspended.execution.workshopNotes, notes);
+    assert.equal(suspended.suspendedCheckpoint.executionId, suspended.execution.id);
+    assert.equal(suspended.suspendedCheckpoint.attemptId, suspended.execution.attempt.id);
+    assert.equal(suspended.suspendedCheckpoint.run.runId, suspended.execution.attempt.runtimeRunId);
+    assert.equal(suspended.suspendedCheckpoint.runtimeRevision, suspended.execution.runtimeRevision);
+    assert.equal(suspended.suspendedCheckpoint.capturedAt, 12_000);
+    assert.equal(suspended.suspendedCheckpoint.clock.status, 'PAUSED');
+    assert.equal(suspended.suspendedCheckpoint.clock.remainingMs, 50_000);
+    assert.equal(result.activeRuntime, null);
+    assert.deepEqual(result.templates, before.templates);
+    assert.deepEqual(result.executions[1], before.executions[1]);
+    assert.deepEqual(started, before);
+});
+
+test('suspends started executions from every supported frozen state including completed sessions', () => {
+    const started = startedRecord();
+    const between = applyStartedSessionActionInRecord(
+        started,
+        sessionActionOptions(started, 'NEXT', 3000),
+    );
+    const paused = applyStartedSessionActionInRecord(
+        started,
+        sessionActionOptions(started, 'PAUSE', 3000),
+    );
+    const second = applyStartedSessionActionInRecord(
+        between,
+        sessionActionOptions(between, 'START', 4000),
+    );
+    const completed = applyStartedSessionActionInRecord(
+        second,
+        sessionActionOptions(second, 'COMPLETE', 5000),
+    );
+    const overtimePaused = applyStartedSessionActionInRecord(
+        completed,
+        sessionActionOptions(completed, 'PAUSE', 7000),
+    );
+    const overtimeStopped = applyStartedSessionActionInRecord(
+        overtimePaused,
+        sessionActionOptions(overtimePaused, 'STOP_OVERTIME', 8000),
+    );
+    for (const [source, suspendedAt, status, stage] of [
+        [between, 3500, 'READY', 'PHASE'],
+        [paused, 3500, 'PAUSED', 'PHASE'],
+        [completed, 6000, 'OVERTIME_PAUSED', 'COMPLETED'],
+        [overtimePaused, 7500, 'OVERTIME_PAUSED', 'COMPLETED'],
+        [overtimeStopped, 8500, 'OVERTIME_STOPPED', 'COMPLETED'],
+    ]) {
+        const result = suspendActiveExecutionInRecord(
+            source,
+            suspendOptions(source, suspendedAt, completeWorkshopNotes()),
+        );
+        const suspended = result.executions[0];
+        assert.equal(suspended.execution.lifecycle, 'suspended');
+        assert.equal(suspended.suspendedCheckpoint.clock.status, status);
+        assert.equal(suspended.suspendedCheckpoint.run.stage, stage);
+        assert.equal(result.activeRuntime, null);
+        assert.deepEqual(suspended.execution.attempt, source.executions[0].execution.attempt);
+    }
+});
+
+test('rejects stale suspend requests, invalid notes, identities and times without mutation', () => {
+    const started = startedRecord();
+    const before = structuredClone(started);
+    const notes = completeWorkshopNotes();
+    for (const changes of [
+        { expectedAggregateRevision: started.revision - 1 },
+        { expectedExecutionRevision: started.executions[0].execution.revision - 1 },
+        { expectedRuntimeRevision: started.executions[0].execution.runtimeRevision - 1 },
+        { expectedAttemptId: 'foreign-attempt' },
+        { expectedRunId: 'foreign-run' },
+        { suspendedAt: -1 },
+        { suspendedAt: 1.5 },
+        { suspendedAt: 1000 },
+        { workshopNotes: undefined },
+        { workshopNotes: { rundown: '', phases: [{ phaseId: 'unknown', text: 'Invalid' }] } },
+        { workshopNotes: { rundown: '', phases: [
+            { phaseId: 'phase-1', text: 'One' },
+            { phaseId: 'phase-1', text: 'Duplicate' },
+        ] } },
+    ]) assert.throws(() => suspendActiveExecutionInRecord(
+        started,
+        suspendOptions(started, 3000, notes, changes),
+    ));
+    const overflow = { ...started, revision: Number.MAX_SAFE_INTEGER };
+    assert.throws(() => suspendActiveExecutionInRecord(
+        overflow,
+        suspendOptions(overflow, 3000, notes),
+    ), /invalidStoreRevision/);
+    const executionOverflow = {
+        ...started,
+        executions: [{
+            ...started.executions[0],
+            execution: { ...started.executions[0].execution, revision: Number.MAX_SAFE_INTEGER },
+        }],
+    };
+    assert.throws(() => suspendActiveExecutionInRecord(
+        executionOverflow,
+        suspendOptions(executionOverflow, 3000, notes),
+    ), /invalidRevision/);
+    const suspended = suspendActiveExecutionInRecord(started, suspendOptions(started, 3000, notes));
+    assert.throws(() => suspendActiveExecutionInRecord(
+        suspended,
+        {
+            ...suspendOptions(started, 3000, notes),
+            expectedAggregateRevision: suspended.revision,
+            expectedExecutionRevision: suspended.executions[0].execution.revision,
+            expectedRuntimeRevision: suspended.executions[0].execution.runtimeRevision,
+        },
+    ), /invalidLifecycle/);
+    assert.deepEqual(started, before);
+});
+
 test('rejects activation conflicts, invalid inputs and aggregate overflow without mutation', () => {
     const source = record({ executions: [entry(planned())] });
     const before = structuredClone(source);
@@ -597,6 +776,58 @@ test('persists READY, first START and later session actions while active-timer o
     assert.equal(await activeLock.release(), true);
     assert.equal(activeLock.held, false);
     assert.equal(locks.held.size, 0);
+});
+
+test('persists a complete suspend under ownership and retains ownership after a quota failure', async () => {
+    const initial = record({ revision: 20, templates: [template()], executions: [entry(planned())] });
+    const storage = memory(JSON.stringify(initial));
+    const locks = aggregateLockManager();
+    const activeLock = createEditorActiveTimerLock({ locks });
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks });
+    const notes = completeWorkshopNotes();
+
+    await activeLock.claim();
+    const ready = await writer.write(current => activatePlannedExecutionInRecord(current, activationOptions({
+        expectedAggregateRevision: 20,
+    })));
+    const started = await writer.write(current => startReadyExecutionInRecord(current, startOptions({
+        expectedAggregateRevision: ready.revision,
+    })));
+    const paused = await writer.write(current => applyStartedSessionActionInRecord(
+        current,
+        sessionActionOptions(current, 'PAUSE', 12_000),
+    ));
+    const suspended = await writer.write(current => {
+        assert.equal(activeLock.held, true);
+        return suspendActiveExecutionInRecord(current, suspendOptions(current, 13_000, notes));
+    });
+    assert.equal(activeLock.held, true);
+    assert.equal(suspended.revision, paused.revision + 1);
+    assert.equal(suspended.activeRuntime, null);
+    assert.equal(suspended.executions[0].execution.lifecycle, 'suspended');
+    assert.deepEqual(suspended.executions[0].execution.workshopNotes, notes);
+    assert.equal(suspended.executions[0].suspendedCheckpoint.clock.status, 'PAUSED');
+    assert.deepEqual(await writer.read(), suspended);
+    assert.equal(activeLock.held, true);
+    assert.equal(await activeLock.release(), true);
+    assert.equal(locks.held.size, 0);
+
+    const failingStorage = memory(JSON.stringify(paused));
+    const failingLocks = aggregateLockManager();
+    const failingActiveLock = createEditorActiveTimerLock({ locks: failingLocks });
+    const failingWriter = createEditorStoreWriter({ getStorage: () => failingStorage, locks: failingLocks });
+    const originalRaw = failingStorage.values.get(EDITOR_STORAGE_KEY);
+    await failingActiveLock.claim();
+    failingStorage.state.failWrite = 'QuotaExceededError';
+    await assert.rejects(failingWriter.write(current => suspendActiveExecutionInRecord(
+        current,
+        suspendOptions(current, 13_000, notes),
+    )), /storageQuota/);
+    assert.equal(failingStorage.state.writes, 0);
+    assert.equal(failingStorage.values.get(EDITOR_STORAGE_KEY), originalRaw);
+    assert.equal(failingActiveLock.held, true);
+    assert.equal(await failingActiveLock.release(), true);
+    assert.equal(failingLocks.held.size, 0);
 });
 
 test('validates the empty record and multiple templates and planned executions', () => {

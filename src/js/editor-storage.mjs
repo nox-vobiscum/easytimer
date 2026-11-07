@@ -2,6 +2,7 @@ import {
     EXECUTION_LIFECYCLES,
     activatePlannedExecution,
     startActiveExecution,
+    suspendReadyExecution,
     validatePlannedExecution,
     validateReadyExecution,
     validateStartedExecution,
@@ -10,7 +11,9 @@ import {
     validateTemplate,
 } from './editor-domain.mjs';
 import {
+    captureExecutionRuntimeCheckpoint,
     prepareReadyExecutionRuntime,
+    suspendStartedExecutionWithCheckpoint,
     validateExecutionRuntimeCheckpoint,
 } from './execution-runtime.mjs';
 import { validateRuntime } from './recovery.mjs';
@@ -300,6 +303,75 @@ export function applyStartedSessionActionInRecord(record, options) {
             run: transitioned.run,
             clock: transitioned.clock,
         },
+    });
+}
+
+export function suspendActiveExecutionInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const {
+        executionId,
+        expectedAggregateRevision,
+        expectedExecutionRevision,
+        expectedRuntimeRevision,
+        expectedAttemptId,
+        expectedRunId,
+        suspendedAt,
+        workshopNotes,
+    } = options;
+    if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+    safeRevision(expectedAggregateRevision);
+    if (!Number.isSafeInteger(expectedExecutionRevision) || expectedExecutionRevision < 0) fail('invalidRevision');
+    if (!Number.isSafeInteger(expectedRuntimeRevision) || expectedRuntimeRevision < 0) {
+        fail('invalidRuntimeRevision');
+    }
+    if (!Number.isSafeInteger(suspendedAt) || suspendedAt < 0) fail('INVALID_RUNTIME');
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+
+    const index = valid.executions.findIndex(entry => entry.execution.id === executionId);
+    if (index < 0) fail('executionNotFound');
+    const selected = valid.executions[index];
+    const execution = selected.execution;
+    if (execution.revision !== expectedExecutionRevision
+        || execution.runtimeRevision !== expectedRuntimeRevision) fail('conflict');
+    if (execution.lifecycle !== EXECUTION_LIFECYCLES.ACTIVE) fail('invalidLifecycle');
+    if (selected.suspendedCheckpoint !== null || valid.activeRuntime === null
+        || valid.activeRuntime.executionId !== execution.id
+        || valid.activeRuntime.attemptId !== (execution.attempt?.id ?? null)
+        || valid.activeRuntime.runtimeRevision !== execution.runtimeRevision) fail('invalidActiveRuntimeBinding');
+    if (expectedRunId !== valid.activeRuntime.run.runId) fail('invalidActiveRuntimeBinding');
+    if (suspendedAt < valid.activeRuntime.savedAt) fail('CLOCK_ANOMALY');
+
+    let suspended;
+    let suspendedCheckpoint = null;
+    if (execution.attempt === null) {
+        if (expectedAttemptId !== null) fail('invalidAttemptBinding');
+        const withNotes = validateReadyExecution({ ...execution, workshopNotes });
+        suspended = suspendReadyExecution(withNotes);
+    } else {
+        if (expectedAttemptId !== execution.attempt.id) fail('invalidAttemptBinding');
+        if (expectedRunId !== execution.attempt.runtimeRunId) fail('invalidActiveRuntimeBinding');
+        const withNotes = validateStartedExecution({ ...execution, workshopNotes });
+        const checkpoint = captureExecutionRuntimeCheckpoint(
+            withNotes,
+            valid.activeRuntime.run,
+            valid.activeRuntime.clock,
+            suspendedAt,
+        );
+        const result = suspendStartedExecutionWithCheckpoint(withNotes, checkpoint);
+        suspended = result.execution;
+        suspendedCheckpoint = result.checkpoint;
+    }
+
+    const executions = valid.executions.map((entry, entryIndex) => (entryIndex === index
+        ? { execution: suspended, suspendedCheckpoint }
+        : entry));
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions,
+        activeRuntime: null,
     });
 }
 
