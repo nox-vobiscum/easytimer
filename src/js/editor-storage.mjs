@@ -1,6 +1,7 @@
 import {
     EXECUTION_LIFECYCLES,
     activatePlannedExecution,
+    startActiveExecution,
     validatePlannedExecution,
     validateReadyExecution,
     validateStartedExecution,
@@ -13,6 +14,7 @@ import {
     validateExecutionRuntimeCheckpoint,
 } from './execution-runtime.mjs';
 import { validateRuntime } from './recovery.mjs';
+import { transitionSession } from './session.mjs';
 
 export const EDITOR_STORAGE_KEY = 'easyTimerEditor.v1';
 export const EDITOR_STORE_SCHEMA_VERSION = 1;
@@ -158,6 +160,65 @@ export function activatePlannedExecutionInRecord(record, options) {
 
     const execution = activatePlannedExecution(selected.execution);
     const activeRuntime = prepareReadyExecutionRuntime(execution, runtimeRunId, savedAt);
+    const executions = valid.executions.map((entry, entryIndex) => (entryIndex === index
+        ? { execution, suspendedCheckpoint: null }
+        : entry));
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions,
+        activeRuntime,
+    });
+}
+
+export function startReadyExecutionInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const {
+        executionId,
+        expectedAggregateRevision,
+        expectedExecutionRevision,
+        expectedRuntimeRevision,
+        attemptId,
+        startedAt,
+    } = options;
+    if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+    safeRevision(expectedAggregateRevision);
+    if (!Number.isSafeInteger(expectedExecutionRevision) || expectedExecutionRevision < 0) fail('invalidRevision');
+    if (!Number.isSafeInteger(expectedRuntimeRevision) || expectedRuntimeRevision < 0) {
+        fail('invalidRuntimeRevision');
+    }
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+
+    const index = valid.executions.findIndex(entry => entry.execution.id === executionId);
+    if (index < 0) fail('executionNotFound');
+    const selected = valid.executions[index];
+    if (selected.execution.revision !== expectedExecutionRevision
+        || selected.execution.runtimeRevision !== expectedRuntimeRevision) fail('conflict');
+    if (selected.execution.lifecycle !== EXECUTION_LIFECYCLES.ACTIVE) fail('invalidLifecycle');
+    if (selected.execution.attempt !== null) fail('invalidAttempt');
+    if (selected.suspendedCheckpoint !== null || valid.activeRuntime === null
+        || valid.activeRuntime.executionId !== selected.execution.id
+        || valid.activeRuntime.attemptId !== null
+        || valid.activeRuntime.runtimeRevision !== selected.execution.runtimeRevision) fail('invalidActiveRuntimeBinding');
+
+    const runtimeRunId = valid.activeRuntime.run.runId;
+    const execution = startActiveExecution(selected.execution, attemptId, startedAt, runtimeRunId);
+    const transitioned = transitionSession(
+        valid.activeRuntime.run,
+        valid.activeRuntime.clock,
+        { type: 'START' },
+        startedAt,
+    );
+    const activeRuntime = {
+        executionId: execution.id,
+        attemptId: execution.attempt.id,
+        runtimeRevision: execution.runtimeRevision,
+        savedAt: startedAt,
+        run: transitioned.run,
+        clock: transitioned.clock,
+    };
     const executions = valid.executions.map((entry, entryIndex) => (entryIndex === index
         ? { execution, suspendedCheckpoint: null }
         : entry));
