@@ -16,6 +16,7 @@ import {
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     createEditorStore,
+    resumeSuspendedExecutionInRecord,
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
     validateEditorStoreRecord,
@@ -187,6 +188,21 @@ const completeWorkshopNotes = () => ({
         { phaseId: 'phase-2', text: 'Discussion draft' },
     ],
 });
+
+function resumeOptions(source, resumedAt, changes = {}) {
+    const execution = source.executions.find(item => item.execution.lifecycle === 'suspended').execution;
+    return {
+        executionId: execution.id,
+        expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision,
+        expectedAttemptId: execution.attempt?.id ?? null,
+        expectedRunId: execution.attempt?.runtimeRunId ?? null,
+        ...(execution.attempt === null ? { runtimeRunId: 'runtime-resumed' } : {}),
+        resumedAt,
+        ...changes,
+    };
+}
 
 function startedRecord(changes = {}) {
     const execution = { ...planned(), ...changes };
@@ -656,6 +672,213 @@ test('rejects stale suspend requests, invalid notes, identities and times withou
     assert.deepEqual(started, before);
 });
 
+test('resumes SUSPENDED READY with a new explicit READY runtime and preserved notes', () => {
+    const ready = activatePlannedExecutionInRecord(
+        record({ templates: [template()], executions: [entry(planned()), entry(planned('execution-2'))] }),
+        activationOptions(),
+    );
+    const suspended = suspendActiveExecutionInRecord(
+        ready,
+        suspendOptions(ready, 1500, completeWorkshopNotes()),
+    );
+    const before = structuredClone(suspended);
+    const result = resumeSuspendedExecutionInRecord(suspended, resumeOptions(suspended, 50_000));
+    const active = result.executions[0];
+
+    assert.equal(result.revision, suspended.revision + 1);
+    assert.equal(active.execution.lifecycle, 'active');
+    assert.equal(active.execution.revision, suspended.executions[0].execution.revision + 1);
+    assert.equal(active.execution.runtimeRevision, suspended.executions[0].execution.runtimeRevision + 1);
+    assert.equal(active.execution.attempt, null);
+    assert.equal(active.suspendedCheckpoint, null);
+    assert.deepEqual(active.execution.currentPlan, suspended.executions[0].execution.currentPlan);
+    assert.deepEqual(active.execution.workshopNotes, suspended.executions[0].execution.workshopNotes);
+    assert.equal(result.activeRuntime.executionId, active.execution.id);
+    assert.equal(result.activeRuntime.attemptId, null);
+    assert.equal(result.activeRuntime.runtimeRevision, active.execution.runtimeRevision);
+    assert.equal(result.activeRuntime.savedAt, 50_000);
+    assert.equal(result.activeRuntime.run.runId, 'runtime-resumed');
+    assert.equal(result.activeRuntime.clock.status, 'READY');
+    assert.deepEqual(result.templates, suspended.templates);
+    assert.deepEqual(result.executions[1], suspended.executions[1]);
+    assert.deepEqual(suspended, before);
+    assert.notEqual(active.execution, suspended.executions[0].execution);
+    assert.notEqual(active.execution.currentPlan, suspended.executions[0].execution.currentPlan);
+    assert.notEqual(active.execution.workshopNotes, suspended.executions[0].execution.workshopNotes);
+});
+
+test('resumes SUSPENDED STARTED without advancing its frozen runtime or replacing its attempt', () => {
+    const started = startedRecord();
+    const paused = applyStartedSessionActionInRecord(
+        started,
+        sessionActionOptions(started, 'PAUSE', 12_000),
+    );
+    const suspended = suspendActiveExecutionInRecord(
+        paused,
+        suspendOptions(paused, 13_000, completeWorkshopNotes()),
+    );
+    const before = structuredClone(suspended);
+    const checkpoint = suspended.executions[0].suspendedCheckpoint;
+    const result = resumeSuspendedExecutionInRecord(suspended, resumeOptions(suspended, 1_000_000));
+    const active = result.executions[0];
+
+    assert.equal(result.revision, suspended.revision + 1);
+    assert.equal(active.execution.lifecycle, 'active');
+    assert.equal(active.execution.revision, suspended.executions[0].execution.revision + 1);
+    assert.equal(active.execution.runtimeRevision, suspended.executions[0].execution.runtimeRevision + 1);
+    assert.equal(active.suspendedCheckpoint, null);
+    assert.deepEqual(active.execution.attempt, suspended.executions[0].execution.attempt);
+    assert.deepEqual(active.execution.attempt.startSnapshot, suspended.executions[0].execution.attempt.startSnapshot);
+    assert.deepEqual(active.execution.currentPlan, suspended.executions[0].execution.currentPlan);
+    assert.deepEqual(active.execution.workshopNotes, suspended.executions[0].execution.workshopNotes);
+    assert.equal(result.activeRuntime.executionId, active.execution.id);
+    assert.equal(result.activeRuntime.attemptId, active.execution.attempt.id);
+    assert.equal(result.activeRuntime.runtimeRevision, active.execution.runtimeRevision);
+    assert.equal(result.activeRuntime.savedAt, 1_000_000);
+    assert.equal(result.activeRuntime.run.runId, checkpoint.run.runId);
+    assert.deepEqual(result.activeRuntime.run, checkpoint.run);
+    assert.deepEqual(result.activeRuntime.clock, checkpoint.clock);
+    assert.equal(result.activeRuntime.clock.status, 'PAUSED');
+    assert.equal(result.activeRuntime.clock.remainingMs, 50_000);
+    assert.deepEqual(suspended, before);
+    assert.notEqual(active.execution.attempt, suspended.executions[0].execution.attempt);
+    assert.notEqual(
+        active.execution.attempt.startSnapshot,
+        suspended.executions[0].execution.attempt.startSnapshot,
+    );
+    assert.notEqual(result.activeRuntime.run, checkpoint.run);
+    assert.notEqual(result.activeRuntime.clock, checkpoint.clock);
+});
+
+test('resumes all supported started checkpoints including between-phase and completed runtimes', () => {
+    const started = startedRecord();
+    const between = applyStartedSessionActionInRecord(
+        started,
+        sessionActionOptions(started, 'NEXT', 3000),
+    );
+    const paused = applyStartedSessionActionInRecord(
+        started,
+        sessionActionOptions(started, 'PAUSE', 3000),
+    );
+    const second = applyStartedSessionActionInRecord(
+        between,
+        sessionActionOptions(between, 'START', 4000),
+    );
+    const completed = applyStartedSessionActionInRecord(
+        second,
+        sessionActionOptions(second, 'COMPLETE', 5000),
+    );
+    const overtimePaused = applyStartedSessionActionInRecord(
+        completed,
+        sessionActionOptions(completed, 'PAUSE', 7000),
+    );
+    const overtimeStopped = applyStartedSessionActionInRecord(
+        overtimePaused,
+        sessionActionOptions(overtimePaused, 'STOP_OVERTIME', 8000),
+    );
+    for (const [source, suspendedAt, resumedAt, status, stage] of [
+        [between, 3500, 100_000, 'READY', 'PHASE'],
+        [paused, 3500, 100_000, 'PAUSED', 'PHASE'],
+        [completed, 6000, 100_000, 'OVERTIME_PAUSED', 'COMPLETED'],
+        [overtimePaused, 7500, 100_000, 'OVERTIME_PAUSED', 'COMPLETED'],
+        [overtimeStopped, 8500, 100_000, 'OVERTIME_STOPPED', 'COMPLETED'],
+    ]) {
+        const suspended = suspendActiveExecutionInRecord(
+            source,
+            suspendOptions(source, suspendedAt, completeWorkshopNotes()),
+        );
+        const checkpoint = suspended.executions[0].suspendedCheckpoint;
+        const resumed = resumeSuspendedExecutionInRecord(suspended, resumeOptions(suspended, resumedAt));
+        assert.equal(resumed.activeRuntime.clock.status, status);
+        assert.equal(resumed.activeRuntime.run.stage, stage);
+        assert.deepEqual(resumed.activeRuntime.clock, checkpoint.clock);
+        assert.equal(resumed.executions[0].suspendedCheckpoint, null);
+        assert.deepEqual(resumed.executions[0].execution.attempt, source.executions[0].execution.attempt);
+    }
+});
+
+test('rejects invalid resume identities, lifecycles, times, run IDs and revisions without mutation', () => {
+    const started = startedRecord();
+    const suspended = suspendActiveExecutionInRecord(
+        started,
+        suspendOptions(started, 3000, completeWorkshopNotes()),
+    );
+    const before = structuredClone(suspended);
+    for (const changes of [
+        { expectedAggregateRevision: suspended.revision - 1 },
+        { expectedExecutionRevision: suspended.executions[0].execution.revision - 1 },
+        { expectedRuntimeRevision: suspended.executions[0].execution.runtimeRevision - 1 },
+        { expectedAttemptId: 'foreign-attempt' },
+        { expectedRunId: 'foreign-run' },
+        { runtimeRunId: 'forbidden-new-run' },
+        { resumedAt: -1 },
+        { resumedAt: 1.5 },
+        { resumedAt: 2999 },
+    ]) assert.throws(() => resumeSuspendedExecutionInRecord(
+        suspended,
+        resumeOptions(suspended, 4000, changes),
+    ));
+
+    const ready = activatePlannedExecutionInRecord(
+        record({ executions: [entry(planned())] }),
+        activationOptions(),
+    );
+    const suspendedReady = suspendActiveExecutionInRecord(
+        ready,
+        suspendOptions(ready, 1500, completeWorkshopNotes()),
+    );
+    for (const changes of [
+        { expectedAttemptId: 'unexpected' },
+        { expectedRunId: 'unexpected' },
+        { runtimeRunId: undefined },
+        { runtimeRunId: '' },
+    ]) assert.throws(() => resumeSuspendedExecutionInRecord(
+        suspendedReady,
+        resumeOptions(suspendedReady, 2000, changes),
+    ));
+
+    const overflow = { ...suspended, revision: Number.MAX_SAFE_INTEGER };
+    assert.throws(() => resumeSuspendedExecutionInRecord(
+        overflow,
+        resumeOptions(overflow, 4000),
+    ), /invalidStoreRevision/);
+    const executionOverflow = {
+        ...suspended,
+        executions: [{
+            ...suspended.executions[0],
+            execution: { ...suspended.executions[0].execution, revision: Number.MAX_SAFE_INTEGER },
+        }],
+    };
+    assert.throws(() => resumeSuspendedExecutionInRecord(
+        executionOverflow,
+        resumeOptions(executionOverflow, 4000),
+    ), /invalidRevision/);
+    assert.throws(() => resumeSuspendedExecutionInRecord(
+        record({ executions: [entry(planned())] }),
+        {
+            executionId: 'execution-1', expectedAggregateRevision: 0,
+            expectedExecutionRevision: 1, expectedRuntimeRevision: 0,
+            expectedAttemptId: null, expectedRunId: null,
+            runtimeRunId: 'runtime-resumed', resumedAt: 2000,
+        },
+    ), /invalidLifecycle/);
+
+    const otherReady = activatePlannedExecutionInRecord(
+        record({ executions: [entry(planned('active-other'))] }),
+        activationOptions({ executionId: 'active-other' }),
+    );
+    const withOtherActive = {
+        ...suspended,
+        executions: [...suspended.executions, otherReady.executions[0]],
+        activeRuntime: otherReady.activeRuntime,
+    };
+    assert.throws(() => resumeSuspendedExecutionInRecord(
+        withOtherActive,
+        resumeOptions(withOtherActive, 4000),
+    ), /activeExecutionExists/);
+    assert.deepEqual(suspended, before);
+});
+
 test('rejects activation conflicts, invalid inputs and aggregate overflow without mutation', () => {
     const source = record({ executions: [entry(planned())] });
     const before = structuredClone(source);
@@ -812,6 +1035,24 @@ test('persists a complete suspend under ownership and retains ownership after a 
     assert.equal(await activeLock.release(), true);
     assert.equal(locks.held.size, 0);
 
+    const frozen = structuredClone(suspended.executions[0].suspendedCheckpoint);
+    await activeLock.claim();
+    const resumed = await writer.write(current => resumeSuspendedExecutionInRecord(
+        current,
+        resumeOptions(current, 1_000_000),
+    ));
+    assert.equal(activeLock.held, true);
+    assert.equal(resumed.activeRuntime.savedAt, 1_000_000);
+    assert.deepEqual(resumed.activeRuntime.run, frozen.run);
+    assert.deepEqual(resumed.activeRuntime.clock, frozen.clock);
+    assert.deepEqual(resumed.executions[0].execution.attempt, suspended.executions[0].execution.attempt);
+    assert.deepEqual(resumed.executions[0].execution.workshopNotes, notes);
+    assert.equal(resumed.executions[0].suspendedCheckpoint, null);
+    assert.deepEqual(await writer.read(), resumed);
+    assert.equal(activeLock.held, true);
+    assert.equal(await activeLock.release(), true);
+    assert.equal(locks.held.size, 0);
+
     const failingStorage = memory(JSON.stringify(paused));
     const failingLocks = aggregateLockManager();
     const failingActiveLock = createEditorActiveTimerLock({ locks: failingLocks });
@@ -828,6 +1069,64 @@ test('persists a complete suspend under ownership and retains ownership after a 
     assert.equal(failingActiveLock.held, true);
     assert.equal(await failingActiveLock.release(), true);
     assert.equal(failingLocks.held.size, 0);
+
+    const failingResumeStorage = memory(JSON.stringify(suspended));
+    const failingResumeLocks = aggregateLockManager();
+    const failingResumeActiveLock = createEditorActiveTimerLock({ locks: failingResumeLocks });
+    const failingResumeWriter = createEditorStoreWriter({
+        getStorage: () => failingResumeStorage,
+        locks: failingResumeLocks,
+    });
+    const suspendedRaw = failingResumeStorage.values.get(EDITOR_STORAGE_KEY);
+    await failingResumeActiveLock.claim();
+    failingResumeStorage.state.failWrite = 'QuotaExceededError';
+    await assert.rejects(failingResumeWriter.write(current => resumeSuspendedExecutionInRecord(
+        current,
+        resumeOptions(current, 1_000_000),
+    )), /storageQuota/);
+    assert.equal(failingResumeStorage.state.writes, 0);
+    assert.equal(failingResumeStorage.values.get(EDITOR_STORAGE_KEY), suspendedRaw);
+    assert.equal(failingResumeActiveLock.held, true);
+    assert.equal(await failingResumeActiveLock.release(), true);
+    assert.equal(failingResumeLocks.held.size, 0);
+});
+
+test('persists a READY suspend and resume with a fresh run under reacquired ownership', async () => {
+    const initial = record({ revision: 30, executions: [entry(planned())] });
+    const storage = memory(JSON.stringify(initial));
+    const locks = aggregateLockManager();
+    const activeLock = createEditorActiveTimerLock({ locks });
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks });
+
+    await activeLock.claim();
+    const ready = await writer.write(current => activatePlannedExecutionInRecord(current, activationOptions({
+        expectedAggregateRevision: 30,
+        runtimeRunId: 'runtime-before-ready-suspend',
+    })));
+    const suspended = await writer.write(current => suspendActiveExecutionInRecord(
+        current,
+        suspendOptions(current, 2000, completeWorkshopNotes()),
+    ));
+    assert.equal(suspended.executions[0].execution.attempt, null);
+    assert.equal(suspended.executions[0].suspendedCheckpoint, null);
+    assert.equal(suspended.activeRuntime, null);
+    assert.deepEqual(await writer.read(), suspended);
+    await activeLock.release();
+
+    await activeLock.claim();
+    const resumed = await writer.write(current => resumeSuspendedExecutionInRecord(
+        current,
+        resumeOptions(current, 50_000, { runtimeRunId: 'runtime-after-ready-resume' }),
+    ));
+    assert.equal(activeLock.held, true);
+    assert.equal(resumed.executions[0].execution.attempt, null);
+    assert.equal(resumed.executions[0].suspendedCheckpoint, null);
+    assert.equal(resumed.activeRuntime.run.runId, 'runtime-after-ready-resume');
+    assert.equal(resumed.activeRuntime.clock.status, 'READY');
+    assert.deepEqual(resumed.executions[0].execution.workshopNotes, completeWorkshopNotes());
+    assert.deepEqual(await writer.read(), resumed);
+    await activeLock.release();
+    assert.equal(locks.held.size, 0);
 });
 
 test('validates the empty record and multiple templates and planned executions', () => {

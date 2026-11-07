@@ -1,6 +1,7 @@
 import {
     EXECUTION_LIFECYCLES,
     activatePlannedExecution,
+    resumeReadyExecution,
     startActiveExecution,
     suspendReadyExecution,
     validatePlannedExecution,
@@ -13,6 +14,7 @@ import {
 import {
     captureExecutionRuntimeCheckpoint,
     prepareReadyExecutionRuntime,
+    resumeStartedExecutionWithCheckpoint,
     suspendStartedExecutionWithCheckpoint,
     validateExecutionRuntimeCheckpoint,
 } from './execution-runtime.mjs';
@@ -372,6 +374,79 @@ export function suspendActiveExecutionInRecord(record, options) {
         revision: valid.revision + 1,
         executions,
         activeRuntime: null,
+    });
+}
+
+export function resumeSuspendedExecutionInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const {
+        executionId,
+        expectedAggregateRevision,
+        expectedExecutionRevision,
+        expectedRuntimeRevision,
+        expectedAttemptId,
+        expectedRunId,
+        runtimeRunId,
+        resumedAt,
+    } = options;
+    if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+    safeRevision(expectedAggregateRevision);
+    if (!Number.isSafeInteger(expectedExecutionRevision) || expectedExecutionRevision < 0) fail('invalidRevision');
+    if (!Number.isSafeInteger(expectedRuntimeRevision) || expectedRuntimeRevision < 0) {
+        fail('invalidRuntimeRevision');
+    }
+    if (!Number.isSafeInteger(resumedAt) || resumedAt < 0) fail('INVALID_RUNTIME');
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+
+    const index = valid.executions.findIndex(entry => entry.execution.id === executionId);
+    if (index < 0) fail('executionNotFound');
+    const selected = valid.executions[index];
+    const execution = selected.execution;
+    if (execution.revision !== expectedExecutionRevision
+        || execution.runtimeRevision !== expectedRuntimeRevision) fail('conflict');
+    if (execution.lifecycle !== EXECUTION_LIFECYCLES.SUSPENDED) fail('invalidLifecycle');
+    if (valid.activeRuntime !== null || valid.executions.some((entry, entryIndex) => entryIndex !== index
+        && entry.execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE)) fail('activeExecutionExists');
+
+    let active;
+    let activeRuntime;
+    if (execution.attempt === null) {
+        if (selected.suspendedCheckpoint !== null) fail('unexpectedCheckpoint');
+        if (expectedAttemptId !== null || expectedRunId !== null) fail('invalidAttemptBinding');
+        const suspended = validateSuspendedReadyExecution(execution);
+        active = resumeReadyExecution(suspended);
+        activeRuntime = prepareReadyExecutionRuntime(active, runtimeRunId, resumedAt);
+    } else {
+        if (runtimeRunId !== undefined) fail('invalidActiveRuntimeBinding');
+        const suspended = validateSuspendedStartedExecution(execution);
+        if (selected.suspendedCheckpoint === null) fail('missingCheckpoint');
+        const checkpoint = validateExecutionRuntimeCheckpoint(selected.suspendedCheckpoint, suspended);
+        if (expectedAttemptId !== suspended.attempt.id) fail('invalidAttemptBinding');
+        if (expectedRunId !== suspended.attempt.runtimeRunId
+            || expectedRunId !== checkpoint.run.runId) fail('invalidActiveRuntimeBinding');
+        if (resumedAt < checkpoint.capturedAt) fail('CLOCK_ANOMALY');
+        const resumed = resumeStartedExecutionWithCheckpoint(suspended, checkpoint);
+        active = resumed.execution;
+        activeRuntime = {
+            executionId: active.id,
+            attemptId: active.attempt.id,
+            runtimeRevision: active.runtimeRevision,
+            savedAt: resumedAt,
+            run: resumed.checkpoint.run,
+            clock: resumed.checkpoint.clock,
+        };
+    }
+
+    const executions = valid.executions.map((entry, entryIndex) => (entryIndex === index
+        ? { execution: active, suspendedCheckpoint: null }
+        : entry));
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions,
+        activeRuntime,
     });
 }
 
