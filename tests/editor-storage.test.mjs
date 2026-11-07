@@ -13,9 +13,12 @@ import {
 import {
     EDITOR_STORAGE_KEY,
     EDITOR_STORE_SCHEMA_VERSION,
+    activatePlannedExecutionInRecord,
     createEditorStore,
     validateEditorStoreRecord,
 } from '../src/js/editor-storage.mjs';
+import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
+import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { prepareSession, transitionSession } from '../src/js/session.mjs';
 
 const plan = (name = 'Workshop') => ({
@@ -108,6 +111,160 @@ function memory(raw = null) {
         removeItem(key) { values.delete(key); },
     };
 }
+
+function aggregateLockManager() {
+    const held = new Set();
+    return {
+        held,
+        request(name, options, callback) {
+            assert.deepEqual(options, { mode: 'exclusive', ifAvailable: true });
+            if (held.has(name)) return Promise.resolve(callback(null));
+            held.add(name);
+            return Promise.resolve(callback({ name, mode: 'exclusive' }))
+                .finally(() => held.delete(name));
+        },
+    };
+}
+
+const activationOptions = (changes = {}) => ({
+    executionId: 'execution-1',
+    expectedAggregateRevision: 0,
+    expectedExecutionRevision: 1,
+    expectedRuntimeRevision: 0,
+    runtimeRunId: 'runtime-ready-1',
+    savedAt: 1000,
+    ...changes,
+});
+
+test('activates one planned execution with an initial READY runtime and exact revision progress', () => {
+    const source = record({
+        revision: 3,
+        templates: [template()],
+        executions: [entry(planned()), entry(planned('execution-2'))],
+    });
+    source.executions[0].execution.currentPlan.preparedInformation = '**Prepared**';
+    source.executions[0].execution.workshopNotes = {
+        rundown: 'Rundown note',
+        phases: [{ phaseId: 'phase-1', text: 'Phase note' }],
+    };
+    const before = structuredClone(source);
+    const result = activatePlannedExecutionInRecord(source, activationOptions({
+        expectedAggregateRevision: 3,
+    }));
+
+    assert.deepEqual(source, before);
+    assert.equal(result.revision, 4);
+    assert.equal(result.executions[0].execution.lifecycle, 'active');
+    assert.equal(result.executions[0].execution.revision, 2);
+    assert.equal(result.executions[0].execution.runtimeRevision, 1);
+    assert.equal(result.executions[0].execution.attempt, null);
+    assert.equal(result.executions[0].suspendedCheckpoint, null);
+    assert.deepEqual(result.executions[0].execution.currentPlan, before.executions[0].execution.currentPlan);
+    assert.deepEqual(result.executions[0].execution.workshopNotes, before.executions[0].execution.workshopNotes);
+    assert.deepEqual(result.executions[1], before.executions[1]);
+    assert.deepEqual(result.templates, before.templates);
+    assert.equal(result.activeRuntime.executionId, 'execution-1');
+    assert.equal(result.activeRuntime.attemptId, null);
+    assert.equal(result.activeRuntime.runtimeRevision, 1);
+    assert.equal(result.activeRuntime.savedAt, 1000);
+    assert.equal(result.activeRuntime.run.runId, 'runtime-ready-1');
+    assert.equal(result.activeRuntime.run.sourceTemplateId, 'template-1');
+    assert.equal(result.activeRuntime.run.currentIndex, 0);
+    assert.equal(result.activeRuntime.run.stage, 'PHASE');
+    assert.deepEqual(result.activeRuntime.run.phaseOvertime, {});
+    assert.equal(result.activeRuntime.clock.status, 'READY');
+    assert.notEqual(result.executions[0].execution, source.executions[0].execution);
+    assert.notEqual(result.executions[1], source.executions[1]);
+    assert.notEqual(result.templates[0], source.templates[0]);
+});
+
+test('uses the execution ID as the source-less runtime fallback', () => {
+    const execution = { ...planned(), source: null };
+    const result = activatePlannedExecutionInRecord(
+        record({ executions: [entry(execution)] }),
+        activationOptions(),
+    );
+    assert.equal(result.activeRuntime.run.sourceTemplateId, execution.id);
+});
+
+test('rejects activation conflicts, invalid inputs and aggregate overflow without mutation', () => {
+    const source = record({ executions: [entry(planned())] });
+    const before = structuredClone(source);
+    const invalidOptions = [
+        activationOptions({ executionId: 'missing' }),
+        activationOptions({ executionId: '' }),
+        activationOptions({ expectedAggregateRevision: 1 }),
+        activationOptions({ expectedAggregateRevision: -1 }),
+        activationOptions({ expectedExecutionRevision: 2 }),
+        activationOptions({ expectedExecutionRevision: -1 }),
+        activationOptions({ expectedRuntimeRevision: 1 }),
+        activationOptions({ expectedRuntimeRevision: -1 }),
+        activationOptions({ runtimeRunId: undefined }),
+        activationOptions({ runtimeRunId: '' }),
+        activationOptions({ savedAt: -1 }),
+    ];
+    for (const options of invalidOptions) {
+        assert.throws(() => activatePlannedExecutionInRecord(source, options));
+        assert.deepEqual(source, before);
+    }
+
+    const active = activatePlannedExecution(planned());
+    const activeRecord = record({
+        executions: [entry(active)],
+        activeRuntime: activeRuntime(active, session()),
+    });
+    assert.throws(() => activatePlannedExecutionInRecord(activeRecord, activationOptions({
+        expectedExecutionRevision: active.revision,
+        expectedRuntimeRevision: active.runtimeRevision,
+    })), /invalidLifecycle/);
+
+    const suspended = suspendReadyExecution(activatePlannedExecution(planned()));
+    assert.throws(() => activatePlannedExecutionInRecord(
+        record({ executions: [entry(suspended)] }),
+        activationOptions({ expectedExecutionRevision: suspended.revision, expectedRuntimeRevision: suspended.runtimeRevision }),
+    ), /invalidLifecycle/);
+
+    const otherActive = activatePlannedExecution(planned('execution-2'));
+    assert.throws(() => activatePlannedExecutionInRecord(record({
+        executions: [entry(planned()), entry(otherActive)],
+        activeRuntime: activeRuntime(otherActive, session('runtime-other')),
+    }), activationOptions()), /activeExecutionExists/);
+
+    const overflow = record({
+        revision: Number.MAX_SAFE_INTEGER,
+        executions: [entry(planned())],
+    });
+    assert.throws(() => activatePlannedExecutionInRecord(overflow, activationOptions({
+        expectedAggregateRevision: Number.MAX_SAFE_INTEGER,
+    })), /invalidStoreRevision/);
+    assert.throws(() => activatePlannedExecutionInRecord({ ...source, extra: true }, activationOptions()));
+});
+
+test('activates and persists READY under the writer lock while active-timer ownership remains held', async () => {
+    const initial = record({ revision: 7, templates: [template()], executions: [entry(planned())] });
+    const storage = memory(JSON.stringify(initial));
+    const locks = aggregateLockManager();
+    const activeLock = createEditorActiveTimerLock({ locks });
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks });
+
+    assert.equal(await activeLock.claim(), true);
+    assert.equal(activeLock.held, true);
+    const saved = await writer.write(current => {
+        assert.equal(activeLock.held, true);
+        return activatePlannedExecutionInRecord(current, activationOptions({
+            expectedAggregateRevision: 7,
+        }));
+    });
+    assert.equal(activeLock.held, true);
+    assert.equal(saved.activeRuntime.clock.status, 'READY');
+    assert.equal(storage.state.writes, 1);
+    const readback = await writer.read();
+    assert.deepEqual(readback, saved);
+    assert.equal(activeLock.held, true);
+    assert.equal(await activeLock.release(), true);
+    assert.equal(activeLock.held, false);
+    assert.equal(locks.held.size, 0);
+});
 
 test('validates the empty record and multiple templates and planned executions', () => {
     const source = record({
