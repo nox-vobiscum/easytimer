@@ -41,6 +41,7 @@ function memory(raw = null, locks = null, events = []) {
     const state = {
         writes: 0,
         removes: 0,
+        failRead: false,
         failWrite: null,
         failReadAfterWrite: false,
         readback: undefined,
@@ -50,6 +51,7 @@ function memory(raw = null, locks = null, events = []) {
         state,
         getItem(key) {
             events.push(['read', locks?.held.has(EDITOR_STORE_WRITE_LOCK) ?? false]);
+            if (state.failRead) throw new Error('synthetic read failure');
             if (state.failReadAfterWrite && state.writes > 0) throw new Error('synthetic readback failure');
             if (state.readback !== undefined && state.writes > 0) return state.readback;
             return values.get(key) ?? null;
@@ -72,6 +74,83 @@ function memory(raw = null, locks = null, events = []) {
 }
 
 const next = record => ({ ...record, revision: record.revision + 1 });
+
+test('read loads and validates the missing-key initial record entirely inside the existing lock', async () => {
+    const events = [];
+    const locks = lockManager(events);
+    const storage = memory(null, locks, events);
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks });
+    assert.deepEqual(await writer.read(), empty());
+    assert.deepEqual(events, [
+        ['request', EDITOR_STORE_WRITE_LOCK, { mode: 'exclusive', ifAvailable: true }],
+        ['acquired', EDITOR_STORE_WRITE_LOCK],
+        ['read', true],
+        ['released', EDITOR_STORE_WRITE_LOCK],
+    ]);
+    assert.equal(storage.state.writes, 0);
+    assert.equal(storage.state.removes, 0);
+    assert.equal(locks.held.size, 0);
+});
+
+test('each read observes the newest complete record and returns a copy-isolated result', async () => {
+    const locks = lockManager();
+    const storage = memory(JSON.stringify(empty(1)), locks);
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks });
+    const first = await writer.read();
+    assert.deepEqual(first, empty(1));
+    first.templates.push({ invalid: true });
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(empty(2)));
+    const second = await writer.read();
+    assert.deepEqual(second, empty(2));
+    second.executions.push({ invalid: true });
+    assert.deepEqual(await writer.read(), empty(2));
+    assert.equal(storage.state.writes, 0);
+    assert.equal(storage.state.removes, 0);
+});
+
+test('read fails closed for unavailable, busy and failed lock requests without storage access', async () => {
+    let storageRequests = 0;
+    const unavailable = createEditorStoreWriter({
+        getStorage: () => { storageRequests += 1; return memory(); },
+        locks: null,
+    });
+    await assert.rejects(unavailable.read(), /lockUnavailable/);
+
+    const locks = lockManager();
+    const storage = memory(null, locks);
+    const owner = createEditorStoreWriter({ getStorage: () => storage, locks });
+    const reader = createEditorStoreWriter({
+        getStorage: () => { storageRequests += 1; return storage; },
+        locks,
+    });
+    let concurrentRead;
+    await owner.write(record => {
+        concurrentRead = reader.read();
+        return next(record);
+    });
+    await assert.rejects(concurrentRead, /lockBusy/);
+
+    locks.fail = true;
+    await assert.rejects(reader.read(), /lockRequest/);
+    assert.equal(storageRequests, 0);
+    assert.equal(locks.held.size, 0);
+});
+
+test('read forwards storage failures unchanged and releases the lock', async () => {
+    const locks = lockManager();
+    const unreadable = memory(null, locks);
+    unreadable.state.failRead = true;
+    const unreadableWriter = createEditorStoreWriter({ getStorage: () => unreadable, locks });
+    await assert.rejects(unreadableWriter.read(), /storageRead/);
+    assert.equal(locks.held.size, 0);
+
+    const invalid = memory('{broken', locks);
+    const invalidWriter = createEditorStoreWriter({ getStorage: () => invalid, locks });
+    await assert.rejects(invalidWriter.read(), /storageValidation/);
+    assert.equal(locks.held.size, 0);
+    assert.equal(unreadable.state.writes, 0);
+    assert.equal(invalid.state.writes, 0);
+});
 
 test('exports the fixed lock name and runs load, transform, save and readback inside one lock', async () => {
     const events = [];
