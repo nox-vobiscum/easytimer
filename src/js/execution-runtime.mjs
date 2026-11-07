@@ -1,16 +1,18 @@
 import {
     resumeStartedExecution,
     suspendStartedExecution,
+    validateReadyExecution,
     validateStartedExecution,
     validateSuspendedStartedExecution,
 } from './editor-domain.mjs';
 import { validateRuntime } from './recovery.mjs';
-import { transitionSession } from './session.mjs';
+import { prepareSession, transitionSession } from './session.mjs';
 
 export const EXECUTION_RUNTIME_CHECKPOINT_SCHEMA_VERSION = 1;
 export const EXECUTION_RUNTIME_CHECKPOINT_KIND = 'execution-runtime-checkpoint';
 
 const CHECKPOINT_CONTEXT_ID = 'execution-runtime-checkpoint';
+const ACTIVE_RUNTIME_CONTEXT_ID = 'execution-active-runtime';
 
 const fail = code => { throw new Error(code); };
 
@@ -18,6 +20,39 @@ function exactFields(value, fields) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)
         || Object.keys(value).length !== fields.length
         || fields.some(field => !Object.hasOwn(value, field))) fail('invalidCheckpoint');
+}
+
+export function prepareReadyExecutionRuntime(execution, runtimeRunId, savedAt) {
+    const ready = validateReadyExecution(execution);
+    if (typeof runtimeRunId !== 'string' || !runtimeRunId.trim()) fail('INVALID_RUN');
+    const plan = ready.currentPlan;
+    const prepared = prepareSession({
+        id: ready.source?.id ?? ready.id,
+        name: plan.name,
+        transitionMode: plan.transitionMode,
+        phases: plan.phases.map(phase => ({
+            id: phase.id,
+            title: phase.title,
+            durationSeconds: phase.durationSeconds,
+        })),
+    }, runtimeRunId);
+    const runtime = validateRuntime({
+        schemaVersion: 1,
+        contextId: ACTIVE_RUNTIME_CONTEXT_ID,
+        savedAt,
+        mode: 'session',
+        run: prepared.run,
+        clock: prepared.clock,
+        quickDurationMs: 0,
+    });
+    return {
+        executionId: ready.id,
+        attemptId: null,
+        runtimeRevision: ready.runtimeRevision,
+        savedAt: runtime.savedAt,
+        run: runtime.run,
+        clock: runtime.clock,
+    };
 }
 
 export function validateExecutionRuntimeCheckpoint(checkpoint, execution) {
