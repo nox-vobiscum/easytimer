@@ -230,6 +230,79 @@ export function startReadyExecutionInRecord(record, options) {
     });
 }
 
+export function applyStartedSessionActionInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const {
+        executionId,
+        expectedAggregateRevision,
+        expectedExecutionRevision,
+        expectedRuntimeRevision,
+        expectedAttemptId,
+        expectedRunId,
+        actionType,
+        occurredAt,
+    } = options;
+    if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+    safeRevision(expectedAggregateRevision);
+    if (!Number.isSafeInteger(expectedExecutionRevision) || expectedExecutionRevision < 0) fail('invalidRevision');
+    if (!Number.isSafeInteger(expectedRuntimeRevision) || expectedRuntimeRevision < 0) {
+        fail('invalidRuntimeRevision');
+    }
+    if (!Number.isSafeInteger(occurredAt) || occurredAt < 0) fail('INVALID_RUNTIME');
+    const supported = ['START', 'PAUSE', 'RESUME', 'NEXT', 'COMPLETE', 'STOP_OVERTIME'];
+    if (!supported.includes(actionType)) fail('invalidSessionAction');
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+
+    const selected = valid.executions.find(entry => entry.execution.id === executionId);
+    if (!selected) fail('executionNotFound');
+    const execution = selected.execution;
+    if (execution.revision !== expectedExecutionRevision
+        || execution.runtimeRevision !== expectedRuntimeRevision) fail('conflict');
+    if (execution.lifecycle !== EXECUTION_LIFECYCLES.ACTIVE) fail('invalidLifecycle');
+    if (execution.attempt === null) fail('invalidAttempt');
+    if (selected.suspendedCheckpoint !== null || valid.activeRuntime === null
+        || valid.activeRuntime.executionId !== execution.id
+        || valid.activeRuntime.attemptId !== execution.attempt.id
+        || valid.activeRuntime.runtimeRevision !== execution.runtimeRevision) fail('invalidActiveRuntimeBinding');
+    if (expectedAttemptId !== execution.attempt.id) fail('invalidAttemptBinding');
+    if (expectedRunId !== execution.attempt.runtimeRunId
+        || expectedRunId !== valid.activeRuntime.run.runId) fail('invalidActiveRuntimeBinding');
+    if (occurredAt < valid.activeRuntime.savedAt) fail('CLOCK_ANOMALY');
+
+    const reconciled = transitionSession(
+        valid.activeRuntime.run,
+        valid.activeRuntime.clock,
+        { type: 'TICK' },
+        occurredAt,
+    );
+    const { run, clock } = reconciled;
+    const last = run.currentIndex === run.phases.length - 1;
+    const allowed = (actionType === 'START' && run.stage === 'PHASE'
+            && run.currentIndex > 0 && clock.status === 'READY')
+        || (actionType === 'PAUSE' && ['RUNNING', 'FINISHED'].includes(clock.status))
+        || (actionType === 'RESUME' && ['PAUSED', 'OVERTIME_PAUSED'].includes(clock.status))
+        || (actionType === 'NEXT' && run.transitionMode === 'manual' && run.stage === 'PHASE' && !last)
+        || (actionType === 'COMPLETE' && run.transitionMode === 'manual' && run.stage === 'PHASE' && last)
+        || (actionType === 'STOP_OVERTIME' && run.stage === 'COMPLETED'
+            && ['FINISHED', 'OVERTIME_PAUSED'].includes(clock.status));
+    if (!allowed) fail('invalidSessionAction');
+
+    const transitioned = transitionSession(run, clock, { type: actionType }, occurredAt);
+    if (JSON.stringify(transitioned) === JSON.stringify(reconciled)) fail('invalidSessionAction');
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        activeRuntime: {
+            ...valid.activeRuntime,
+            savedAt: occurredAt,
+            run: transitioned.run,
+            clock: transitioned.clock,
+        },
+    });
+}
+
 function emptyRecord() {
     return validateEditorStoreRecord({
         schemaVersion: EDITOR_STORE_SCHEMA_VERSION,

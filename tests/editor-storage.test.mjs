@@ -13,6 +13,7 @@ import {
 import {
     EDITOR_STORAGE_KEY,
     EDITOR_STORE_SCHEMA_VERSION,
+    applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     createEditorStore,
     startReadyExecutionInRecord,
@@ -147,6 +148,30 @@ const startOptions = (changes = {}) => ({
     startedAt: 2000,
     ...changes,
 });
+
+function sessionActionOptions(source, actionType, occurredAt, changes = {}) {
+    const execution = source.executions.find(item => item.execution.lifecycle === 'active').execution;
+    return {
+        executionId: execution.id,
+        expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision,
+        expectedAttemptId: execution.attempt.id,
+        expectedRunId: execution.attempt.runtimeRunId,
+        actionType,
+        occurredAt,
+        ...changes,
+    };
+}
+
+function startedRecord(changes = {}) {
+    const execution = { ...planned(), ...changes };
+    const ready = activatePlannedExecutionInRecord(
+        record({ executions: [entry(execution)] }),
+        activationOptions(),
+    );
+    return startReadyExecutionInRecord(ready, startOptions());
+}
 
 test('activates one planned execution with an initial READY runtime and exact revision progress', () => {
     const source = record({
@@ -303,6 +328,155 @@ test('rejects invalid first START inputs, stale revisions and repeated START wit
     assert.throws(() => startReadyExecutionInRecord({ ...ready, extra: true }, startOptions()));
 });
 
+test('applies pause, resume, next and later-phase start without changing execution identity', () => {
+    const started = startedRecord();
+    started.templates.push(template());
+    started.executions.push(entry(planned('execution-2')));
+    const before = structuredClone(started);
+    const pause = applyStartedSessionActionInRecord(
+        started,
+        sessionActionOptions(started, 'PAUSE', 12_000),
+    );
+    assert.equal(pause.activeRuntime.clock.status, 'PAUSED');
+    assert.equal(pause.activeRuntime.clock.remainingMs, 50_000);
+    const resume = applyStartedSessionActionInRecord(
+        pause,
+        sessionActionOptions(pause, 'RESUME', 20_000),
+    );
+    assert.equal(resume.activeRuntime.clock.status, 'RUNNING');
+    assert.equal(resume.activeRuntime.clock.deadlineMs, 70_000);
+    const next = applyStartedSessionActionInRecord(
+        resume,
+        sessionActionOptions(resume, 'NEXT', 30_000),
+    );
+    assert.equal(next.activeRuntime.run.currentIndex, 1);
+    assert.equal(next.activeRuntime.clock.status, 'READY');
+    const laterStart = applyStartedSessionActionInRecord(
+        next,
+        sessionActionOptions(next, 'START', 31_000),
+    );
+    assert.equal(laterStart.activeRuntime.clock.status, 'RUNNING');
+    assert.equal(laterStart.activeRuntime.clock.deadlineMs, 151_000);
+
+    const originalExecution = before.executions[0].execution;
+    for (const result of [pause, resume, next, laterStart]) {
+        const execution = result.executions[0].execution;
+        assert.equal(execution.id, originalExecution.id);
+        assert.equal(execution.revision, originalExecution.revision);
+        assert.equal(execution.runtimeRevision, originalExecution.runtimeRevision);
+        assert.deepEqual(execution.attempt, originalExecution.attempt);
+        assert.deepEqual(execution.currentPlan, originalExecution.currentPlan);
+        assert.deepEqual(execution.workshopNotes, originalExecution.workshopNotes);
+        assert.equal(result.activeRuntime.attemptId, originalExecution.attempt.id);
+        assert.equal(result.activeRuntime.runtimeRevision, originalExecution.runtimeRevision);
+        assert.equal(result.activeRuntime.run.runId, originalExecution.attempt.runtimeRunId);
+        assert.deepEqual(result.templates, before.templates);
+        assert.deepEqual(result.executions[1], before.executions[1]);
+    }
+    assert.equal(pause.revision, started.revision + 1);
+    assert.equal(resume.revision, pause.revision + 1);
+    assert.equal(next.revision, resume.revision + 1);
+    assert.equal(laterStart.revision, next.revision + 1);
+    assert.deepEqual(started, before);
+    assert.notEqual(laterStart.activeRuntime, next.activeRuntime);
+    assert.notEqual(laterStart.activeRuntime.run, next.activeRuntime.run);
+});
+
+test('completes the final session phase and stops overtime without completing the execution', () => {
+    const started = startedRecord();
+    const next = applyStartedSessionActionInRecord(
+        started,
+        sessionActionOptions(started, 'NEXT', 10_000),
+    );
+    const second = applyStartedSessionActionInRecord(
+        next,
+        sessionActionOptions(next, 'START', 11_000),
+    );
+    const complete = applyStartedSessionActionInRecord(
+        second,
+        sessionActionOptions(second, 'COMPLETE', 20_000),
+    );
+    assert.equal(complete.activeRuntime.run.stage, 'COMPLETED');
+    assert.equal(complete.activeRuntime.clock.status, 'FINISHED');
+    assert.equal(complete.activeRuntime.clock.deadlineMs, 20_000);
+    assert.equal(complete.executions[0].execution.lifecycle, 'active');
+    const stopped = applyStartedSessionActionInRecord(
+        complete,
+        sessionActionOptions(complete, 'STOP_OVERTIME', 25_000),
+    );
+    assert.equal(stopped.activeRuntime.run.stage, 'COMPLETED');
+    assert.equal(stopped.activeRuntime.clock.status, 'OVERTIME_STOPPED');
+    assert.equal(stopped.activeRuntime.clock.overtimeMs, 5000);
+    assert.equal(stopped.executions[0].execution.lifecycle, 'active');
+    assert.deepEqual(stopped.executions[0].execution.attempt, started.executions[0].execution.attempt);
+});
+
+test('uses session reconciliation for automatic phase catch-up before applying an action', () => {
+    const automatic = startedRecord({
+        currentPlan: { ...planned().currentPlan, transitionMode: 'automatic' },
+    });
+    const paused = applyStartedSessionActionInRecord(
+        automatic,
+        sessionActionOptions(automatic, 'PAUSE', 70_000),
+    );
+    assert.equal(paused.activeRuntime.run.currentIndex, 1);
+    assert.equal(paused.activeRuntime.run.stage, 'PHASE');
+    assert.equal(paused.activeRuntime.clock.status, 'PAUSED');
+    assert.equal(paused.activeRuntime.clock.remainingMs, 112_000);
+    assert.deepEqual(paused.activeRuntime.run.phaseOvertime, { 'phase-1': 0 });
+});
+
+test('rejects unsupported, inapplicable, stale, foreign and anomalous actions without mutation', () => {
+    const started = startedRecord();
+    const before = structuredClone(started);
+    for (const actionType of ['TICK', 'PRIMARY', 'STOP_WORKSHOP', 'UNKNOWN']) {
+        assert.throws(() => applyStartedSessionActionInRecord(
+            started,
+            sessionActionOptions(started, actionType, 3000),
+        ), /invalidSessionAction/);
+    }
+    for (const [actionType, occurredAt] of [
+        ['START', 3000],
+        ['RESUME', 3000],
+        ['COMPLETE', 3000],
+        ['STOP_OVERTIME', 3000],
+    ]) {
+        assert.throws(() => applyStartedSessionActionInRecord(
+            started,
+            sessionActionOptions(started, actionType, occurredAt),
+        ), /invalidSessionAction/);
+    }
+    for (const changes of [
+        { expectedAggregateRevision: started.revision - 1 },
+        { expectedExecutionRevision: 2 },
+        { expectedRuntimeRevision: 1 },
+        { expectedAttemptId: 'foreign-attempt' },
+        { expectedRunId: 'foreign-run' },
+        { occurredAt: -1 },
+        { occurredAt: 1.5 },
+        { occurredAt: 1000 },
+    ]) assert.throws(() => applyStartedSessionActionInRecord(
+        started,
+        sessionActionOptions(started, 'PAUSE', 3000, changes),
+    ));
+    const overflow = { ...started, revision: Number.MAX_SAFE_INTEGER };
+    assert.throws(() => applyStartedSessionActionInRecord(
+        overflow,
+        sessionActionOptions(overflow, 'PAUSE', 3000),
+    ), /invalidStoreRevision/);
+    assert.deepEqual(started, before);
+
+    const automatic = startedRecord({
+        currentPlan: { ...planned().currentPlan, transitionMode: 'automatic' },
+    });
+    for (const actionType of ['NEXT', 'COMPLETE']) {
+        assert.throws(() => applyStartedSessionActionInRecord(
+            automatic,
+            sessionActionOptions(automatic, actionType, 3000),
+        ), /invalidSessionAction/);
+    }
+});
+
 test('rejects activation conflicts, invalid inputs and aggregate overflow without mutation', () => {
     const source = record({ executions: [entry(planned())] });
     const before = structuredClone(source);
@@ -356,7 +530,7 @@ test('rejects activation conflicts, invalid inputs and aggregate overflow withou
     assert.throws(() => activatePlannedExecutionInRecord({ ...source, extra: true }, activationOptions()));
 });
 
-test('activates READY and persists the first START while active-timer ownership remains held', async () => {
+test('persists READY, first START and later session actions while active-timer ownership remains held', async () => {
     const initial = record({ revision: 7, templates: [template()], executions: [entry(planned())] });
     const storage = memory(JSON.stringify(initial));
     const locks = aggregateLockManager();
@@ -389,14 +563,36 @@ test('activates READY and persists the first START while active-timer ownership 
     assert.equal(startedRecord.activeRuntime.run.runId, 'runtime-ready-1');
     assert.equal(startedRecord.activeRuntime.clock.status, 'RUNNING');
     assert.deepEqual(await writer.read(), startedRecord);
-    await assert.rejects(writer.write(current => startReadyExecutionInRecord(current, startOptions({
-        expectedAggregateRevision: 9,
-        expectedExecutionRevision: 3,
-        expectedRuntimeRevision: 2,
-        attemptId: 'attempt-2',
-        startedAt: 3000,
-    }))), /invalidAttempt/);
-    assert.equal(storage.state.writes, 2);
+
+    let current = startedRecord;
+    for (const [actionType, occurredAt, expectedStatus] of [
+        ['PAUSE', 12_000, 'PAUSED'],
+        ['RESUME', 20_000, 'RUNNING'],
+        ['NEXT', 30_000, 'READY'],
+        ['START', 31_000, 'RUNNING'],
+    ]) {
+        const previous = current;
+        current = await writer.write(loaded => {
+            assert.equal(activeLock.held, true);
+            return applyStartedSessionActionInRecord(
+                loaded,
+                sessionActionOptions(loaded, actionType, occurredAt),
+            );
+        });
+        assert.equal(activeLock.held, true);
+        assert.equal(current.revision, previous.revision + 1);
+        assert.equal(current.activeRuntime.clock.status, expectedStatus);
+        assert.equal(current.executions[0].execution.attempt.id, 'attempt-1');
+        assert.equal(current.executions[0].execution.attempt.runtimeRunId, 'runtime-ready-1');
+        assert.equal(current.activeRuntime.run.runId, 'runtime-ready-1');
+    }
+    assert.equal(storage.state.writes, 6);
+    assert.deepEqual(await writer.read(), current);
+    await assert.rejects(writer.write(loaded => applyStartedSessionActionInRecord(
+        loaded,
+        sessionActionOptions(loaded, 'RESUME', 32_000),
+    )), /invalidSessionAction/);
+    assert.equal(storage.state.writes, 6);
     assert.equal(activeLock.held, true);
     assert.equal(await activeLock.release(), true);
     assert.equal(activeLock.held, false);
