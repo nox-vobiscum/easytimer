@@ -27,7 +27,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | --- | --- | --- | --- |
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
-| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — design pending | Future preparation workspace, notes/resources and on-demand facilitator reference |
+| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — technical foundation implemented locally; UI/workflow pending | Unreleased Schema-2 persistence; Editor UI, remaining lifecycle and Facilitator Panel work remain open |
 | EDITOR-002 | Restore unsaved Workshop-Notizen after reload/crash | Someday / Spike — „für lange Winternächte“ | Explicitly deferred; at most a tiny feasibility spike if a safe, simple approach appears |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
 | SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](archive/investigations/SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
@@ -71,9 +71,23 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 
 ### EDITOR-001 — Session Editor Evolution & Facilitator Panel
 
-**Priority:** High / Near-term — strategic product direction. **Status:** Concept direction accepted; detailed design and implementation pending.
+**Priority:** High / Near-term — strategic product direction. **Status:** Native
+Schema-2 domain, persistence and runtime-transition foundation implemented and
+verified locally, but unreleased. Editor UI integration, remaining lifecycle
+and archive workflows, Facilitator Panel work and their focused reviews remain
+open; every subsequent slice requires explicit Product Owner approval.
 
 Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability and simplicity. No initial file uploads, own backend/accounts, confidentiality model or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private or role-specific notes. See the [concept and open design questions](SESSION_EDITOR_EVOLUTION.md).
+
+**Binding data decision:** No historical user Rundowns require migration.
+EDITOR-001 creates templates and independent executions directly in the native
+Schema-2 Editor Store aggregate. V1-to-V2 conversion, historical compatibility
+import, automatic or dual-library migration and a migration wizard are neither
+required nor open backlog work, and they are not dependencies for the new
+Session Editor. Existing V1 implementation code may remain temporarily for
+regression safety; preserve released timer, editor and recovery behavior until
+separately approved replacement. Future Schema-2 JSON portability remains a
+separate new-model requirement, not a historical migration task.
 
 ### EDITOR-002 — Unsaved Workshop-Notizen draft recovery („Für lange Winternächte“)
 

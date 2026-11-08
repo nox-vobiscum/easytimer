@@ -1,6 +1,22 @@
 # Session Editor Evolution & Facilitator Panel
 
-**Status:** Strategic direction agreed; concept and implementation details pending. **Priority:** High / Near-term. **Implementation authorized:** No.
+**Status:** Strategic direction agreed; the native Schema-2 domain, persistence
+and runtime-transition foundation is implemented and verified locally but not
+released. Editor UI integration, remaining lifecycle/archive workflows and the
+Facilitator Panel remain pending. **Priority:** High / Near-term. Every
+subsequent implementation slice requires separate explicit Product Owner
+approval.
+
+**Binding EDITOR-001 data decision:** There are no historical user Rundowns that
+require migration. New templates and independent executions are created directly
+as native Schema-2 objects in the Editor Store aggregate. No V1-to-V2 conversion,
+historical compatibility import, dual-library migration, startup migration or
+migration wizard is required or authorized. The released V1 implementation may
+remain temporarily and must keep working until separately approved replacement;
+that regression requirement does not imply data migration. Future JSON
+import/export for the new model is a separate contract, not a historical V1
+migration path. Revisit this decision only through an explicit Product Owner
+change.
 
 ## Purpose
 
@@ -163,11 +179,11 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 
 ### Predefined categories for rundowns and phases — agreed direction
 
-- **Category fields belong in the future data model for both rundowns and individual phases**, irrespective of whether the user explicitly chooses a category. A neutral predefined fallback (such as “uncategorized” / “standard”) must be present in the persisted JSON when none is chosen; the final identifiers and schema migration are not yet selected.
+- **Category fields belong in the new data model for both rundowns and individual phases**, irrespective of whether the user explicitly chooses a category. A neutral predefined fallback must be present in persisted Schema-2 JSON when none is chosen. Schema 2 uses the fixed identifier `uncategorized`; no V1 category conversion or migration is required.
 - Categories come from **fixed, application-defined lists**, not user-defined or customizable taxonomies. Possible rundown examples: workshop, congress/conference, meeting, training. Possible phase examples: talk/presentation, discussion, breakout, break. Exact initial lists and labels still require a separate review.
 - **Choosing a category remains optional in the UI**. Do not impose a classification step on users who just want to create and run a timer.
 - Distinguish a rundown's **library role** (template vs. individual execution), its **lifecycle status** (planned/active-in-timer/suspended/completed), and its **category** (workshop/training/etc.); these are independent concepts.
-- **Confirmed user value of phase categories:** Optional phase icons can later make an agenda and timer phases recognizable and help facilitators scan the balance of presentations, discussions, group work and breaks. Categories are a modest initial JSON field, with UI iconography deliverable in a later increment; no category-specific clock/timer behavior is implied. Exact iconography and visual treatment remain open. Import/export and backward compatibility with existing category-free JSON must be addressed in the separately approved data contract. Import/export and backward compatibility with existing category-free JSON must be addressed in the separately approved data contract.
+- **Confirmed user value of phase categories:** Optional phase icons can later make an agenda and timer phases recognizable and help facilitators scan the balance of presentations, discussions, group work and breaks. Categories are a modest Schema-2 JSON field, with UI iconography deliverable in a later increment; no category-specific clock/timer behavior is implied. Exact iconography and visual treatment remain open. Future import/export must validate the new model; category-free historical V1 JSON needs no compatibility or conversion path.
 
 ### Built-in example rundowns — agreed product direction
 
@@ -240,8 +256,8 @@ Requirements and boundaries:
 
 - Preserve one authoritative timer state and existing Session Timer behavior.
 - Maintain the distinction between the saved Rundown definition, the active run's snapshot, and notes captured during that run.
-- Any extension to persisted Rundown data must be designed and tested with existing library storage, validation, JSON import/export, compatibility with saved data, and recovery. The optional Google synchronization work must not be accidentally broken.
-- **JSON field naming (open, distinct from UI copy):** The currently released Rundown library uses **`schemaVersion: 1`**; phase records currently have **`id`**, **`title`**, and **`durationSeconds`** without any notes field. Prefer a neutral, purpose-independent planned-phase field such as **`notes`**, rather than encoding 'moderator-only', 'audience-only', or a changeable German UI label into its key. Store notes captured during a run **separately in the execution context**, associated with stable target phase identity (possible concept-level name: **`phaseNotes`**), not by silently merging them with prepared notes. **Neither proposed field name nor its structure is approved as a schema change**; settle versioning/migration, notes representation, validation, JSON portability and recovery in the later explicit data contract. Displaying prepared content to an audience remains a presentation choice, not a field-level security promise.
+- New persisted Rundown data must be designed and tested with Schema-2 storage, strict validation, new-model JSON import/export and recovery. Existing released functionality and the isolated optional Google synchronization work must not be accidentally broken. This regression boundary does not require V1-to-V2 data migration.
+- **JSON field naming (distinct from UI copy):** The released Rundown implementation still uses **`schemaVersion: 1`** and phase records with **`id`**, **`title`**, and **`durationSeconds`**. EDITOR-001 instead uses the approved native Schema-2 contract, including neutral prepared `notes`, resources and separate execution `workshopNotes` associated with stable phase identities. New-model JSON portability and recovery require their own explicit integration and tests; they must not become a historical V1 conversion path. Displaying prepared content to an audience remains a presentation choice, not a field-level security promise.
 - No own backend, database, account system, file hosting, or mandatory Google login for the initial increments.
 - No new confidentiality, roles, or access-control system in this initiative.
 - Cross-device **live timer synchronization** is a separate, strategically important feature and takes priority over private notes or role-gated views. Google identity alone must not be mistaken for live state synchronization.
@@ -249,7 +265,7 @@ Requirements and boundaries:
 
 ## 5. Candidate incremental delivery path (not yet approved)
 
-1. **Concept and data contract:** settle preparation fields, backward-compatible storage/JSON behavior, and the active-run snapshot boundary. Treat data-model changes as higher-risk than cosmetic UI work.
+1. **Concept and data contract:** use native Schema-2 templates and independent executions, validate new-model storage/JSON behavior, and preserve the active-run snapshot boundary. No historical V1 compatibility migration is required. Treat data-model changes as higher-risk than cosmetic UI work.
 2. **Editor workspace and prepared content:** progressively add more usable phase details, rundown/phase notes, and labeled resource links without losing the simple phase-list workflow.
 3. **Read-only Facilitator Panel:** reveal prepared information on demand in the current Session Timer, without changing timer controls or transitions.
 4. **Lightweight live note capture:** capture phase/rundown observations and optionally transfer selected notes into a saved Rundown after explicit confirmation.

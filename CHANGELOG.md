@@ -6,7 +6,12 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-No unreleased changes.
+### Added
+
+- **EDITOR-001 internal foundation:** the native Schema-2 Editor Store can
+  validate and persist new templates and create independent PLANNED executions
+  from stored templates. This is an unreleased data-layer capability only; no
+  Editor UI integration or production availability is included.
 
 ## PWA v67 — 2026-11-01
 

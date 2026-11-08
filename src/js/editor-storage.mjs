@@ -1,6 +1,7 @@
 import {
     EXECUTION_LIFECYCLES,
     activatePlannedExecution,
+    createPlannedExecution,
     resumeReadyExecution,
     startActiveExecution,
     suspendReadyExecution,
@@ -132,6 +133,44 @@ export function validateEditorStoreRecord(record) {
         executions,
         activeRuntime,
     };
+}
+
+export function insertTemplateInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const { template, expectedAggregateRevision } = options;
+    safeRevision(expectedAggregateRevision);
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+
+    const inserted = validateTemplate(template);
+    if (valid.templates.some(item => item.id === inserted.id)) fail('duplicateId');
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        templates: [...valid.templates, inserted],
+    });
+}
+
+export function planExecutionFromTemplateInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const { templateId, executionId, expectedAggregateRevision } = options;
+    if (typeof templateId !== 'string' || !templateId.trim()
+        || typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+    safeRevision(expectedAggregateRevision);
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+
+    const template = valid.templates.find(item => item.id === templateId);
+    if (!template) fail('templateNotFound');
+    if (valid.executions.some(entry => entry.execution.id === executionId)) fail('duplicateId');
+    const execution = createPlannedExecution(template, executionId);
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions: [...valid.executions, { execution, suspendedCheckpoint: null }],
+    });
 }
 
 export function activatePlannedExecutionInRecord(record, options) {

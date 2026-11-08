@@ -163,6 +163,16 @@ silently reinterpret them here.
 easyTimer is a static HTML/CSS/JavaScript PWA. There is no production build
 framework or application backend.
 
+**Binding EDITOR-001 data decision:** The repository still contains the released
+V1 Rundown implementation, but there is no historical user Rundown data that
+requires migration. EDITOR-001 creates new templates and independent executions
+directly in the native Schema-2 Editor data model and aggregate. Do not add or
+propose V1-to-V2 conversion, compatibility import, dual-library migration or a
+migration wizard unless the Product Owner explicitly changes this decision.
+Keep the released V1 timer, editor and recovery functionality working until a
+separately approved replacement is integrated; regression protection does not
+create a historical-data migration requirement.
+
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.
 - `src/js/timer.mjs` owns Quick Timer transitions and authoritative deadlines.
