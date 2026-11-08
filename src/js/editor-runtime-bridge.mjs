@@ -1,45 +1,78 @@
-import { activatePlannedExecutionInRecord } from './editor-storage.mjs';
+import {
+    activatePlannedExecutionInRecord,
+    startReadyExecutionInRecord,
+} from './editor-storage.mjs';
 
 const fail = code => { throw new Error(code); };
 
 export function createEditorRuntimeBridge({ writer, activeLock }) {
-    let pendingActivation = null;
+    let pendingOperation = null;
+    let busy = false;
 
-    return {
-        async activatePlanned(options) {
-            if (pendingActivation !== null) fail('pendingActivation');
-            await activeLock.claim();
-            let source = null;
-            let target = null;
-            try {
-                const confirmed = await writer.write(record => {
-                    source = structuredClone(record);
-                    target = structuredClone(activatePlannedExecutionInRecord(record, options));
-                    return target;
-                });
-                return confirmed;
-            } catch (error) {
-                if ((error?.message === 'storageUnconfirmed' || error?.message === 'storageReadback')
-                    && source !== null && target !== null) {
-                    pendingActivation = {
-                        source: structuredClone(source),
-                        target: structuredClone(target),
-                    };
-                }
-                throw error;
+    async function writeOperation(kind, options, transform, claimOwnership) {
+        if (pendingOperation !== null) fail(kind === 'activation' ? 'pendingActivation' : 'pendingOperation');
+        if (busy) fail('bridgeBusy');
+        if (!claimOwnership && !activeLock.held) fail('activeLockRequired');
+        busy = true;
+        let source = null;
+        let target = null;
+        try {
+            if (claimOwnership) await activeLock.claim();
+            return await writer.write(record => {
+                source = structuredClone(record);
+                target = structuredClone(transform(record, options));
+                return target;
+            });
+        } catch (error) {
+            if ((error?.message === 'storageUnconfirmed' || error?.message === 'storageReadback')
+                && source !== null && target !== null) {
+                pendingOperation = {
+                    kind,
+                    source: structuredClone(source),
+                    target: structuredClone(target),
+                };
             }
-        },
-        async reconcilePendingActivation() {
-            if (pendingActivation === null) fail('noPendingActivation');
-            if (!activeLock.held) fail('activeLockRequired');
+            throw error;
+        } finally {
+            busy = false;
+        }
+    }
+
+    async function reconcile(expectedKind, includeKind) {
+        if (pendingOperation === null || (expectedKind !== null && pendingOperation.kind !== expectedKind)) {
+            fail(expectedKind === 'activation' ? 'noPendingActivation' : 'noPendingOperation');
+        }
+        if (!activeLock.held) fail('activeLockRequired');
+        if (busy) fail('bridgeBusy');
+        busy = true;
+        const pending = pendingOperation;
+        try {
             const record = await writer.read();
             const raw = JSON.stringify(record);
             let outcome = 'conflict';
-            if (raw === JSON.stringify(pendingActivation.target)) outcome = 'target';
-            else if (raw === JSON.stringify(pendingActivation.source)) outcome = 'source';
+            if (raw === JSON.stringify(pending.target)) outcome = 'target';
+            else if (raw === JSON.stringify(pending.source)) outcome = 'source';
             const result = { outcome, record: structuredClone(record) };
-            if (outcome !== 'conflict') pendingActivation = null;
+            if (includeKind) result.kind = pending.kind;
+            if (outcome !== 'conflict' && pendingOperation === pending) pendingOperation = null;
             return result;
+        } finally {
+            busy = false;
+        }
+    }
+
+    return {
+        activatePlanned(options) {
+            return writeOperation('activation', options, activatePlannedExecutionInRecord, true);
+        },
+        startReady(options) {
+            return writeOperation('start', options, startReadyExecutionInRecord, false);
+        },
+        reconcilePendingActivation() {
+            return reconcile('activation', false);
+        },
+        reconcilePendingOperation() {
+            return reconcile(null, true);
         },
     };
 }

@@ -52,17 +52,39 @@ const activationOptions = (changes = {}) => ({
     ...changes,
 });
 
+const startOptions = (changes = {}) => ({
+    executionId: 'execution-1',
+    expectedAggregateRevision: 1,
+    expectedExecutionRevision: 2,
+    expectedRuntimeRevision: 1,
+    attemptId: 'attempt-1',
+    startedAt: 2000,
+    ...changes,
+});
+
+function deferred() {
+    let resolve;
+    const promise = new Promise(done => { resolve = done; });
+    return { promise, resolve };
+}
+
 function lockManager(events = []) {
     const held = new Set();
     return {
         held,
+        storeGate: null,
         request(name, options, callback) {
             events.push(['request', name, structuredClone(options)]);
             if (held.has(name)) return Promise.resolve(callback(null));
             held.add(name);
             events.push(['acquired', name]);
             return Promise.resolve()
-                .then(() => callback({ name, mode: 'exclusive' }))
+                .then(async () => {
+                    if (name === 'easyTimerEditor.v1.write' && this.storeGate) {
+                        await this.storeGate.promise;
+                    }
+                    return callback({ name, mode: 'exclusive' });
+                })
                 .finally(() => {
                     held.delete(name);
                     events.push(['released', name]);
@@ -78,6 +100,7 @@ function memory(record, locks, events = []) {
         failRead: false,
         failWrite: null,
         failReadAfterWrite: false,
+        faultAfterWrites: 0,
         readback: undefined,
     };
     return {
@@ -86,8 +109,10 @@ function memory(record, locks, events = []) {
         getItem(key) {
             events.push(['read', new Set(locks.held)]);
             if (state.failRead) throw new Error('read failed');
-            if (state.failReadAfterWrite && state.writes > 0) throw new Error('readback failed');
-            if (state.readback !== undefined && state.writes > 0) return state.readback;
+            if (state.failReadAfterWrite && state.writes > state.faultAfterWrites) {
+                throw new Error('readback failed');
+            }
+            if (state.readback !== undefined && state.writes > state.faultAfterWrites) return state.readback;
             return values.get(key) ?? null;
         },
         setItem(key, value) {
@@ -230,8 +255,9 @@ test('reconciles an unconfirmed activation as the complete target without writin
     await assert.rejects(bridge.activatePlanned(activationOptions()), /storageUnconfirmed/);
     storage.state.failReadAfterWrite = false;
     const writes = storage.state.writes;
-    const result = await bridge.reconcilePendingActivation();
+    const result = await bridge.reconcilePendingOperation();
 
+    assert.equal(result.kind, 'activation');
     assert.equal(result.outcome, 'target');
     assert.equal(result.record.executions[0].execution.lifecycle, 'active');
     assert.equal(result.record.activeRuntime.clock.status, 'READY');
@@ -330,5 +356,164 @@ test('rejects reconciliation after ownership is lost and keeps the pending activ
 
     assert.equal(await activeLock.claim(), true);
     assert.equal((await bridge.reconcilePendingActivation()).outcome, 'target');
+    await activeLock.release();
+});
+
+test('starts READY under existing ownership without a second claim and confirms the bound RUNNING attempt', async () => {
+    const events = [];
+    const locks = lockManager(events);
+    const storage = memory(initialRecord(), locks, events);
+    const { activeLock, bridge } = setup({ locks, storage });
+    const ready = await bridge.activatePlanned(activationOptions());
+    const activeRequests = () => events.filter(event => event[0] === 'request'
+        && event[1] === 'easyTimerEditor.v1.active-runtime').length;
+    assert.equal(activeRequests(), 1);
+
+    const result = await bridge.startReady(startOptions());
+
+    assert.equal(activeRequests(), 1);
+    assert.equal(storage.state.writes, 2);
+    assert.equal(result.revision, ready.revision + 1);
+    assert.equal(result.executions[0].execution.attempt.id, 'attempt-1');
+    assert.equal(result.executions[0].execution.attempt.runtimeRunId, 'runtime-ready-1');
+    assert.equal(result.activeRuntime.attemptId, 'attempt-1');
+    assert.equal(result.activeRuntime.run.runId, 'runtime-ready-1');
+    assert.equal(result.activeRuntime.clock.status, 'RUNNING');
+    assert.equal(activeLock.held, true);
+    result.executions[0].execution.attempt.startSnapshot.name = 'Changed result';
+    assert.equal(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY))
+        .executions[0].execution.attempt.startSnapshot.name, 'Workshop');
+    await assert.rejects(bridge.reconcilePendingOperation(), /noPendingOperation/);
+
+    await activeLock.release();
+});
+
+test('rejects START without ownership before store access', async () => {
+    let storageRequests = 0;
+    const locks = lockManager();
+    const activeLock = createEditorActiveTimerLock({ locks });
+    const writer = createEditorStoreWriter({
+        getStorage: () => { storageRequests += 1; return memory(initialRecord(), locks); },
+        locks,
+    });
+    const bridge = createEditorRuntimeBridge({ writer, activeLock });
+
+    await assert.rejects(bridge.startReady(startOptions()), /activeLockRequired/);
+    assert.equal(storageRequests, 0);
+});
+
+test('rejects stale and backward first START operations without a write or ownership release', async () => {
+    const { storage, activeLock, bridge } = setup();
+    await bridge.activatePlanned(activationOptions());
+    const writes = storage.state.writes;
+
+    await assert.rejects(bridge.startReady(startOptions({
+        expectedAggregateRevision: 0,
+    })), /conflict/);
+    await assert.rejects(bridge.startReady(startOptions({ startedAt: 999 })), /CLOCK_ANOMALY/);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+
+    await activeLock.release();
+});
+
+async function pendingStartSetup(failureMode) {
+    const locks = lockManager();
+    const source = initialRecord();
+    const storage = memory(source, locks);
+    const components = setup({ locks, storage });
+    const ready = await components.bridge.activatePlanned(activationOptions());
+    storage.state.faultAfterWrites = storage.state.writes;
+    if (failureMode === 'unconfirmed') storage.state.failReadAfterWrite = true;
+    else storage.state.readback = null;
+    await assert.rejects(
+        components.bridge.startReady(startOptions()),
+        failureMode === 'unconfirmed' ? /storageUnconfirmed/ : /storageReadback/,
+    );
+    storage.state.failReadAfterWrite = false;
+    storage.state.readback = undefined;
+    return { ...components, ready };
+}
+
+test('reconciles an unconfirmed first START as target without another write', async () => {
+    const { locks, storage, activeLock, bridge } = await pendingStartSetup('unconfirmed');
+    const writes = storage.state.writes;
+
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'start');
+    assert.equal(result.outcome, 'target');
+    assert.equal(result.record.executions[0].execution.attempt.id, 'attempt-1');
+    assert.equal(result.record.activeRuntime.clock.status, 'RUNNING');
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await assert.rejects(bridge.reconcilePendingOperation(), /noPendingOperation/);
+
+    await activeLock.release();
+    assert.equal(locks.held.size, 0);
+});
+
+test('reconciles an unconfirmed first START as source without retrying it', async () => {
+    const { storage, activeLock, bridge, ready } = await pendingStartSetup('readback');
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(ready));
+    const writes = storage.state.writes;
+
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'start');
+    assert.equal(result.outcome, 'source');
+    assert.deepEqual(result.record, ready);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('keeps a conflicting START pending and blocks START and activation mutations', async () => {
+    const { storage, activeLock, bridge } = await pendingStartSetup('readback');
+    const third = JSON.parse(storage.values.get(EDITOR_STORAGE_KEY));
+    third.templates[0].plan.name = 'Concurrent valid change';
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(third));
+    const writes = storage.state.writes;
+
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'start');
+    assert.equal(result.outcome, 'conflict');
+    await assert.rejects(bridge.startReady(startOptions()), /pendingOperation/);
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /pendingActivation/);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('retains a pending START and ownership after a failed reconciliation read', async () => {
+    const { storage, activeLock, bridge } = await pendingStartSetup('unconfirmed');
+    storage.state.failRead = true;
+
+    await assert.rejects(bridge.reconcilePendingOperation(), /storageRead/);
+    assert.equal(activeLock.held, true);
+    storage.state.failRead = false;
+    assert.equal((await bridge.reconcilePendingOperation()).outcome, 'target');
+    await activeLock.release();
+});
+
+test('blocks overlapping bridge mutations while the first writer is pending', async () => {
+    const locks = lockManager();
+    const storage = memory(initialRecord(), locks);
+    const { activeLock, bridge } = setup({ locks, storage });
+    await bridge.activatePlanned(activationOptions());
+    locks.storeGate = deferred();
+
+    const first = bridge.startReady(startOptions());
+    await new Promise(resolve => setImmediate(resolve));
+    await assert.rejects(bridge.startReady(startOptions()), /bridgeBusy/);
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /bridgeBusy/);
+    assert.equal(storage.state.writes, 1);
+
+    locks.storeGate.resolve();
+    const result = await first;
+    assert.equal(result.activeRuntime.clock.status, 'RUNNING');
+    assert.equal(storage.state.writes, 2);
+    assert.equal(activeLock.held, true);
     await activeLock.release();
 });
