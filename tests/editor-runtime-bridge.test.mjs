@@ -75,6 +75,7 @@ function memory(record, locks, events = []) {
     const values = new Map([[EDITOR_STORAGE_KEY, JSON.stringify(record)]]);
     const state = {
         writes: 0,
+        failRead: false,
         failWrite: null,
         failReadAfterWrite: false,
         readback: undefined,
@@ -84,6 +85,7 @@ function memory(record, locks, events = []) {
         values,
         getItem(key) {
             events.push(['read', new Set(locks.held)]);
+            if (state.failRead) throw new Error('read failed');
             if (state.failReadAfterWrite && state.writes > 0) throw new Error('readback failed');
             if (state.readback !== undefined && state.writes > 0) return state.readback;
             return values.get(key) ?? null;
@@ -136,6 +138,7 @@ test('activates PLANNED as confirmed ACTIVE READY after acquiring ownership firs
     assert.equal(result.activeRuntime.run.runId, 'runtime-ready-1');
     assert.equal(result.activeRuntime.clock.status, 'READY');
     assert.equal(activeLock.held, true);
+    await assert.rejects(bridge.reconcilePendingActivation(), /noPendingActivation/);
 
     result.executions[0].execution.currentPlan.name = 'Changed result';
     const persisted = JSON.parse(storage.values.get(EDITOR_STORAGE_KEY));
@@ -215,4 +218,117 @@ test('unconfirmed and failed readback writes retain ownership and are never retr
         await activeLock.release();
         assert.equal(locks.held.size, 0);
     }
+});
+
+test('reconciles an unconfirmed activation as the complete target without writing or releasing ownership', async () => {
+    const events = [];
+    const locks = lockManager(events);
+    const storage = memory(initialRecord(), locks, events);
+    storage.state.failReadAfterWrite = true;
+    const { activeLock, bridge } = setup({ locks, storage });
+
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /storageUnconfirmed/);
+    storage.state.failReadAfterWrite = false;
+    const writes = storage.state.writes;
+    const result = await bridge.reconcilePendingActivation();
+
+    assert.equal(result.outcome, 'target');
+    assert.equal(result.record.executions[0].execution.lifecycle, 'active');
+    assert.equal(result.record.activeRuntime.clock.status, 'READY');
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    const lastRequest = events.filter(event => event[0] === 'request').at(-1);
+    assert.equal(lastRequest[1], 'easyTimerEditor.v1.write');
+    const lastRead = events.filter(event => event[0] === 'read').at(-1);
+    assert.equal(lastRead[1].has('easyTimerEditor.v1.write'), true);
+    assert.equal(lastRead[1].has('easyTimerEditor.v1.active-runtime'), true);
+    result.record.executions[0].execution.currentPlan.name = 'Changed result';
+    assert.equal(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY))
+        .executions[0].execution.currentPlan.name, 'Workshop');
+    await assert.rejects(bridge.reconcilePendingActivation(), /noPendingActivation/);
+
+    await activeLock.release();
+    assert.equal(locks.held.size, 0);
+});
+
+test('reconciles a failed readback as the complete source and clears pending', async () => {
+    const locks = lockManager();
+    const source = initialRecord();
+    const storage = memory(source, locks);
+    storage.state.readback = null;
+    const { activeLock, bridge } = setup({ locks, storage });
+
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /storageReadback/);
+    storage.state.readback = undefined;
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(source));
+    const result = await bridge.reconcilePendingActivation();
+
+    assert.equal(result.outcome, 'source');
+    assert.deepEqual(result.record, source);
+    assert.equal(storage.state.writes, 1);
+    assert.equal(activeLock.held, true);
+    await assert.rejects(bridge.reconcilePendingActivation(), /noPendingActivation/);
+
+    await activeLock.release();
+});
+
+test('keeps a full-record conflict pending and blocks another activation without a write', async () => {
+    const locks = lockManager();
+    const storage = memory(initialRecord(), locks);
+    storage.state.readback = null;
+    const { activeLock, bridge } = setup({ locks, storage });
+
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /storageReadback/);
+    storage.state.readback = undefined;
+    const third = JSON.parse(storage.values.get(EDITOR_STORAGE_KEY));
+    third.templates[0].plan.name = 'Concurrent valid change';
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(third));
+    const result = await bridge.reconcilePendingActivation();
+
+    assert.equal(result.outcome, 'conflict');
+    assert.deepEqual(result.record, third);
+    assert.equal(result.record.revision, 1);
+    assert.equal(result.record.activeRuntime.run.runId, 'runtime-ready-1');
+    const writes = storage.state.writes;
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /pendingActivation/);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    const repeated = await bridge.reconcilePendingActivation();
+    assert.equal(repeated.outcome, 'conflict');
+
+    await activeLock.release();
+});
+
+test('failed reconciliation reads retain pending and ownership for a later classification', async () => {
+    const locks = lockManager();
+    const storage = memory(initialRecord(), locks);
+    storage.state.failReadAfterWrite = true;
+    const { activeLock, bridge } = setup({ locks, storage });
+
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /storageUnconfirmed/);
+    storage.state.failReadAfterWrite = false;
+    storage.state.failRead = true;
+    await assert.rejects(bridge.reconcilePendingActivation(), /storageRead/);
+    assert.equal(activeLock.held, true);
+    assert.equal(storage.state.writes, 1);
+
+    storage.state.failRead = false;
+    assert.equal((await bridge.reconcilePendingActivation()).outcome, 'target');
+    await activeLock.release();
+});
+
+test('rejects reconciliation after ownership is lost and keeps the pending activation', async () => {
+    const locks = lockManager();
+    const storage = memory(initialRecord(), locks);
+    storage.state.failReadAfterWrite = true;
+    const { activeLock, bridge } = setup({ locks, storage });
+
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /storageUnconfirmed/);
+    storage.state.failReadAfterWrite = false;
+    await activeLock.release();
+    await assert.rejects(bridge.reconcilePendingActivation(), /activeLockRequired/);
+
+    assert.equal(await activeLock.claim(), true);
+    assert.equal((await bridge.reconcilePendingActivation()).outcome, 'target');
+    await activeLock.release();
 });
