@@ -84,6 +84,29 @@ function sessionActionOptions(source, actionType, occurredAt, changes = {}) {
     };
 }
 
+const completeWorkshopNotes = () => ({
+    rundown: 'Complete rundown notes',
+    phases: [
+        { phaseId: 'phase-1', text: 'Opening notes' },
+        { phaseId: 'phase-2', text: 'Discussion notes' },
+    ],
+});
+
+function suspendOptions(source, suspendedAt, workshopNotes = completeWorkshopNotes(), changes = {}) {
+    const execution = source.executions.find(item => item.execution.lifecycle === 'active').execution;
+    return {
+        executionId: execution.id,
+        expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision,
+        expectedAttemptId: execution.attempt?.id ?? null,
+        expectedRunId: source.activeRuntime.run.runId,
+        suspendedAt,
+        workshopNotes,
+        ...changes,
+    };
+}
+
 function deferred() {
     let resolve;
     const promise = new Promise(done => { resolve = done; });
@@ -774,5 +797,231 @@ test('rejects activation when claimed ownership is lost before its write begins'
     assert.deepEqual(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY)), initialRecord());
     assert.equal(events.filter(event => event[0] === 'request'
         && event[1] === 'easyTimerEditor.v1.active-runtime').length, 1);
+    await assert.rejects(bridge.reconcilePendingOperation(), /noPendingOperation/);
+});
+
+test('suspends ACTIVE READY with complete notes and retains ownership until explicit release', async () => {
+    const events = [];
+    const locks = lockManager(events);
+    const storage = memory(initialRecord(), locks, events);
+    const { writer, activeLock, bridge } = setup({ locks, storage });
+    const ready = await bridge.activatePlanned(activationOptions());
+    const before = structuredClone(ready);
+    const notes = completeWorkshopNotes();
+
+    const result = await bridge.suspendActive(suspendOptions(ready, 2000, notes));
+
+    assert.deepEqual(ready, before);
+    assert.equal(result.revision, ready.revision + 1);
+    assert.equal(result.executions[0].execution.lifecycle, 'suspended');
+    assert.equal(result.executions[0].execution.revision, ready.executions[0].execution.revision + 1);
+    assert.equal(result.executions[0].execution.runtimeRevision,
+        ready.executions[0].execution.runtimeRevision + 1);
+    assert.equal(result.executions[0].execution.attempt, null);
+    assert.equal(result.executions[0].suspendedCheckpoint, null);
+    assert.equal(result.activeRuntime, null);
+    assert.deepEqual(result.executions[0].execution.workshopNotes, notes);
+    assert.equal(result.executions[0].execution.workshopNotes.phases[1].text, 'Discussion notes');
+    assert.deepEqual(result.executions[0].execution.currentPlan, before.executions[0].execution.currentPlan);
+    assert.equal(events.filter(event => event[0] === 'request'
+        && event[1] === 'easyTimerEditor.v1.active-runtime').length, 1);
+    assert.equal(activeLock.held, true);
+    assert.deepEqual(await writer.read(), result);
+    assert.equal(activeLock.held, true);
+
+    notes.rundown = 'Changed input';
+    result.executions[0].execution.workshopNotes.phases[0].text = 'Changed result';
+    const persisted = await writer.read();
+    assert.equal(persisted.executions[0].execution.workshopNotes.rundown, 'Complete rundown notes');
+    assert.equal(persisted.executions[0].execution.workshopNotes.phases[0].text, 'Opening notes');
+    assert.equal(await activeLock.release(), true);
+    assert.equal(locks.held.size, 0);
+});
+
+test('suspends ACTIVE STARTED with one bound frozen checkpoint and unchanged attempt baseline', async () => {
+    const events = [];
+    const { writer, activeLock, bridge, started } = await startedBridgeSetup(events);
+    const paused = await bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 12_000));
+    const before = structuredClone(paused);
+    const notes = completeWorkshopNotes();
+
+    const result = await bridge.suspendActive(suspendOptions(paused, 13_000, notes));
+    const execution = result.executions[0].execution;
+    const checkpoint = result.executions[0].suspendedCheckpoint;
+
+    assert.deepEqual(paused, before);
+    assert.equal(result.revision, paused.revision + 1);
+    assert.equal(execution.lifecycle, 'suspended');
+    assert.equal(execution.revision, paused.executions[0].execution.revision + 1);
+    assert.equal(execution.runtimeRevision, paused.executions[0].execution.runtimeRevision + 1);
+    assert.deepEqual(execution.attempt, before.executions[0].execution.attempt);
+    assert.deepEqual(execution.attempt.startSnapshot, before.executions[0].execution.attempt.startSnapshot);
+    assert.deepEqual(execution.currentPlan, before.executions[0].execution.currentPlan);
+    assert.deepEqual(execution.workshopNotes, notes);
+    assert.equal(result.activeRuntime, null);
+    assert.equal(checkpoint.executionId, execution.id);
+    assert.equal(checkpoint.attemptId, execution.attempt.id);
+    assert.equal(checkpoint.runtimeRevision, execution.runtimeRevision);
+    assert.equal(checkpoint.run.runId, execution.attempt.runtimeRunId);
+    assert.equal(checkpoint.clock.status, 'PAUSED');
+    assert.equal(checkpoint.capturedAt, 13_000);
+    assert.equal(events.filter(event => event[0] === 'request'
+        && event[1] === 'easyTimerEditor.v1.active-runtime').length, 1);
+    assert.equal(activeLock.held, true);
+    assert.deepEqual(await writer.read(), result);
+    assert.equal(await activeLock.release(), true);
+});
+
+test('suspends a runtime-completed session without completing the execution lifecycle', async () => {
+    const { activeLock, bridge, started } = await startedBridgeSetup();
+    const next = await bridge.applySessionAction(sessionActionOptions(started, 'NEXT', 10_000));
+    const second = await bridge.applySessionAction(sessionActionOptions(next, 'START', 11_000));
+    const completed = await bridge.applySessionAction(sessionActionOptions(second, 'COMPLETE', 20_000));
+
+    const result = await bridge.suspendActive(suspendOptions(completed, 21_000));
+
+    assert.equal(result.executions[0].execution.lifecycle, 'suspended');
+    assert.equal(result.executions[0].suspendedCheckpoint.run.stage, 'COMPLETED');
+    assert.equal(result.executions[0].suspendedCheckpoint.clock.status, 'OVERTIME_PAUSED');
+    assert.equal(result.activeRuntime, null);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('rejects invalid suspend requests without a write or automatic ownership release', async () => {
+    const { storage, activeLock, bridge, started } = await startedBridgeSetup();
+    const writes = storage.state.writes;
+    const duplicateNotes = completeWorkshopNotes();
+    duplicateNotes.phases[1].phaseId = 'phase-1';
+
+    await assert.rejects(bridge.suspendActive(suspendOptions(started, 3000, completeWorkshopNotes(), {
+        expectedAggregateRevision: started.revision - 1,
+    })), /conflict/);
+    await assert.rejects(bridge.suspendActive(suspendOptions(started, 1000)), /CLOCK_ANOMALY/);
+    await assert.rejects(bridge.suspendActive(suspendOptions(started, 3000, duplicateNotes)), /invalidNotes/);
+    const unknownNotes = completeWorkshopNotes();
+    unknownNotes.phases[1].phaseId = 'unknown-phase';
+    await assert.rejects(bridge.suspendActive(suspendOptions(started, 3000, unknownNotes)), /invalidNotes/);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+
+    await activeLock.release();
+    await assert.rejects(bridge.suspendActive(suspendOptions(started, 3000)), /activeLockRequired/);
+    assert.equal(storage.state.writes, writes);
+});
+
+test('does not report or release ownership after a quota-failed suspend', async () => {
+    const { locks, storage, activeLock, bridge, started } = await startedBridgeSetup();
+    const writes = storage.state.writes;
+    storage.state.failWrite = 'QuotaExceededError';
+
+    await assert.rejects(bridge.suspendActive(suspendOptions(started, 3000)), /storageQuota/);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+    assert.equal(locks.held.size, 0);
+});
+
+async function pendingSuspendSetup(failureMode) {
+    const components = await startedBridgeSetup();
+    components.storage.state.faultAfterWrites = components.storage.state.writes;
+    if (failureMode === 'unconfirmed') components.storage.state.failReadAfterWrite = true;
+    else components.storage.state.readback = null;
+    await assert.rejects(
+        components.bridge.suspendActive(suspendOptions(components.started, 3000)),
+        failureMode === 'unconfirmed' ? /storageUnconfirmed/ : /storageReadback/,
+    );
+    components.storage.state.failReadAfterWrite = false;
+    components.storage.state.readback = undefined;
+    return components;
+}
+
+test('reconciles an unconfirmed suspend as target without releasing ownership', async () => {
+    const { storage, activeLock, bridge } = await pendingSuspendSetup('unconfirmed');
+    const writes = storage.state.writes;
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'suspend');
+    assert.equal(result.outcome, 'target');
+    assert.equal(result.record.executions[0].execution.lifecycle, 'suspended');
+    assert.equal(result.record.activeRuntime, null);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('reconciles an unconfirmed suspend as source without retrying or releasing', async () => {
+    const { storage, activeLock, bridge, started } = await pendingSuspendSetup('readback');
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(started));
+    const writes = storage.state.writes;
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'suspend');
+    assert.equal(result.outcome, 'source');
+    assert.deepEqual(result.record, started);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('keeps a conflicting suspend pending and blocks further mutations', async () => {
+    const { storage, activeLock, bridge, started } = await pendingSuspendSetup('readback');
+    const third = JSON.parse(storage.values.get(EDITOR_STORAGE_KEY));
+    third.templates[0].plan.name = 'Concurrent valid change';
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(third));
+    const writes = storage.state.writes;
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'suspend');
+    assert.equal(result.outcome, 'conflict');
+    await assert.rejects(bridge.suspendActive(suspendOptions(started, 3000)), /pendingOperation/);
+    await assert.rejects(
+        bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 3000)),
+        /pendingOperation/,
+    );
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('retains a pending suspend and ownership after a failed reconciliation read', async () => {
+    const { storage, activeLock, bridge } = await pendingSuspendSetup('unconfirmed');
+    storage.state.failRead = true;
+
+    await assert.rejects(bridge.reconcilePendingOperation(), /storageRead/);
+    assert.equal(activeLock.held, true);
+    storage.state.failRead = false;
+    assert.equal((await bridge.reconcilePendingOperation()).outcome, 'target');
+    await activeLock.release();
+});
+
+test('blocks overlapping suspend operations while the first writer is pending', async () => {
+    const { locks, storage, activeLock, bridge, started } = await startedBridgeSetup();
+    locks.storeGate = deferred();
+    const operation = bridge.suspendActive(suspendOptions(started, 3000));
+    await new Promise(resolve => setImmediate(resolve));
+
+    await assert.rejects(bridge.suspendActive(suspendOptions(started, 3000)), /bridgeBusy/);
+    assert.equal(storage.state.writes, 2);
+    locks.storeGate.resolve();
+    assert.equal((await operation).executions[0].execution.lifecycle, 'suspended');
+    assert.equal(storage.state.writes, 3);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('rejects suspend when ownership is lost while waiting for the writer', async () => {
+    const { locks, storage, activeLock, bridge, started } = await startedBridgeSetup();
+    locks.storeGate = deferred();
+    const operation = bridge.suspendActive(suspendOptions(started, 3000));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(await activeLock.release(), true);
+    const writes = storage.state.writes;
+    locks.storeGate.resolve();
+    await assert.rejects(operation, /activeLockRequired/);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY))
+        .executions[0].execution.lifecycle, 'active');
     await assert.rejects(bridge.reconcilePendingOperation(), /noPendingOperation/);
 });

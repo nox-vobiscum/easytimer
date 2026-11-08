@@ -2,6 +2,7 @@ import {
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     startReadyExecutionInRecord,
+    suspendActiveExecutionInRecord,
 } from './editor-storage.mjs';
 
 const fail = code => { throw new Error(code); };
@@ -72,6 +73,9 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         },
         applySessionAction(options) {
             return writeOperation('sessionAction', options, applyStartedSessionActionInRecord, false);
+        },
+        suspendActive(options) {
+            return writeOperation('suspend', options, suspendActiveExecutionInRecord, false);
         },
         reconcilePendingActivation() {
             return reconcile('activation', false);
