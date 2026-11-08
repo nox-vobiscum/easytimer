@@ -1,6 +1,7 @@
 import {
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
+    resumeSuspendedExecutionInRecord,
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
 } from './editor-storage.mjs';
@@ -76,6 +77,9 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         },
         suspendActive(options) {
             return writeOperation('suspend', options, suspendActiveExecutionInRecord, false);
+        },
+        resumeSuspended(options) {
+            return writeOperation('resume', options, resumeSuspendedExecutionInRecord, true);
         },
         reconcilePendingActivation() {
             return reconcile('activation', false);
