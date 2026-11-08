@@ -18,6 +18,13 @@ const plan = () => ({
         category: 'uncategorized',
         notes: '',
         resources: [],
+    }, {
+        id: 'phase-2',
+        title: 'Discussion',
+        durationSeconds: 120,
+        category: 'uncategorized',
+        notes: '',
+        resources: [],
     }],
 });
 
@@ -61,6 +68,21 @@ const startOptions = (changes = {}) => ({
     startedAt: 2000,
     ...changes,
 });
+
+function sessionActionOptions(source, actionType, occurredAt, changes = {}) {
+    const execution = source.executions.find(item => item.execution.lifecycle === 'active').execution;
+    return {
+        executionId: execution.id,
+        expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision,
+        expectedAttemptId: execution.attempt.id,
+        expectedRunId: execution.attempt.runtimeRunId,
+        actionType,
+        occurredAt,
+        ...changes,
+    };
+}
 
 function deferred() {
     let resolve;
@@ -516,4 +538,196 @@ test('blocks overlapping bridge mutations while the first writer is pending', as
     assert.equal(storage.state.writes, 2);
     assert.equal(activeLock.held, true);
     await activeLock.release();
+});
+
+async function startedBridgeSetup(events = []) {
+    const locks = lockManager(events);
+    const storage = memory(initialRecord(), locks, events);
+    const components = setup({ locks, storage });
+    await components.bridge.activatePlanned(activationOptions());
+    const started = await components.bridge.startReady(startOptions());
+    return { ...components, started };
+}
+
+test('persists every supported session action without changing execution identities or revisions', async () => {
+    const events = [];
+    const { storage, activeLock, bridge, started } = await startedBridgeSetup(events);
+    const originalExecution = structuredClone(started.executions[0].execution);
+    const activeRequests = () => events.filter(event => event[0] === 'request'
+        && event[1] === 'easyTimerEditor.v1.active-runtime').length;
+
+    const pause = await bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 12_000));
+    assert.equal(pause.activeRuntime.clock.status, 'PAUSED');
+    assert.equal(pause.activeRuntime.clock.remainingMs, 50_000);
+    const resume = await bridge.applySessionAction(sessionActionOptions(pause, 'RESUME', 20_000));
+    assert.equal(resume.activeRuntime.clock.status, 'RUNNING');
+    assert.equal(resume.activeRuntime.clock.deadlineMs, 70_000);
+    const next = await bridge.applySessionAction(sessionActionOptions(resume, 'NEXT', 30_000));
+    assert.equal(next.activeRuntime.run.currentIndex, 1);
+    assert.equal(next.activeRuntime.clock.status, 'READY');
+    const laterStart = await bridge.applySessionAction(sessionActionOptions(next, 'START', 31_000));
+    assert.equal(laterStart.activeRuntime.clock.status, 'RUNNING');
+    assert.equal(laterStart.activeRuntime.clock.deadlineMs, 151_000);
+    const complete = await bridge.applySessionAction(sessionActionOptions(laterStart, 'COMPLETE', 40_000));
+    assert.equal(complete.activeRuntime.run.stage, 'COMPLETED');
+    assert.equal(complete.activeRuntime.clock.status, 'FINISHED');
+    assert.equal(complete.executions[0].execution.lifecycle, 'active');
+    const stopped = await bridge.applySessionAction(sessionActionOptions(complete, 'STOP_OVERTIME', 45_000));
+    assert.equal(stopped.activeRuntime.clock.status, 'OVERTIME_STOPPED');
+    assert.equal(stopped.activeRuntime.clock.overtimeMs, 5000);
+    assert.equal(stopped.executions[0].execution.lifecycle, 'active');
+
+    for (const [index, result] of [pause, resume, next, laterStart, complete, stopped].entries()) {
+        const execution = result.executions[0].execution;
+        assert.equal(result.revision, started.revision + index + 1);
+        assert.equal(execution.id, originalExecution.id);
+        assert.equal(execution.revision, originalExecution.revision);
+        assert.equal(execution.runtimeRevision, originalExecution.runtimeRevision);
+        assert.deepEqual(execution.attempt, originalExecution.attempt);
+        assert.deepEqual(execution.currentPlan, originalExecution.currentPlan);
+        assert.deepEqual(execution.workshopNotes, originalExecution.workshopNotes);
+        assert.equal(result.activeRuntime.run.runId, originalExecution.attempt.runtimeRunId);
+    }
+    assert.equal(activeRequests(), 1);
+    assert.equal(storage.state.writes, 8);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('rejects session actions without ownership, with stale time or unsupported and no-op actions', async () => {
+    const { storage, activeLock, bridge, started } = await startedBridgeSetup();
+    await activeLock.release();
+    const writes = storage.state.writes;
+    await assert.rejects(
+        bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 12_000)),
+        /activeLockRequired/,
+    );
+    assert.equal(storage.state.writes, writes);
+
+    await activeLock.claim();
+    await assert.rejects(bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 12_000, {
+        expectedAggregateRevision: started.revision - 1,
+    })), /conflict/);
+    await assert.rejects(
+        bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 1000)),
+        /CLOCK_ANOMALY/,
+    );
+    for (const actionType of ['TICK', 'PRIMARY', 'STOP_WORKSHOP', 'UNKNOWN', 'START', 'RESUME']) {
+        await assert.rejects(
+            bridge.applySessionAction(sessionActionOptions(started, actionType, 3000)),
+            /invalidSessionAction/,
+        );
+    }
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+async function pendingSessionActionSetup(failureMode) {
+    const components = await startedBridgeSetup();
+    components.storage.state.faultAfterWrites = components.storage.state.writes;
+    if (failureMode === 'unconfirmed') components.storage.state.failReadAfterWrite = true;
+    else components.storage.state.readback = null;
+    await assert.rejects(
+        components.bridge.applySessionAction(
+            sessionActionOptions(components.started, 'PAUSE', 12_000),
+        ),
+        failureMode === 'unconfirmed' ? /storageUnconfirmed/ : /storageReadback/,
+    );
+    components.storage.state.failReadAfterWrite = false;
+    components.storage.state.readback = undefined;
+    return components;
+}
+
+test('reconciles an unconfirmed session action as target without another write', async () => {
+    const { storage, activeLock, bridge } = await pendingSessionActionSetup('unconfirmed');
+    const writes = storage.state.writes;
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'sessionAction');
+    assert.equal(result.outcome, 'target');
+    assert.equal(result.record.activeRuntime.clock.status, 'PAUSED');
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('reconciles an unconfirmed session action as source without retrying it', async () => {
+    const { storage, activeLock, bridge, started } = await pendingSessionActionSetup('readback');
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(started));
+    const writes = storage.state.writes;
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'sessionAction');
+    assert.equal(result.outcome, 'source');
+    assert.deepEqual(result.record, started);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('keeps a conflicting session action pending and blocks every mutation', async () => {
+    const { storage, activeLock, bridge, started } = await pendingSessionActionSetup('readback');
+    const third = JSON.parse(storage.values.get(EDITOR_STORAGE_KEY));
+    third.templates[0].plan.name = 'Concurrent valid change';
+    storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(third));
+    const writes = storage.state.writes;
+    const result = await bridge.reconcilePendingOperation();
+
+    assert.equal(result.kind, 'sessionAction');
+    assert.equal(result.outcome, 'conflict');
+    await assert.rejects(
+        bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 12_000)),
+        /pendingOperation/,
+    );
+    await assert.rejects(bridge.startReady(startOptions()), /pendingOperation/);
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /pendingActivation/);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('retains a pending session action and ownership after a failed reconciliation read', async () => {
+    const { storage, activeLock, bridge } = await pendingSessionActionSetup('unconfirmed');
+    storage.state.failRead = true;
+
+    await assert.rejects(bridge.reconcilePendingOperation(), /storageRead/);
+    assert.equal(activeLock.held, true);
+    storage.state.failRead = false;
+    assert.equal((await bridge.reconcilePendingOperation()).outcome, 'target');
+    await activeLock.release();
+});
+
+test('blocks overlapping session actions while the first writer is pending', async () => {
+    const { locks, storage, activeLock, bridge, started } = await startedBridgeSetup();
+    locks.storeGate = deferred();
+
+    const first = bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 12_000));
+    await new Promise(resolve => setImmediate(resolve));
+    await assert.rejects(
+        bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 12_000)),
+        /bridgeBusy/,
+    );
+    assert.equal(storage.state.writes, 2);
+    locks.storeGate.resolve();
+    assert.equal((await first).activeRuntime.clock.status, 'PAUSED');
+    assert.equal(storage.state.writes, 3);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
+test('does not prevent an external ownership release during an in-flight session action', async () => {
+    const { locks, storage, activeLock, bridge, started } = await startedBridgeSetup();
+    locks.storeGate = deferred();
+
+    const operation = bridge.applySessionAction(sessionActionOptions(started, 'PAUSE', 12_000));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(await activeLock.release(), true);
+    assert.equal(activeLock.held, false);
+    assert.equal(storage.state.writes, 2);
+
+    locks.storeGate.resolve();
+    assert.equal((await operation).activeRuntime.clock.status, 'PAUSED');
+    assert.equal(storage.state.writes, 3);
+    assert.equal(activeLock.held, false);
 });

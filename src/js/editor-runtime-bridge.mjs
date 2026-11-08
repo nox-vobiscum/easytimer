@@ -1,4 +1,5 @@
 import {
+    applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     startReadyExecutionInRecord,
 } from './editor-storage.mjs';
@@ -67,6 +68,9 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         },
         startReady(options) {
             return writeOperation('start', options, startReadyExecutionInRecord, false);
+        },
+        applySessionAction(options) {
+            return writeOperation('sessionAction', options, applyStartedSessionActionInRecord, false);
         },
         reconcilePendingActivation() {
             return reconcile('activation', false);
