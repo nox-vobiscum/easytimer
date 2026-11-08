@@ -716,7 +716,7 @@ test('blocks overlapping session actions while the first writer is pending', asy
     await activeLock.release();
 });
 
-test('does not prevent an external ownership release during an in-flight session action', async () => {
+test('rejects an in-flight session action when ownership is lost before the write begins', async () => {
     const { locks, storage, activeLock, bridge, started } = await startedBridgeSetup();
     locks.storeGate = deferred();
 
@@ -727,7 +727,52 @@ test('does not prevent an external ownership release during an in-flight session
     assert.equal(storage.state.writes, 2);
 
     locks.storeGate.resolve();
-    assert.equal((await operation).activeRuntime.clock.status, 'PAUSED');
-    assert.equal(storage.state.writes, 3);
+    await assert.rejects(operation, /activeLockRequired/);
+    assert.equal(storage.state.writes, 2);
     assert.equal(activeLock.held, false);
+    assert.equal(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY)).activeRuntime.clock.status, 'RUNNING');
+    await assert.rejects(bridge.reconcilePendingOperation(), /noPendingOperation/);
+});
+
+test('rejects an in-flight first START when ownership is lost before the write begins', async () => {
+    const locks = lockManager();
+    const storage = memory(initialRecord(), locks);
+    const { activeLock, bridge } = setup({ locks, storage });
+    await bridge.activatePlanned(activationOptions());
+    locks.storeGate = deferred();
+
+    const operation = bridge.startReady(startOptions());
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(await activeLock.release(), true);
+    assert.equal(storage.state.writes, 1);
+
+    locks.storeGate.resolve();
+    await assert.rejects(operation, /activeLockRequired/);
+    assert.equal(storage.state.writes, 1);
+    const persisted = JSON.parse(storage.values.get(EDITOR_STORAGE_KEY));
+    assert.equal(persisted.executions[0].execution.attempt, null);
+    assert.equal(persisted.activeRuntime.clock.status, 'READY');
+    await assert.rejects(bridge.reconcilePendingOperation(), /noPendingOperation/);
+});
+
+test('rejects activation when claimed ownership is lost before its write begins', async () => {
+    const events = [];
+    const locks = lockManager(events);
+    const storage = memory(initialRecord(), locks, events);
+    const { activeLock, bridge } = setup({ locks, storage });
+    locks.storeGate = deferred();
+
+    const operation = bridge.activatePlanned(activationOptions());
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(activeLock.held, true);
+    assert.equal(await activeLock.release(), true);
+    assert.equal(storage.state.writes, 0);
+
+    locks.storeGate.resolve();
+    await assert.rejects(operation, /activeLockRequired/);
+    assert.equal(storage.state.writes, 0);
+    assert.deepEqual(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY)), initialRecord());
+    assert.equal(events.filter(event => event[0] === 'request'
+        && event[1] === 'easyTimerEditor.v1.active-runtime').length, 1);
+    await assert.rejects(bridge.reconcilePendingOperation(), /noPendingOperation/);
 });

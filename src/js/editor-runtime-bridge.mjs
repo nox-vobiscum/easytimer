@@ -20,6 +20,7 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         try {
             if (claimOwnership) await activeLock.claim();
             return await writer.write(record => {
+                if (!activeLock.held) fail('activeLockRequired');
                 source = structuredClone(record);
                 target = structuredClone(transform(record, options));
                 return target;
