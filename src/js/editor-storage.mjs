@@ -207,6 +207,7 @@ export function startReadyExecutionInRecord(record, options) {
         || valid.activeRuntime.executionId !== selected.execution.id
         || valid.activeRuntime.attemptId !== null
         || valid.activeRuntime.runtimeRevision !== selected.execution.runtimeRevision) fail('invalidActiveRuntimeBinding');
+    if (startedAt < valid.activeRuntime.savedAt) fail('CLOCK_ANOMALY');
 
     const runtimeRunId = valid.activeRuntime.run.runId;
     const execution = startActiveExecution(selected.execution, attemptId, startedAt, runtimeRunId);

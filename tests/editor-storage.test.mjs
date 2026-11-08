@@ -306,6 +306,36 @@ test('starts READY with one attempt bound to the existing run and an immutable p
     assert.notEqual(result.activeRuntime.run, ready.activeRuntime.run);
 });
 
+test('requires the first START time to be at or after the saved READY runtime', () => {
+    const ready = activatePlannedExecutionInRecord(
+        record({ executions: [entry(planned())] }),
+        activationOptions(),
+    );
+    const before = structuredClone(ready);
+
+    assert.throws(() => startReadyExecutionInRecord(
+        ready,
+        startOptions({ startedAt: ready.activeRuntime.savedAt - 1 }),
+    ), /CLOCK_ANOMALY/);
+    assert.deepEqual(ready, before);
+    assert.equal(ready.executions[0].execution.attempt, null);
+    assert.deepEqual(ready.activeRuntime, before.activeRuntime);
+
+    const sameTime = startReadyExecutionInRecord(
+        ready,
+        startOptions({ startedAt: ready.activeRuntime.savedAt }),
+    );
+    assert.equal(sameTime.executions[0].execution.attempt.startedAt, ready.activeRuntime.savedAt);
+    assert.equal(sameTime.activeRuntime.savedAt, ready.activeRuntime.savedAt);
+
+    const later = startReadyExecutionInRecord(
+        ready,
+        startOptions({ startedAt: ready.activeRuntime.savedAt + 1 }),
+    );
+    assert.equal(later.executions[0].execution.attempt.startedAt, ready.activeRuntime.savedAt + 1);
+    assert.equal(later.activeRuntime.savedAt, ready.activeRuntime.savedAt + 1);
+});
+
 test('rejects invalid first START inputs, stale revisions and repeated START without mutation', () => {
     const ready = activatePlannedExecutionInRecord(
         record({ executions: [entry(planned())] }),
@@ -950,6 +980,13 @@ test('persists READY, first START and later session actions while active-timer o
     assert.equal(activeLock.held, true);
     assert.equal(ready.activeRuntime.clock.status, 'READY');
     assert.equal(storage.state.writes, 1);
+    assert.deepEqual(await writer.read(), ready);
+    await assert.rejects(writer.write(current => startReadyExecutionInRecord(current, startOptions({
+        expectedAggregateRevision: 8,
+        startedAt: current.activeRuntime.savedAt - 1,
+    }))), /CLOCK_ANOMALY/);
+    assert.equal(storage.state.writes, 1);
+    assert.equal(activeLock.held, true);
     assert.deepEqual(await writer.read(), ready);
     const startedRecord = await writer.write(current => {
         assert.equal(activeLock.held, true);
