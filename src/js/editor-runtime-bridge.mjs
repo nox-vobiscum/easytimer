@@ -5,6 +5,7 @@ import {
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
 } from './editor-storage.mjs';
+import { transitionSession } from './session.mjs';
 
 const fail = code => { throw new Error(code); };
 
@@ -52,6 +53,7 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         const pending = pendingOperation;
         try {
             const record = await writer.read();
+            if (!activeLock.held) fail('activeLockRequired');
             const raw = JSON.stringify(record);
             let outcome = 'conflict';
             if (raw === JSON.stringify(pending.target)) outcome = 'target';
@@ -60,6 +62,57 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
             if (includeKind) result.kind = pending.kind;
             if (outcome !== 'conflict' && pendingOperation === pending) pendingOperation = null;
             return result;
+        } finally {
+            busy = false;
+        }
+    }
+
+    async function adoptPersistedActive(options = {}) {
+        if (pendingOperation !== null) fail('pendingOperation');
+        if (busy) fail('bridgeBusy');
+        if (options === null || typeof options !== 'object' || Array.isArray(options)) fail('INVALID_RUNTIME');
+        const { observedAt } = options;
+        if (!Number.isSafeInteger(observedAt) || observedAt < 0) fail('INVALID_RUNTIME');
+        busy = true;
+        let claimed = false;
+        try {
+            const initial = await writer.read();
+            if (initial.activeRuntime === null) {
+                return { outcome: 'none', record: structuredClone(initial), runtime: null };
+            }
+            if (!activeLock.held) {
+                await activeLock.claim();
+                claimed = true;
+            }
+            const record = await writer.read();
+            if (!activeLock.held) fail('activeLockRequired');
+            if (record.activeRuntime === null) {
+                if (claimed) await activeLock.release();
+                return { outcome: 'none', record: structuredClone(record), runtime: null };
+            }
+
+            const persisted = record.activeRuntime;
+            if (observedAt < persisted.savedAt
+                && ['RUNNING', 'FINISHED'].includes(persisted.clock.status)) fail('CLOCK_ANOMALY');
+            const current = ['RUNNING', 'FINISHED'].includes(persisted.clock.status)
+                ? transitionSession(persisted.run, persisted.clock, { type: 'TICK' }, observedAt)
+                : { run: persisted.run, clock: persisted.clock };
+            return {
+                outcome: 'adopted',
+                record: structuredClone(record),
+                runtime: structuredClone({
+                    executionId: persisted.executionId,
+                    attemptId: persisted.attemptId,
+                    runtimeRevision: persisted.runtimeRevision,
+                    persistedAt: persisted.savedAt,
+                    observedAt,
+                    run: current.run,
+                    clock: current.clock,
+                }),
+            };
+        } catch (error) {
+            if (claimed && activeLock.held) await activeLock.release();
+            throw error;
         } finally {
             busy = false;
         }
@@ -81,6 +134,7 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         resumeSuspended(options) {
             return writeOperation('resume', options, resumeSuspendedExecutionInRecord, true);
         },
+        adoptPersistedActive,
         reconcilePendingActivation() {
             return reconcile('activation', false);
         },

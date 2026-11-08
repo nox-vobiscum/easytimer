@@ -5,6 +5,7 @@ import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { createEditorRuntimeBridge } from '../src/js/editor-runtime-bridge.mjs';
 import { EDITOR_STORAGE_KEY } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
+import { transitionSession } from '../src/js/session.mjs';
 
 const plan = () => ({
     name: 'Workshop',
@@ -1342,4 +1343,319 @@ test('rejects resume when newly claimed ownership is lost while waiting for the 
     assert.equal(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY))
         .executions[0].execution.lifecycle, 'suspended');
     await assert.rejects(bridge.reconcilePendingOperation(), /noPendingOperation/);
+});
+
+async function persistedActiveSetup({ started = false, transitionMode = 'manual' } = {}) {
+    const locks = lockManager();
+    const source = initialRecord();
+    source.templates[0].plan.transitionMode = transitionMode;
+    source.executions[0].execution.currentPlan.transitionMode = transitionMode;
+    const storage = memory(source, locks);
+    const components = setup({ locks, storage });
+    let record = await components.bridge.activatePlanned(activationOptions());
+    if (started) record = await components.bridge.startReady(startOptions());
+    await components.activeLock.release();
+    return { ...components, record };
+}
+
+test('adoption reports no ACTIVE runtime without claiming ownership or writing', async () => {
+    const events = [];
+    const locks = lockManager(events);
+    const storage = memory(initialRecord(), locks, events);
+    const { activeLock, bridge } = setup({ locks, storage });
+
+    const result = await bridge.adoptPersistedActive({ observedAt: 5000 });
+
+    assert.equal(result.outcome, 'none');
+    assert.equal(result.runtime, null);
+    assert.equal(result.record.activeRuntime, null);
+    assert.equal(activeLock.held, false);
+    assert.equal(storage.state.writes, 0);
+    assert.equal(events.some(event => event[0] === 'request'
+        && event[1] === 'easyTimerEditor.v1.active-runtime'), false);
+});
+
+test('adopts ACTIVE READY after a claimed re-read and keeps its clock frozen and ownership held', async () => {
+    const { locks, storage, record } = await persistedActiveSetup();
+    const writes = storage.state.writes;
+    const activeLock = createEditorActiveTimerLock({ locks });
+    const reads = [];
+    const writer = createEditorStoreWriter({
+        getStorage: () => ({
+            ...storage,
+            getItem(key) { reads.push(new Set(locks.held)); return storage.getItem(key); },
+        }),
+        locks,
+    });
+    const bridge = createEditorRuntimeBridge({ writer, activeLock });
+
+    const result = await bridge.adoptPersistedActive({ observedAt: 50_000 });
+
+    assert.equal(result.outcome, 'adopted');
+    assert.equal(reads.length, 2);
+    assert.equal(reads[0].has('easyTimerEditor.v1.active-runtime'), false);
+    assert.equal(reads[1].has('easyTimerEditor.v1.active-runtime'), true);
+    assert.equal(result.runtime.clock.status, 'READY');
+    assert.deepEqual(result.runtime.clock, record.activeRuntime.clock);
+    assert.equal(result.runtime.persistedAt, record.activeRuntime.savedAt);
+    assert.equal(result.runtime.observedAt, 50_000);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    result.record.activeRuntime.clock.remainingMs = 1;
+    result.runtime.clock.remainingMs = 2;
+    assert.notEqual(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY)).activeRuntime.clock.remainingMs, 1);
+    assert.notEqual(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY)).activeRuntime.clock.remainingMs, 2);
+    await activeLock.release();
+});
+
+test('adopts ACTIVE STARTED by reconciling running time and automatic phase catch-up without a write', async () => {
+    const { locks, storage, record } = await persistedActiveSetup({ started: true, transitionMode: 'automatic' });
+    const writes = storage.state.writes;
+    const activeLock = createEditorActiveTimerLock({ locks });
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks });
+    const bridge = createEditorRuntimeBridge({ writer, activeLock });
+
+    const running = await bridge.adoptPersistedActive({ observedAt: 32_000 });
+    assert.equal(running.runtime.clock.status, 'RUNNING');
+    assert.equal(running.runtime.clock.remainingMs, 30_000);
+    assert.equal(running.runtime.run.currentIndex, 0);
+    assert.equal(running.runtime.attemptId, record.executions[0].execution.attempt.id);
+    assert.equal(running.runtime.run.runId, record.activeRuntime.run.runId);
+    assert.equal(storage.state.writes, writes);
+    await activeLock.release();
+
+    const catchupLock = createEditorActiveTimerLock({ locks });
+    const catchupBridge = createEditorRuntimeBridge({ writer, activeLock: catchupLock });
+    const caughtUp = await catchupBridge.adoptPersistedActive({ observedAt: 72_000 });
+    assert.equal(caughtUp.runtime.run.currentIndex, 1);
+    assert.equal(caughtUp.runtime.clock.status, 'RUNNING');
+    assert.equal(caughtUp.runtime.clock.remainingMs, 110_000);
+    assert.equal(storage.state.writes, writes);
+    await catchupLock.release();
+});
+
+test('adoption preserves paused and completed overtime-frozen clocks without automatic resume', async () => {
+    for (const stopped of [null, false, true]) {
+        const components = await persistedActiveSetup({ started: true });
+        let current = components.record;
+        const owner = createEditorActiveTimerLock({ locks: components.locks });
+        await owner.claim();
+        const ownerBridge = createEditorRuntimeBridge({ writer: components.writer, activeLock: owner });
+        if (stopped === null) {
+            current = await ownerBridge.applySessionAction(sessionActionOptions(current, 'PAUSE', 12_000));
+        } else {
+            current = await ownerBridge.applySessionAction(sessionActionOptions(current, 'NEXT', 10_000));
+            current = await ownerBridge.applySessionAction(sessionActionOptions(current, 'START', 11_000));
+            current = await ownerBridge.applySessionAction(sessionActionOptions(current, 'COMPLETE', 20_000));
+            if (stopped) {
+                current = await ownerBridge.applySessionAction(
+                    sessionActionOptions(current, 'STOP_OVERTIME', 25_000),
+                );
+            } else {
+                current = await ownerBridge.applySessionAction(sessionActionOptions(current, 'PAUSE', 25_000));
+            }
+        }
+        await owner.release();
+        const writes = components.storage.state.writes;
+        const activeLock = createEditorActiveTimerLock({ locks: components.locks });
+        const bridge = createEditorRuntimeBridge({ writer: components.writer, activeLock });
+
+        const result = await bridge.adoptPersistedActive({ observedAt: 1_000_000 });
+        const expected = stopped === null ? 'PAUSED' : stopped ? 'OVERTIME_STOPPED' : 'OVERTIME_PAUSED';
+        assert.equal(result.runtime.clock.status, expected);
+        assert.deepEqual(result.runtime.clock, current.activeRuntime.clock);
+        if (stopped !== null) assert.equal(result.runtime.run.stage, 'COMPLETED');
+        assert.equal(components.storage.state.writes, writes);
+        await activeLock.release();
+    }
+});
+
+test('adoption uses only the post-claim record and releases a new claim when ACTIVE disappears', async () => {
+    const active = await persistedActiveSetup();
+    const noActive = initialRecord();
+    let reads = 0;
+    const writer = {
+        read() {
+            reads += 1;
+            return structuredClone(reads === 1 ? active.record : noActive);
+        },
+    };
+    const activeLock = createEditorActiveTimerLock({ locks: active.locks });
+    const bridge = createEditorRuntimeBridge({ writer, activeLock });
+
+    const result = await bridge.adoptPersistedActive({ observedAt: 5000 });
+
+    assert.equal(reads, 2);
+    assert.equal(result.outcome, 'none');
+    assert.deepEqual(result.record, noActive);
+    assert.equal(activeLock.held, false);
+    assert.equal(active.locks.held.size, 0);
+});
+
+test('adoption ignores a stale initial ACTIVE snapshot and returns only the changed post-claim runtime', async () => {
+    const components = await persistedActiveSetup({ started: true });
+    const changed = structuredClone(components.record);
+    changed.activeRuntime.savedAt = 12_000;
+    const paused = transitionSession(
+        changed.activeRuntime.run,
+        changed.activeRuntime.clock,
+        { type: 'PAUSE' },
+        12_000,
+    );
+    changed.activeRuntime.run = paused.run;
+    changed.activeRuntime.clock = paused.clock;
+    let reads = 0;
+    const activeLock = createEditorActiveTimerLock({ locks: components.locks });
+    const bridge = createEditorRuntimeBridge({
+        activeLock,
+        writer: { read: () => structuredClone(++reads === 1 ? components.record : changed) },
+    });
+
+    const result = await bridge.adoptPersistedActive({ observedAt: 50_000 });
+
+    assert.equal(reads, 2);
+    assert.equal(result.outcome, 'adopted');
+    assert.equal(result.runtime.persistedAt, 12_000);
+    assert.equal(result.runtime.clock.status, 'PAUSED');
+    assert.deepEqual(result.record, changed);
+    await activeLock.release();
+});
+
+test('adoption rejects competing ownership, unavailable locks and lock request failures without adoption', async () => {
+    const components = await persistedActiveSetup();
+    const owner = createEditorActiveTimerLock({ locks: components.locks });
+    await owner.claim();
+    const busy = createEditorRuntimeBridge({
+        writer: components.writer,
+        activeLock: createEditorActiveTimerLock({ locks: components.locks }),
+    });
+    await assert.rejects(busy.adoptPersistedActive({ observedAt: 5000 }), /lockBusy/);
+    await owner.release();
+
+    const unavailable = createEditorRuntimeBridge({
+        writer: components.writer,
+        activeLock: createEditorActiveTimerLock({ locks: null }),
+    });
+    await assert.rejects(unavailable.adoptPersistedActive({ observedAt: 5000 }), /lockUnavailable/);
+
+    const failingLocks = lockManager();
+    const originalRequest = failingLocks.request.bind(failingLocks);
+    failingLocks.request = (name, options, callback) => (name === 'easyTimerEditor.v1.active-runtime'
+        ? Promise.reject(new Error('failed request')) : originalRequest(name, options, callback));
+    const failingStorage = memory(components.record, failingLocks);
+    const failing = setup({ locks: failingLocks, storage: failingStorage });
+    await assert.rejects(failing.bridge.adoptPersistedActive({ observedAt: 5000 }), /lockRequest/);
+    assert.equal(failing.activeLock.held, false);
+    assert.equal(failingLocks.held.size, 0);
+});
+
+test('adoption failures before or after claim never write or leak newly acquired ownership', async () => {
+    const components = await persistedActiveSetup({ started: true });
+    const writes = components.storage.state.writes;
+
+    components.storage.state.failRead = true;
+    const before = setup({ locks: components.locks, storage: components.storage });
+    await assert.rejects(before.bridge.adoptPersistedActive({ observedAt: 5000 }), /storageRead/);
+    assert.equal(before.activeLock.held, false);
+    components.storage.state.failRead = false;
+
+    let reads = 0;
+    const afterLock = createEditorActiveTimerLock({ locks: components.locks });
+    const after = createEditorRuntimeBridge({
+        activeLock: afterLock,
+        writer: {
+            read() {
+                reads += 1;
+                if (reads === 2) throw new Error('storageRead');
+                return structuredClone(components.record);
+            },
+        },
+    });
+    await assert.rejects(after.adoptPersistedActive({ observedAt: 5000 }), /storageRead/);
+    assert.equal(afterLock.held, false);
+    assert.equal(components.locks.held.size, 0);
+
+    const anomalyLock = createEditorActiveTimerLock({ locks: components.locks });
+    const anomaly = createEditorRuntimeBridge({ writer: components.writer, activeLock: anomalyLock });
+    await assert.rejects(anomaly.adoptPersistedActive({ observedAt: 1999 }), /CLOCK_ANOMALY/);
+    assert.equal(anomalyLock.held, false);
+    assert.equal(components.storage.state.writes, writes);
+    for (const observedAt of [undefined, null, -1, 1.5, '5000']) {
+        await assert.rejects(anomaly.adoptPersistedActive({ observedAt }), /INVALID_RUNTIME/);
+    }
+    for (const options of [null, [], 'invalid']) {
+        await assert.rejects(anomaly.adoptPersistedActive(options), /INVALID_RUNTIME/);
+    }
+});
+
+test('adoption rejects ownership lost during the second read and never releases pre-existing ownership', async () => {
+    const components = await persistedActiveSetup();
+    const activeLock = createEditorActiveTimerLock({ locks: components.locks });
+    const gate = deferred();
+    let reads = 0;
+    const bridge = createEditorRuntimeBridge({
+        activeLock,
+        writer: {
+            async read() {
+                reads += 1;
+                if (reads === 2) await gate.promise;
+                return structuredClone(components.record);
+            },
+        },
+    });
+    const operation = bridge.adoptPersistedActive({ observedAt: 5000 });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+    gate.resolve();
+    await assert.rejects(operation, /activeLockRequired/);
+    assert.equal(activeLock.held, false);
+
+    const preOwned = createEditorActiveTimerLock({ locks: components.locks });
+    await preOwned.claim();
+    const invalid = createEditorRuntimeBridge({
+        activeLock: preOwned,
+        writer: { read: () => { throw new Error('storageRead'); } },
+    });
+    await assert.rejects(invalid.adoptPersistedActive({ observedAt: 5000 }), /storageRead/);
+    assert.equal(preOwned.held, true);
+    await preOwned.release();
+});
+
+test('adoption blocks overlap and unresolved pending operations', async () => {
+    const components = await persistedActiveSetup();
+    const gate = deferred();
+    let reads = 0;
+    const bridge = createEditorRuntimeBridge({
+        activeLock: createEditorActiveTimerLock({ locks: components.locks }),
+        writer: {
+            async read() { reads += 1; await gate.promise; return structuredClone(components.record); },
+        },
+    });
+    const operation = bridge.adoptPersistedActive({ observedAt: 5000 });
+    await new Promise(resolve => setImmediate(resolve));
+    await assert.rejects(bridge.adoptPersistedActive({ observedAt: 5000 }), /bridgeBusy/);
+    gate.resolve();
+    const adopted = await operation;
+    assert.equal(adopted.outcome, 'adopted');
+    assert.equal(reads, 2);
+
+    const pending = await pendingStartSetup('unconfirmed');
+    await assert.rejects(pending.bridge.adoptPersistedActive({ observedAt: 5000 }), /pendingOperation/);
+    await pending.activeLock.release();
+});
+
+test('pending reconciliation retains pending state if ownership is lost during its read', async () => {
+    const components = await pendingStartSetup('unconfirmed');
+    const gate = deferred();
+    components.locks.storeGate = gate;
+    const reconciliation = components.bridge.reconcilePendingOperation();
+    await new Promise(resolve => setImmediate(resolve));
+    await components.activeLock.release();
+    gate.resolve();
+    await assert.rejects(reconciliation, /activeLockRequired/);
+    components.locks.storeGate = null;
+    await components.activeLock.claim();
+    assert.equal((await components.bridge.reconcilePendingOperation()).outcome, 'target');
+    await components.activeLock.release();
 });

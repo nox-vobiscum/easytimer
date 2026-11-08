@@ -10,8 +10,10 @@ commit, staging and production deployment are distinct events.
 
 - **EDITOR-001 internal foundation:** the native Schema-2 Editor Store can
   validate and persist new templates and create independent PLANNED executions
-  from stored templates. This is an unreleased data-layer capability only; no
-  Editor UI integration or production availability is included.
+  from stored templates. The Runtime Bridge can also claim ownership and adopt a
+  persisted ACTIVE runtime after a validated post-claim re-read, reconciling only
+  the returned in-memory running view. These are unreleased internal capabilities
+  only; no Editor UI integration or production recovery availability is included.
 
 ## PWA v67 — 2026-11-01
 
