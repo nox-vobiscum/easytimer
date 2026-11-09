@@ -28,6 +28,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
 | EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — technical foundation implemented locally; UI/workflow pending | Unreleased Schema-2 persistence and ACTIVE-runtime adoption; Editor UI, remaining lifecycle and Facilitator Panel work remain open |
+| NANO-001 | Nano-View – Always-on-Top Timer View | Next feature after EDITOR-001 is complete, accepted and production-released; before SW-001 | Secondary Document Picture-in-Picture view of the authoritative active timer; separate approval required |
 | EDITOR-002 | Restore unsaved Workshop-Notizen after reload/crash | Someday / Spike — „für lange Winternächte“ | Explicitly deferred; at most a tiny feasibility spike if a safe, simple approach appears |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
 | SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](archive/investigations/SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
@@ -193,6 +194,16 @@ Independent visual/audio preferences, with audio off by default, event-specific 
 **Status:** Later; useful once relevant runtime events exist.
 
 ## Presentation and remote control
+
+### NANO-001 — Nano-View – Always-on-Top Timer View
+
+**Priority:** Next feature immediately after EDITOR-001, including the Facilitator Panel, is fully completed, accepted and released to production; before SW-001. **Status:** Accepted product direction only; implementation requires separate explicit Product Owner approval and must not interrupt EDITOR-001.
+
+Provide a compact, primarily desktop-oriented secondary view of the currently active Quick Timer or Session Timer. Where supported, open it in a small floating, always-on-top browser window using the native Document Picture-in-Picture API so facilitators can keep essential timing information visible while working in presentations, Miro, browsers or other desktop applications. Show the time, minimal relevant context and only essential timer controls. Keep the UI lightweight, accessible and consistent with the existing DE/EN and theme conventions.
+
+The Nano-View is strictly a view and controller of the existing authoritative timer: do not add another timer instance, timer engine, lifecycle, persistence or recovery architecture. Closing or hiding it must not stop, pause, reset or otherwise alter the timer. Unsupported browsers retain normal EasyTimer functionality. Do not require external utilities, administrator rights, PowerToys or installed desktop applications. Reliable visibility over another application's exclusive fullscreen presentation is desirable but not a release requirement, and precise programmatic window placement is not required. Verify actual browser support and behavior during the later technical design and acceptance phase; do not promise universal compatibility.
+
+This item is distinct from PRES-001's same-device Moderator/Audience dual-window concept, VIS-001's alternative timer renderings and SW-001's separate elapsed-time mode. Detailed interaction design and implementation remain separately reviewable.
 
 ### PRES-001 — Moderator View & Audience View (same device)
 
