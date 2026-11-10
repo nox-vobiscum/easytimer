@@ -4,6 +4,7 @@ import {
     validateTemplate,
 } from './editor-domain.mjs';
 import {
+    deleteTemplateInRecord,
     insertTemplateInRecord,
     updateTemplateInRecord,
 } from './editor-storage.mjs';
@@ -30,9 +31,17 @@ function nativeTemplate(prepared, revision) {
 }
 
 export function createNativeEditorTemplateIntegration({ writer } = {}) {
-    if (!writer || typeof writer.write !== 'function') fail('invalidWriter');
+    if (!writer || typeof writer.read !== 'function' || typeof writer.write !== 'function') fail('invalidWriter');
 
     return Object.freeze({
+        async readLibrary() {
+            const record = await writer.read();
+            return structuredClone({
+                revision: record.revision,
+                templates: record.templates,
+            });
+        },
+
         async createTemplate(prepared, options) {
             exactOptions(options, ['expectedAggregateRevision']);
             const template = nativeTemplate(prepared, 1);
@@ -47,6 +56,15 @@ export function createNativeEditorTemplateIntegration({ writer } = {}) {
             const template = nativeTemplate(prepared, options.expectedTemplateRevision);
             return writer.write(record => updateTemplateInRecord(record, {
                 template,
+                expectedAggregateRevision: options.expectedAggregateRevision,
+                expectedTemplateRevision: options.expectedTemplateRevision,
+            }));
+        },
+
+        async deleteTemplate(templateId, options) {
+            exactOptions(options, ['expectedAggregateRevision', 'expectedTemplateRevision']);
+            return writer.write(record => deleteTemplateInRecord(record, {
+                templateId,
                 expectedAggregateRevision: options.expectedAggregateRevision,
                 expectedTemplateRevision: options.expectedTemplateRevision,
             }));

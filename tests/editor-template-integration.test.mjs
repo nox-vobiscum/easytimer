@@ -21,11 +21,15 @@ const prepared = (changes = {}) => ({
 
 function memory(raw = null) {
     const values = new Map(raw === null ? [] : [[EDITOR_STORAGE_KEY, raw]]);
-    const state = { writes: 0, failWrite: null };
+    const state = { reads: 0, writes: 0, failRead: false, failWrite: null };
     return {
         values,
         state,
-        getItem(key) { return values.get(key) ?? null; },
+        getItem(key) {
+            state.reads += 1;
+            if (state.failRead) throw new Error('synthetic read failure');
+            return values.get(key) ?? null;
+        },
         setItem(key, value) {
             if (state.failWrite) {
                 const error = new Error('synthetic write failure');
@@ -89,6 +93,35 @@ test('creates a validated native template from prepared Editor data through the 
     assert.deepEqual(JSON.parse(storage.values.get(EDITOR_STORAGE_KEY)), result);
 });
 
+test('reads a validated copy-isolated native template library without writing', async () => {
+    const empty = setup();
+    assert.deepEqual(await empty.integration.readLibrary(), { revision: 0, templates: [] });
+    assert.equal(empty.storage.state.writes, 0);
+
+    const { storage, integration } = setup();
+    await integration.createTemplate(prepared({
+        category: 'workshop',
+        preparedInformation: '**Prepared**',
+    }), { expectedAggregateRevision: 0 });
+    const writesBefore = storage.state.writes;
+
+    const first = await integration.readLibrary();
+    const second = await integration.readLibrary();
+
+    assert.equal(storage.state.writes, writesBefore);
+    assert.equal(first.revision, 1);
+    assert.equal(first.templates[0].revision, 1);
+    assert.equal(first.templates[0].plan.category, 'workshop');
+    assert.equal(first.templates[0].plan.preparedInformation, '**Prepared**');
+    assert.deepEqual(first, second);
+    assert.notEqual(first, second);
+    assert.notEqual(first.templates, second.templates);
+    assert.notEqual(first.templates[0], second.templates[0]);
+    first.templates[0].plan.name = 'Locally changed';
+    assert.equal(second.templates[0].plan.name, 'Workshop');
+    assert.equal((await integration.readLibrary()).templates[0].plan.name, 'Workshop');
+});
+
 test('updates template planning data while preserving identities and independent active execution state', async () => {
     const { storage, writer, integration } = setup();
     await integration.createTemplate(prepared(), { expectedAggregateRevision: 0 });
@@ -135,6 +168,39 @@ test('updates template planning data while preserving identities and independent
     assert.notEqual(result.executions[0], active.executions[0]);
     assert.notEqual(result.activeRuntime, active.activeRuntime);
     assert.equal(storage.state.writes, 4);
+});
+
+test('deletes a template through the locked writer without changing its active execution or runtime', async () => {
+    const { storage, writer, integration } = setup();
+    await integration.createTemplate(prepared(), { expectedAggregateRevision: 0 });
+    await integration.createTemplate(prepared({ id: 'template-2', name: 'Other workshop' }), {
+        expectedAggregateRevision: 1,
+    });
+    const withExecution = await writer.write(record => planExecutionFromTemplateInRecord(record, {
+        templateId: 'template-1', executionId: 'execution-1', expectedAggregateRevision: record.revision,
+    }));
+    const active = await writer.write(record => activatePlannedExecutionInRecord(record, {
+        executionId: 'execution-1',
+        expectedAggregateRevision: record.revision,
+        expectedExecutionRevision: withExecution.executions[0].execution.revision,
+        expectedRuntimeRevision: withExecution.executions[0].execution.runtimeRevision,
+        runtimeRunId: 'runtime-1',
+        savedAt: 1000,
+    }));
+    const executionsBefore = structuredClone(active.executions);
+    const runtimeBefore = structuredClone(active.activeRuntime);
+
+    const result = await integration.deleteTemplate('template-1', {
+        expectedAggregateRevision: active.revision,
+        expectedTemplateRevision: active.templates[0].revision,
+    });
+
+    assert.equal(result.revision, active.revision + 1);
+    assert.deepEqual(result.templates.map(item => item.id), ['template-2']);
+    assert.deepEqual(result.executions, executionsBefore);
+    assert.deepEqual(result.activeRuntime, runtimeBefore);
+    assert.equal(result.executions[0].execution.source.id, 'template-1');
+    assert.equal(storage.state.writes, 5);
 });
 
 test('native validation and revision conflicts reject without changing the unsaved draft or storage', async () => {
@@ -189,11 +255,53 @@ test('missing templates, invalid records and storage failures remain controlled 
     assert.deepEqual(draft, before);
 });
 
+test('read and deletion failures use existing contracts and never create unintended writes', async () => {
+    const { storage, integration } = setup();
+    await integration.createTemplate(prepared(), { expectedAggregateRevision: 0 });
+    const baseline = storage.values.get(EDITOR_STORAGE_KEY);
+
+    await assert.rejects(integration.deleteTemplate('template-1', {
+        expectedAggregateRevision: 0,
+        expectedTemplateRevision: 1,
+    }), /conflict/);
+    await assert.rejects(integration.deleteTemplate('template-1', {
+        expectedAggregateRevision: 1,
+        expectedTemplateRevision: 0,
+    }), /conflict/);
+    await assert.rejects(integration.deleteTemplate('missing', {
+        expectedAggregateRevision: 1,
+        expectedTemplateRevision: 1,
+    }), /templateNotFound/);
+    await assert.rejects(integration.deleteTemplate(null, {
+        expectedAggregateRevision: 1,
+        expectedTemplateRevision: 1,
+    }), /invalidData/);
+    assert.equal(storage.state.writes, 1);
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), baseline);
+
+    storage.state.failWrite = 'QuotaExceededError';
+    await assert.rejects(integration.deleteTemplate('template-1', {
+        expectedAggregateRevision: 1,
+        expectedTemplateRevision: 1,
+    }), /storageQuota/);
+    assert.equal(storage.state.writes, 1);
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), baseline);
+    storage.state.failWrite = null;
+
+    storage.state.failRead = true;
+    await assert.rejects(integration.readLibrary(), /storageRead/);
+    assert.equal(storage.state.writes, 1);
+});
+
 test('rejects incomplete integration inputs before acquiring storage write capability', async () => {
     assert.throws(() => createNativeEditorTemplateIntegration(), /invalidWriter/);
+    assert.throws(() => createNativeEditorTemplateIntegration({ writer: { write() {} } }), /invalidWriter/);
     const { storage, integration } = setup();
     await assert.rejects(integration.createTemplate(prepared(), {}), /invalidData/);
     await assert.rejects(integration.updateTemplate(prepared(), {
+        expectedAggregateRevision: 0,
+    }), /invalidData/);
+    await assert.rejects(integration.deleteTemplate('template-1', {
         expectedAggregateRevision: 0,
     }), /invalidData/);
     assert.equal(storage.state.writes, 0);

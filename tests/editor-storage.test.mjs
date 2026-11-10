@@ -16,6 +16,7 @@ import {
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     createEditorStore,
+    deleteTemplateInRecord,
     insertTemplateInRecord,
     planExecutionFromTemplateInRecord,
     resumeSuspendedExecutionInRecord,
@@ -285,6 +286,65 @@ test('template update rejects stale, missing, invalid and overflowing input with
         template: maxTemplate, expectedAggregateRevision: 7, expectedTemplateRevision: Number.MAX_SAFE_INTEGER,
     }), /invalidRevision/);
     assert.deepEqual(source, sourceBefore);
+});
+
+test('deletes only the selected template while preserving independent executions and active runtime', () => {
+    const selected = { ...template(), revision: 4 };
+    const unrelated = template('template-unrelated');
+    const plannedExecution = planned('execution-planned', selected.id);
+    const activeExecution = activatePlannedExecution(planned('execution-active', selected.id));
+    const suspendedExecution = suspendReadyExecution(activatePlannedExecution(planned('execution-suspended', selected.id)));
+    const runtime = activeRuntime(activeExecution, session('active-run'));
+    const source = record({
+        revision: 9,
+        templates: [selected, unrelated],
+        executions: [entry(plannedExecution), entry(activeExecution), entry(suspendedExecution)],
+        activeRuntime: runtime,
+    });
+    const before = structuredClone(source);
+
+    const result = deleteTemplateInRecord(source, {
+        templateId: selected.id,
+        expectedAggregateRevision: 9,
+        expectedTemplateRevision: 4,
+    });
+
+    assert.deepEqual(source, before);
+    assert.equal(result.revision, 10);
+    assert.deepEqual(result.templates, [unrelated]);
+    assert.deepEqual(result.executions, source.executions);
+    assert.deepEqual(result.activeRuntime, source.activeRuntime);
+    assert.deepEqual(result.executions.map(item => item.execution.source.id), [selected.id, selected.id, selected.id]);
+    assert.notEqual(result.templates[0], source.templates[1]);
+    assert.notEqual(result.executions[0].execution, source.executions[0].execution);
+    assert.notEqual(result.activeRuntime, source.activeRuntime);
+});
+
+test('template deletion rejects invalid, missing, stale and overflowing input without mutation', () => {
+    const stored = { ...template(), revision: 3 };
+    const source = record({ revision: 7, templates: [stored], executions: [entry(planned())] });
+    const before = structuredClone(source);
+
+    assert.throws(() => deleteTemplateInRecord(source, {
+        templateId: '', expectedAggregateRevision: 7, expectedTemplateRevision: 3,
+    }), /invalidData/);
+    assert.throws(() => deleteTemplateInRecord(source, {
+        templateId: 'missing', expectedAggregateRevision: 7, expectedTemplateRevision: 3,
+    }), /templateNotFound/);
+    assert.throws(() => deleteTemplateInRecord(source, {
+        templateId: stored.id, expectedAggregateRevision: 6, expectedTemplateRevision: 3,
+    }), /conflict/);
+    assert.throws(() => deleteTemplateInRecord(source, {
+        templateId: stored.id, expectedAggregateRevision: 7, expectedTemplateRevision: 2,
+    }), /conflict/);
+    assert.throws(() => deleteTemplateInRecord(record({
+        revision: Number.MAX_SAFE_INTEGER, templates: [stored],
+    }), {
+        templateId: stored.id,
+        expectedAggregateRevision: Number.MAX_SAFE_INTEGER,
+        expectedTemplateRevision: 3,
+    }), /invalidStoreRevision/);
+    assert.deepEqual(source, before);
 });
 
 test('creates independent PLANNED executions from one stored Schema-2 template', () => {

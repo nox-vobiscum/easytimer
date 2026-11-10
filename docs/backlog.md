@@ -76,7 +76,8 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 Schema-2 domain, persistence and runtime-transition foundation implemented and
 verified locally, including read-only ownership-protected adoption of a persisted
 ACTIVE runtime after reload, conflict-safe native template updates and a
-UI-neutral lock-protected Editor-template save boundary, but unreleased. Public
+UI-neutral lock-protected Template Library read/create/update/delete boundary,
+but unreleased. Public
 Editor UI and unified-library integration, remaining
 lifecycle and archive workflows, Facilitator Panel work and their focused
 reviews remain open; every subsequent slice requires explicit Product Owner
@@ -93,6 +94,13 @@ Session Editor. Existing V1 implementation code may remain temporarily for
 regression safety; preserve released timer, editor and recovery behavior until
 separately approved replacement. Future Schema-2 JSON portability remains a
 separate new-model requirement, not a historical migration task.
+
+Deleting a reusable native Template does not cascade into its independent
+Executions: PLANNED, ACTIVE, SUSPENDED and future COMPLETED records retain their
+plans, progress and historical source Template ID, and an ACTIVE runtime remains
+untouched. A future operation may create a new independent Execution from an
+existing Execution with a fresh identity and independent progress; that cloning
+capability is not implemented and requires a separate approved slice.
 
 ### EDITOR-002 — Unsaved Workshop-Notizen draft recovery („Für lange Winternächte“)
 

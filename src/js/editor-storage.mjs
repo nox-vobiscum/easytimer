@@ -177,6 +177,27 @@ export function updateTemplateInRecord(record, options) {
     });
 }
 
+export function deleteTemplateInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const { templateId, expectedAggregateRevision, expectedTemplateRevision } = options;
+    if (typeof templateId !== 'string' || !templateId.trim()) fail('invalidData');
+    safeRevision(expectedAggregateRevision);
+    safeRevision(expectedTemplateRevision);
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+
+    const index = valid.templates.findIndex(item => item.id === templateId);
+    if (index < 0) fail('templateNotFound');
+    if (valid.templates[index].revision !== expectedTemplateRevision) fail('conflict');
+
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        templates: valid.templates.filter((item, itemIndex) => itemIndex !== index),
+    });
+}
+
 export function planExecutionFromTemplateInRecord(record, options) {
     const valid = validateEditorStoreRecord(record);
     if (!isObject(options)) fail('invalidData');
