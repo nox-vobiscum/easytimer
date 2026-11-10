@@ -1,11 +1,13 @@
 # Session Editor Evolution & Facilitator Panel
 
-**Status:** Strategic direction agreed; the native Schema-2 domain, persistence
-and runtime-transition foundation is implemented and verified locally but not
-released. Editor UI integration, remaining lifecycle/archive workflows and the
-Facilitator Panel remain pending. **Priority:** High / Near-term. Every
-subsequent implementation slice requires separate explicit Product Owner
-approval.
+**Status:** Strategic direction agreed; the native Schema-2 domain, persistence,
+runtime-transition and UI-neutral Editor-template save boundary are implemented
+and verified locally but not released. The boundary maps prepared Editor data to
+native Templates and uses the lock-protected Editor Store without exposing a
+second library. Public Editor UI and unified-library integration, remaining
+lifecycle/archive workflows and the Facilitator Panel remain pending.
+**Priority:** High / Near-term. Every subsequent implementation slice requires
+separate explicit Product Owner approval.
 
 **Binding EDITOR-001 data decision:** There are no historical user Rundowns that
 require migration. New templates and independent executions are created directly
