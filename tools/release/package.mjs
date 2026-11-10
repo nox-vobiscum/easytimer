@@ -8,6 +8,8 @@ export const sourceRoot = fileURLToPath(new URL('../../src/', import.meta.url));
 export const productionFiles = Object.freeze([
     'about.html', 'faq.html', 'imprint.html', 'privacy.html', 'js/info.js', 'js/header.mjs',
     'index.html', 'css/styles.css', 'js/app.js', 'js/planner.js', 'js/portability.mjs',
+    'js/editor-active-lock.mjs', 'js/editor-domain.mjs', 'js/editor-runtime-bridge.mjs',
+    'js/editor-storage-lock.mjs', 'js/editor-storage.mjs', 'js/execution-runtime.mjs',
     'js/recovery.mjs', 'js/session.mjs', 'js/templates.mjs', 'js/time-visuals.mjs', 'js/timer.mjs',
     'service-worker.js', 'manifest.webmanifest', 'assets/branding/favicon.ico',
     'assets/branding/apple-touch-icon.png', 'assets/branding/android-chrome-192x192.png',
@@ -39,7 +41,7 @@ export async function validateProduction(root = sourceRoot) {
     for (const file of productionFiles) {
         const text = contents.get(file).toString();
         if (/\.(?:mjs|js)$/.test(file) && file !== 'service-worker.js') {
-            const imports = [...text.matchAll(/^import\s+.*?from\s+['"]([^'"]+)['"]/gm)];
+            const imports = [...text.matchAll(/^import\s+[\s\S]*?\sfrom\s+['"]([^'"]+)['"]/gm)];
             check(imports.length === [...text.matchAll(/^\s*import\b/gm)].length, `UNREVIEWED_IMPORT_SYNTAX: ${file}`);
             for (const match of imports) add(file, match[1]);
             check(!/\bimport\s*\(|\bexport\s+.*?\bfrom\s|^import\s*['"]|\b(?:fetch|importScripts|Worker|WebSocket|XMLHttpRequest)\s*\(/m.test(text), `UNREVIEWED_RUNTIME_LOADING: ${file}`);

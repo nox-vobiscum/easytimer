@@ -7,7 +7,7 @@ import { packageProduction, verifyArtifact, validateProduction, sourceRoot } fro
 
 test('production packaging is repeatable, allowlisted and checksum-verifiable across checkout line endings', async () => {
     const a = await packageProduction(), b = await packageProduction();
-    assert.equal(a.inventory.files.length, 24);
+    assert.equal(a.inventory.files.length, 30);
     assert.deepEqual(a.inventory, b.inventory);
     assert.deepEqual(await verifyArtifact(a.directory), a.inventory);
     const source = await mkdtemp(join(tmpdir(), 'easytimer-package-lines-'));

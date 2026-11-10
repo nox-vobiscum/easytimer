@@ -6,6 +6,9 @@ import { createTemplateStore } from './templates.mjs?v=37';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=54';
 import { downloadRundowns, rundownFromRun, exportFilename } from './portability.mjs?v=37';
 import { createRecovery } from './recovery.mjs?v=54';
+import { createEditorActiveTimerLock } from './editor-active-lock.mjs';
+import { createEditorRuntimeBridge } from './editor-runtime-bridge.mjs';
+import { createEditorStoreWriter } from './editor-storage-lock.mjs';
 
 const applicationHeader = mountApplicationHeader();
 const copy = {
@@ -106,7 +109,28 @@ let pickerOpen = false;
 let pickerTemplates = [];
 let pickerMessage = '';
 const development = location.origin === 'http://localhost:8000' && globalThis.easyTimerDevelopment?.enabled === true ? globalThis.easyTimerDevelopment : null;
-const recovery = await createRecovery({
+const editorWriter = createEditorStoreWriter({ getStorage: () => localStorage, locks: navigator.locks });
+const editorActiveLock = createEditorActiveTimerLock({ locks: navigator.locks });
+const editorBridge = createEditorRuntimeBridge({ writer: editorWriter, activeLock: editorActiveLock });
+let nativeRuntime = null;
+let nativeStartupFeedback = '';
+try {
+    const adopted = await editorBridge.adoptPersistedActive({ observedAt: Date.now() });
+    if (adopted.outcome === 'adopted') {
+        nativeRuntime = { record: adopted.record, pending: false, blocked: false };
+        mode = 'session'; run = adopted.runtime.run; timer = adopted.runtime.clock; pickerOpen = false;
+    }
+} catch (cause) {
+    nativeStartupFeedback = cause?.message === 'lockBusy' ? 'CONTEXT_ACTIVE' : 'NATIVE_RUNTIME_ERROR';
+}
+const inactiveRecovery = {
+    restored: null, error: null, pending: false, candidates: [],
+    async refreshAvailability() {},
+    save() { return true; },
+    async recover() { throw new Error('RECOVERY_UNAVAILABLE'); },
+    dismiss() {}, close() {},
+};
+const recovery = nativeRuntime ? inactiveRecovery : await createRecovery({
     storage: { getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value),
         removeItem: key => localStorage.removeItem(key), key: index => localStorage.key(index), get length() { return localStorage.length; } },
     tabs: { getItem: key => sessionStorage.getItem(key), setItem: (key, value) => sessionStorage.setItem(key, value), removeItem: key => sessionStorage.removeItem(key) },
@@ -123,8 +147,8 @@ function adoptRecovered(restored) {
     }
     pickerOpen = false;
 }
-if (recovery.restored) adoptRecovered(recovery.restored);
-let recoveryFeedback = '';
+if (!nativeRuntime && recovery.restored && !(nativeStartupFeedback && recovery.restored.run)) adoptRecovered(recovery.restored);
+let recoveryFeedback = nativeStartupFeedback;
 const templateStore = development ? development.createStore() : createTemplateStore(() => localStorage);
 let limitExceeded = false;
 let expanded = false;
@@ -151,6 +175,7 @@ const recoveryCopy = {
         label: 'Saved timer', placeholder: 'Select a timer', restore: 'Restore timer', dismiss: 'Use current timer',
         timer: 'Timer', start: 'Start', total: 'Timebox', notStarted: 'Not started', unknownStart: 'Start time not recorded', saved: 'Saved', elsewhere: 'In use in another tab',
         error: 'Timer recovery is unavailable or saved data could not be trusted. You can keep using the timer; do not rely on recovery.',
+        nativeError: 'This session can no longer be changed safely. Reload to retry; stored data was not overwritten.',
         active: 'This timer is already in use in another tab. Switch to that tab or start a new timer here.',
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: 'Overtime' },
     de: { heading: 'Timer wiederherstellen', choose: 'Ein gespeicherter Timer ist verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
@@ -159,6 +184,7 @@ const recoveryCopy = {
         label: 'Gespeicherter Timer', placeholder: 'Timer auswählen', restore: 'Timer wiederherstellen', dismiss: 'Aktuellen Timer verwenden',
         timer: 'Timer', start: 'Start', total: 'Timebox', notStarted: 'Noch nicht gestartet', unknownStart: 'Startzeit nicht erfasst', saved: 'Gespeichert', elsewhere: 'In anderem Tab aktiv',
         error: 'Die Timer-Wiederherstellung ist nicht verfügbar oder gespeicherte Daten sind nicht verlässlich. Du kannst den Timer weiter nutzen; verlasse dich nicht auf die Wiederherstellung.',
+        nativeError: 'Diese Session kann nicht mehr sicher geändert werden. Lade die Seite zum Wiederholen neu; gespeicherte Daten wurden nicht überschrieben.',
         active: 'Dieser Timer wird bereits in einem anderen Tab verwendet. Wechsle dorthin oder starte hier einen neuen Timer.',
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Überzeit' },
 };
@@ -186,7 +212,10 @@ function renderRecovery() {
     const t = recoveryCopy[language];
     $('runtime-recovery').hidden = !recovery.error && !recoveryFeedback && (mode !== 'quick' || (!recovery.pending && !candidates.length));
     $('recovery-heading').textContent = t.heading;
-    const feedback = recoveryFeedback === 'CONTEXT_ACTIVE' ? t.active : recoveryFeedback || recovery.error ? t.error : !candidates.length && recovery.pending ? t.noCandidates : candidates.length > 1 ? t.chooseMany : t.choose;
+    const feedback = recoveryFeedback === 'CONTEXT_ACTIVE' ? t.active
+        : recoveryFeedback === 'NATIVE_RUNTIME_ERROR' ? t.nativeError
+            : recoveryFeedback || recovery.error ? t.error
+                : !candidates.length && recovery.pending ? t.noCandidates : candidates.length > 1 ? t.chooseMany : t.choose;
     if ($('recovery-feedback').textContent !== feedback) $('recovery-feedback').textContent = feedback;
     $('recovery-choices').hidden = mode !== 'quick' || (!recovery.pending && !candidates.length);
     $('recovery-label').textContent = t.label;
@@ -318,7 +347,90 @@ async function toggleFullscreen() {
     $('fullscreen').focus({ preventScroll: true });
 }
 
+function activeNativeExecution() {
+    return nativeRuntime?.record.executions.find(entry => entry.execution.lifecycle === 'active')?.execution ?? null;
+}
+function blockNativeRuntime() {
+    if (nativeRuntime) nativeRuntime.blocked = true;
+    recoveryFeedback = 'NATIVE_RUNTIME_ERROR';
+}
+function installNativeRecord(record) {
+    if (!nativeRuntime || !record.activeRuntime) throw new Error('invalidActiveRuntimeBinding');
+    nativeRuntime.record = record;
+    run = structuredClone(record.activeRuntime.run);
+    timer = structuredClone(record.activeRuntime.clock);
+    mode = 'session'; pickerOpen = false;
+}
+async function persistNativeAction(action, occurredAt) {
+    if (!nativeRuntime || nativeRuntime.pending || nativeRuntime.blocked) return;
+    if (!editorActiveLock.held) { blockNativeRuntime(); render(); return; }
+    nativeRuntime.pending = true;
+    render();
+    try {
+        const execution = activeNativeExecution();
+        if (!execution) throw new Error('executionNotFound');
+        const common = {
+            executionId: execution.id,
+            expectedAggregateRevision: nativeRuntime.record.revision,
+            expectedExecutionRevision: execution.revision,
+            expectedRuntimeRevision: execution.runtimeRevision,
+        };
+        let record;
+        if (action.type === 'PRIMARY' && execution.attempt === null) {
+            const current = transitionSession(run, timer, { type: 'TICK' }, occurredAt);
+            if (current.clock.status !== 'READY') throw new Error('invalidSessionAction');
+            record = await editorBridge.startReady({
+                ...common,
+                attemptId: crypto.randomUUID(),
+                startedAt: occurredAt,
+            });
+        } else {
+            if (execution.attempt === null) throw new Error('invalidAttempt');
+            const current = transitionSession(run, timer, { type: 'TICK' }, occurredAt);
+            let actionType = action.type;
+            if (actionType === 'PRIMARY') {
+                actionType = current.clock.status === 'READY' ? 'START'
+                    : ['RUNNING', 'FINISHED'].includes(current.clock.status) ? 'PAUSE' : 'RESUME';
+            }
+            record = await editorBridge.applySessionAction({
+                ...common,
+                expectedAttemptId: execution.attempt.id,
+                expectedRunId: execution.attempt.runtimeRunId,
+                actionType,
+                occurredAt,
+            });
+        }
+        installNativeRecord(record);
+        recoveryFeedback = '';
+    } catch {
+        blockNativeRuntime();
+    } finally {
+        nativeRuntime.pending = false;
+        render();
+    }
+}
+function dispatchNative(action) {
+    if (!nativeRuntime) return;
+    if (!editorActiveLock.held) {
+        blockNativeRuntime();
+        render();
+        return;
+    }
+    if (action.type === 'TICK') {
+        const current = transitionSession(run, timer, action, Date.now());
+        run = current.run; timer = current.clock;
+        render();
+        return;
+    }
+    if (action.type === 'STOP_WORKSHOP') {
+        recoveryFeedback = 'NATIVE_RUNTIME_ERROR';
+        render();
+        return;
+    }
+    return persistNativeAction(action, Date.now());
+}
 function dispatch(action) {
+    if (nativeRuntime) return dispatchNative(action);
     if (mode === 'session' && run) {
         const next = transitionSession(run, timer, action, Date.now());
         run = next.run; timer = next.clock;
@@ -360,6 +472,11 @@ function exitPresentationForWorkspace() {
     return document.fullscreenElement ? document.exitFullscreen().catch(() => {}) : null;
 }
 async function switchMode(nextMode) {
+    if ((nativeRuntime && nextMode !== 'session') || (nativeStartupFeedback && nextMode === 'session')) {
+        recoveryFeedback = 'NATIVE_RUNTIME_ERROR'; render();
+        $('recovery-feedback').focus({ preventScroll: true });
+        return;
+    }
     dispatch({ type: 'TICK' });
     if (nextMode === mode) {
         if (plannerOpen && !planner.close()) { dispatch({ type: 'TICK' }); return; }
@@ -386,7 +503,7 @@ async function switchMode(nextMode) {
 }
 function render() {
     rememberView();
-    recovery.save(timer, null, mode === 'session' ? run : null, quickDurationMs);
+    if (!nativeRuntime) recovery.save(timer, null, mode === 'session' ? run : null, quickDurationMs);
     renderRecovery();
     const t = copy[language];
     const session = mode === 'session' && run;
@@ -399,7 +516,9 @@ function render() {
     $('session-picker').hidden = !pickerOpen || plannerOpen;
     $('open-quick').setAttribute('aria-pressed', String(mode === 'quick'));
     $('open-session').setAttribute('aria-pressed', String(mode === 'session'));
-    $('export-rundown').hidden = !session;
+    $('open-quick').disabled = Boolean(nativeRuntime);
+    $('open-session').disabled = Boolean(nativeStartupFeedback && !nativeRuntime);
+    $('export-rundown').hidden = !session || Boolean(nativeRuntime);
     if (!session) { $('export-feedback').hidden = true; $('export-feedback').textContent = ''; }
     else if (!$('export-feedback').hidden) $('export-feedback').textContent = t.exportFailed;
     $('session-context').hidden = !session;
@@ -416,7 +535,8 @@ function render() {
     const { totalMs, plannedMs, adjustmentMs } = timer ? timeBudget(timer) : { totalMs: 1, plannedMs: 0, adjustmentMs: 0 };
     $('time').dataset.visualState = timer ? timeVisualState(timer, totalMs) : 'NORMAL';
     const remaining = timer ? totalMs > 0 ? Math.max(0, Math.min(1, timer.remainingMs / totalMs)) : 0 : 1;
-    $('primary').disabled = mode === 'quick' && timer?.status === 'READY' && timer.durationMs === 0;
+    const nativeUnavailable = Boolean(nativeRuntime && (nativeRuntime.pending || nativeRuntime.blocked));
+    $('primary').disabled = nativeUnavailable || (mode === 'quick' && timer?.status === 'READY' && timer.durationMs === 0);
     $('progress').style.setProperty('--remaining', `${remaining * 100}%`);
     document.documentElement.lang = language;
     document.documentElement.dataset.theme = theme;
@@ -485,13 +605,15 @@ function render() {
     $('primary').title = t[primary];
     $('primary').setAttribute('aria-label', t[primary]);
     $('stop').hidden = session ? !hasSessionProgress(run, timer) : timer.status === 'READY';
+    $('stop').disabled = Boolean(nativeRuntime);
     const stopLabel = session ? t.stopWorkshop : t.stop;
     $('stop').querySelector('.action-label').textContent = stopLabel;
     $('stop').setAttribute('aria-label', stopLabel);
     $('stop').title = stopLabel;
     const automatic = session && run.transitionMode === 'automatic';
     $('next').hidden = !session || automatic || run.stage === 'COMPLETED';
-    $('next').disabled = !session || automatic || run.stage === 'COMPLETED';
+    $('next').disabled = !session || automatic || run.stage === 'COMPLETED' || nativeUnavailable
+        || Boolean(nativeRuntime && activeNativeExecution()?.attempt === null);
     const upcoming = session && run.stage === 'PHASE' ? run.phases[run.currentIndex + 1] : null;
     const nextLabel = upcoming ? `${t.upNext}: ${upcoming.title}` : t.complete;
     $('next-label').textContent = upcoming ? t.upNext : t.complete;
@@ -504,6 +626,7 @@ function render() {
     $('automatic-next-phase').textContent = upcoming ? upcoming.title : '';
     $('automatic-next-phase').hidden = !upcoming;
     $('stop-overtime').hidden = !session || run.stage !== 'COMPLETED' || timer.status === 'OVERTIME_STOPPED';
+    $('stop-overtime').disabled = nativeUnavailable;
     $('stop-overtime').setAttribute('aria-label', t.stopOvertime); $('stop-overtime').title = t.stopOvertime;
     document.querySelectorAll('[data-adjustment]').forEach(button => button.setAttribute('aria-label', t.addTime(Number(button.dataset.adjustment) / 1000)));
     $('adjustment-shortcut').textContent = t.adjustmentShortcut;
@@ -556,6 +679,7 @@ stopWorkshopDialog.addEventListener('close', () => {
 });
 $('stop').addEventListener('click', () => {
     if (mode === 'session') {
+        if (nativeRuntime) { recoveryFeedback = 'NATIVE_RUNTIME_ERROR'; render(); return; }
         dispatch({ type: 'TICK' });
         openStopWorkshopDialog();
         return;
@@ -600,6 +724,11 @@ $('session-template').addEventListener('change', () => {
     $('prepare-session').disabled = !pickerTemplates.some(item => item.id === $('session-template').value);
 });
 async function loadSavedSession(id, fromEditor = false) {
+    if (nativeRuntime || nativeStartupFeedback) {
+        recoveryFeedback = 'NATIVE_RUNTIME_ERROR'; render();
+        $('recovery-feedback').focus({ preventScroll: true });
+        return;
+    }
     const navigation = navigationRevision;
     const saved = await templateStore.load();
     if (navigation !== navigationRevision || (fromEditor ? !plannerOpen : !pickerOpen || plannerOpen)) return;
@@ -631,9 +760,11 @@ $('next').addEventListener('click', () => {
     dispatch({ type: run.currentIndex === run.phases.length - 1 ? 'COMPLETE' : 'NEXT' });
     $('primary').focus({ preventScroll: true });
 });
-$('stop-overtime').addEventListener('click', () => {
+$('stop-overtime').addEventListener('click', async () => {
     if (mode !== 'session' || !run) return;
-    dispatch({ type: 'STOP_OVERTIME' }); $('stop').focus({ preventScroll: true });
+    const native = Boolean(nativeRuntime);
+    await dispatch({ type: 'STOP_OVERTIME' });
+    $(native ? isSmartphone() ? 'menu-toggle' : 'fullscreen' : 'stop').focus({ preventScroll: true });
 });
 $('export-rundown').addEventListener('click', () => {
     if (mode !== 'session' || !run) return;
@@ -726,7 +857,8 @@ if (returnURL.searchParams.get('from') === 'information') {
     history.replaceState(null, '', returnURL);
 }
 try { sessionStorage.removeItem(INFORMATION_ORIGIN_KEY); } catch { /* Optional navigation metadata. */ }
-const unresolvedRecovery = (mode === 'quick' && recovery.pending) || (!recovery.restored && recovery.error);
+const unresolvedRecovery = Boolean(nativeStartupFeedback)
+    || (mode === 'quick' && recovery.pending) || (!recovery.restored && recovery.error);
 if (!unresolvedRecovery && savedView === 'editor') {
     await openEditor();
 } else if (!unresolvedRecovery && savedView === 'session' && mode !== 'session' && !recovery.restored) {

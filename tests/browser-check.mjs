@@ -15,6 +15,7 @@ import { checkRundownEntry } from './rundown-entry-browser.mjs';
 import { checkDirectLaunch } from './direct-launch-browser.mjs';
 import { checkRecovery, checkRecoveryCorrections } from './recovery-browser.mjs';
 import { checkSessionRecovery } from './session-recovery-browser.mjs';
+import { checkEditorRuntimeApp } from './editor-runtime-app-browser.mjs';
 import { checkNavigation } from './navigation-browser.mjs';
 import { checkSubtraction } from './subtraction-browser.mjs';
 import { configureQuickTimebox } from './quick-timebox.mjs';
@@ -158,6 +159,9 @@ try {
     }
     if(timeTravelOptions.names.length) {
         await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
+        assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_EDITOR_RUNTIME_ONLY === '1') {
+        await checkEditorRuntimeApp({evaluate,click,text,cdp});
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_UX011_ONLY === '1') {
         await checkSessionNavigation({evaluate,click,text,cdp,configure});
@@ -875,6 +879,7 @@ try {
     assert.equal(await evaluate(`JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1'))).run.runId`), offlineRunId);
     assert.equal(await text('#status'), 'Running');
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
+    await checkEditorRuntimeApp({ evaluate, click, text, cdp });
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');
     }
