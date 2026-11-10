@@ -18,7 +18,11 @@ commit, staging and production deployment are distinct events.
   PLANNED executions from stored templates. A UI-neutral integration boundary
   now maps prepared Editor data into native Templates, exposes a validated
   copy-isolated library snapshot, and saves creation, edits or deletion through
-  the existing lock-protected writer. Deleting a Template leaves every independent
+  the existing lock-protected writer. A stateless Planner-facing service now
+  prepares complete isolated native drafts, carries their optimistic revision
+  bases through save/delete operations, refreshes confirmed library snapshots
+  after writes and preserves rejected unsaved drafts for later UI feedback.
+  Deleting a Template leaves every independent
   Execution, historical source reference and ACTIVE runtime unchanged. The Runtime
   Bridge can also claim ownership and adopt a
   persisted ACTIVE runtime after a validated post-claim re-read, reconciling only

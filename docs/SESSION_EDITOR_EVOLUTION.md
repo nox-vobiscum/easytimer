@@ -2,13 +2,24 @@
 
 **Status:** Strategic direction agreed; the native Schema-2 domain, persistence,
 runtime-transition, UI-neutral Template Library read/create/update/delete boundary
-and passive Schema-2 JSON portability contract are implemented and verified
+and Planner-facing draft/outcome service, plus a passive Schema-2 JSON portability
+contract, are implemented and verified
 locally but not released. The boundaries
 map prepared Editor data to native Templates and use the lock-protected Editor
 Store without exposing a second library. Public Editor UI and unified-library integration, remaining
 lifecycle/archive workflows and the Facilitator Panel remain pending.
 **Priority:** High / Near-term. Every subsequent implementation slice requires
 separate explicit Product Owner approval.
+
+**Internal Planner integration boundary:** The UI-neutral native Planner service
+loads copy-isolated Template Library snapshots, prepares complete isolated create
+or edit drafts, and carries the captured aggregate and Template revisions into
+the existing lock-protected native operations. Successful writes return a fresh
+confirmed library snapshot; rejected writes return structured error information
+and preserve the unsaved draft without merge, retry or overwrite. The service
+does not cache library state, access V1 storage or change the public Editor,
+Session Picker or timer UI. Their cutover remains separately reviewable and
+requires explicit approval.
 
 **Binding EDITOR-001 data decision:** There are no historical user Rundowns that
 require migration. New templates and independent executions are created directly

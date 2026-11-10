@@ -77,7 +77,8 @@ Schema-2 domain, persistence and runtime-transition foundation implemented and
 verified locally, including read-only ownership-protected adoption of a persisted
 ACTIVE runtime after reload, conflict-safe native template updates and a
 UI-neutral lock-protected Template Library read/create/update/delete boundary and
-a versioned passive Schema-2 JSON portability contract, but unreleased. Public
+a stateless Planner-facing draft and structured-outcome service, plus a versioned
+passive Schema-2 JSON portability contract, but unreleased. Public
 Editor UI and unified-library integration, remaining
 lifecycle and archive workflows, Facilitator Panel work and their focused
 reviews remain open; every subsequent slice requires explicit Product Owner
@@ -111,6 +112,14 @@ ACTIVE Execution. Individual exports use the same passive snapshot rule. Export
 documents do not grant timer ownership, and parsing never restores, activates or
 writes anything. COMPLETED records remain unsupported until their native
 lifecycle contract exists.
+
+The internal Planner service prepares copy-isolated create/edit drafts containing
+all native planning fields, captures aggregate and Template revisions for
+conflict-safe writes, delegates persistence to the existing locked Template
+integration, and returns refreshed confirmed library snapshots. Validation,
+conflict, missing-record, storage and lock failures remain structured and retain
+the caller's unsaved draft. This is an unreleased UI-neutral contract only; the
+public Editor, visible library and Session Picker still use their existing paths.
 
 ### EDITOR-002 — Unsaved Workshop-Notizen draft recovery („Für lange Winternächte“)
 
