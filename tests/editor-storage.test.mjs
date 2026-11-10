@@ -21,6 +21,7 @@ import {
     resumeSuspendedExecutionInRecord,
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
+    updateTemplateInRecord,
     validateEditorStoreRecord,
 } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
@@ -205,6 +206,87 @@ test('template insertion rejects invalid, duplicate, stale and overflowing input
     }), /invalidStoreRevision/);
 });
 
+test('updates one native template without changing its identity or independent executions', () => {
+    const stored = { ...template(), revision: 4 };
+    const unrelated = template('template-unrelated');
+    const plannedExecution = planned('execution-planned');
+    const activeExecution = activatePlannedExecution(planned('execution-active'));
+    const suspendedExecution = suspendReadyExecution(activatePlannedExecution(planned('execution-suspended')));
+    const source = record({
+        revision: 9,
+        templates: [stored, unrelated],
+        executions: [entry(plannedExecution), entry(activeExecution), entry(suspendedExecution)],
+        activeRuntime: activeRuntime(activeExecution, session('active-run')),
+    });
+    const replacement = structuredClone(stored);
+    replacement.plan = {
+        ...replacement.plan,
+        name: 'Updated workshop',
+        category: 'workshop',
+        preparedInformation: '**Prepared** information',
+        phases: replacement.plan.phases.map((phase, index) => index === 0 ? {
+            ...phase,
+            category: 'presentation',
+            notes: '*Opening* notes',
+            resources: [{ label: 'Workshop board', url: 'https://example.com/board' }],
+        } : phase),
+    };
+    const sourceBefore = structuredClone(source);
+    const replacementBefore = structuredClone(replacement);
+
+    const result = updateTemplateInRecord(source, {
+        template: replacement,
+        expectedAggregateRevision: 9,
+        expectedTemplateRevision: 4,
+    });
+
+    assert.deepEqual(source, sourceBefore);
+    assert.deepEqual(replacement, replacementBefore);
+    assert.equal(result.revision, 10);
+    assert.equal(result.templates[0].id, stored.id);
+    assert.equal(result.templates[0].revision, 5);
+    assert.deepEqual(result.templates[0].plan, replacement.plan);
+    assert.deepEqual(result.templates[1], unrelated);
+    assert.deepEqual(result.executions, source.executions);
+    assert.deepEqual(result.activeRuntime, source.activeRuntime);
+    assert.notEqual(result.templates[0], replacement);
+    assert.notEqual(result.executions[0].execution, source.executions[0].execution);
+});
+
+test('template update rejects stale, missing, invalid and overflowing input without mutation', () => {
+    const stored = { ...template(), revision: 3 };
+    const source = record({ revision: 7, templates: [stored] });
+    const sourceBefore = structuredClone(source);
+    const replacement = structuredClone(stored);
+
+    assert.throws(() => updateTemplateInRecord(source, {
+        template: replacement, expectedAggregateRevision: 6, expectedTemplateRevision: 3,
+    }), /conflict/);
+    assert.throws(() => updateTemplateInRecord(source, {
+        template: replacement, expectedAggregateRevision: 7, expectedTemplateRevision: 2,
+    }), /conflict/);
+    assert.throws(() => updateTemplateInRecord(source, {
+        template: { ...replacement, revision: 2 }, expectedAggregateRevision: 7, expectedTemplateRevision: 3,
+    }), /conflict/);
+    assert.throws(() => updateTemplateInRecord(source, {
+        template: template('missing'), expectedAggregateRevision: 7, expectedTemplateRevision: 1,
+    }), /templateNotFound/);
+    assert.throws(() => updateTemplateInRecord(source, {
+        template: { ...replacement, plan: { ...replacement.plan, unknown: true } },
+        expectedAggregateRevision: 7, expectedTemplateRevision: 3,
+    }), /invalidData/);
+    assert.throws(() => updateTemplateInRecord(record({
+        revision: Number.MAX_SAFE_INTEGER, templates: [stored],
+    }), {
+        template: replacement, expectedAggregateRevision: Number.MAX_SAFE_INTEGER, expectedTemplateRevision: 3,
+    }), /invalidStoreRevision/);
+    const maxTemplate = { ...stored, revision: Number.MAX_SAFE_INTEGER };
+    assert.throws(() => updateTemplateInRecord(record({ revision: 7, templates: [maxTemplate] }), {
+        template: maxTemplate, expectedAggregateRevision: 7, expectedTemplateRevision: Number.MAX_SAFE_INTEGER,
+    }), /invalidRevision/);
+    assert.deepEqual(source, sourceBefore);
+});
+
 test('creates independent PLANNED executions from one stored Schema-2 template', () => {
     const storedTemplate = template();
     const unrelated = planned('execution-existing');
@@ -263,7 +345,7 @@ test('planned execution creation rejects missing templates, duplicate IDs, stale
     }), /invalidStoreRevision/);
 });
 
-test('writer persists and confirms native templates and planned executions without an active lock', async () => {
+test('writer persists and confirms native templates, updates and planned executions without an active lock', async () => {
     const storage = memory();
     const locks = aggregateLockManager();
     const writer = createEditorStoreWriter({ getStorage: () => storage, locks });
@@ -275,16 +357,25 @@ test('writer persists and confirms native templates and planned executions witho
         templateId: 'template-1', executionId: 'execution-1',
         expectedAggregateRevision: current.revision,
     }));
+    const withUpdate = await writer.write(current => updateTemplateInRecord(current, {
+        template: { ...current.templates[0], plan: { ...current.templates[0].plan, name: 'Updated' } },
+        expectedAggregateRevision: current.revision,
+        expectedTemplateRevision: current.templates[0].revision,
+    }));
 
-    assert.equal(storage.state.writes, 2);
+    assert.equal(storage.state.writes, 3);
     assert.equal(withTemplate.revision, 1);
     assert.equal(withExecution.revision, 2);
-    assert.deepEqual(await writer.read(), withExecution);
-    assert.equal(withExecution.activeRuntime, null);
+    assert.equal(withUpdate.revision, 3);
+    assert.equal(withUpdate.templates[0].revision, 2);
+    assert.equal(withUpdate.templates[0].plan.name, 'Updated');
+    assert.deepEqual(withUpdate.executions, withExecution.executions);
+    assert.deepEqual(await writer.read(), withUpdate);
+    assert.equal(withUpdate.activeRuntime, null);
     assert.equal(locks.held.size, 0);
 });
 
-test('writer performs no storage write after rejected template or execution insertion', async () => {
+test('writer performs no storage write after rejected template insertion, update or execution creation', async () => {
     const initial = record({ revision: 5, templates: [template()], executions: [entry(planned())] });
     const storage = memory(JSON.stringify(initial));
     const locks = aggregateLockManager();
@@ -293,6 +384,10 @@ test('writer performs no storage write after rejected template or execution inse
     await assert.rejects(writer.write(current => insertTemplateInRecord(current, {
         template: template(), expectedAggregateRevision: current.revision,
     })), /duplicateId/);
+    await assert.rejects(writer.write(current => updateTemplateInRecord(current, {
+        template: current.templates[0], expectedAggregateRevision: current.revision,
+        expectedTemplateRevision: current.templates[0].revision - 1,
+    })), /conflict/);
     await assert.rejects(writer.write(current => planExecutionFromTemplateInRecord(current, {
         templateId: 'template-1', executionId: 'execution-1',
         expectedAggregateRevision: current.revision,

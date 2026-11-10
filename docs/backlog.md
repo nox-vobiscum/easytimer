@@ -75,7 +75,8 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 **Priority:** High / Near-term — strategic product direction. **Status:** Native
 Schema-2 domain, persistence and runtime-transition foundation implemented and
 verified locally, including read-only ownership-protected adoption of a persisted
-ACTIVE runtime after reload, but unreleased. Editor UI integration, remaining
+ACTIVE runtime after reload and conflict-safe native template updates, but
+unreleased. Editor UI integration, remaining
 lifecycle and archive workflows, Facilitator Panel work and their focused
 reviews remain open; every subsequent slice requires explicit Product Owner
 approval.

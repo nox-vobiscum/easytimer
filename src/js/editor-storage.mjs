@@ -152,6 +152,31 @@ export function insertTemplateInRecord(record, options) {
     });
 }
 
+export function updateTemplateInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const { template, expectedAggregateRevision, expectedTemplateRevision } = options;
+    safeRevision(expectedAggregateRevision);
+    safeRevision(expectedTemplateRevision);
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+
+    const replacement = validateTemplate(template);
+    const index = valid.templates.findIndex(item => item.id === replacement.id);
+    if (index < 0) fail('templateNotFound');
+    const current = valid.templates[index];
+    if (current.revision !== expectedTemplateRevision
+        || replacement.revision !== expectedTemplateRevision) fail('conflict');
+    if (current.revision === Number.MAX_SAFE_INTEGER) fail('invalidRevision');
+
+    const updated = validateTemplate({ ...replacement, revision: current.revision + 1 });
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        templates: valid.templates.map((item, itemIndex) => itemIndex === index ? updated : item),
+    });
+}
+
 export function planExecutionFromTemplateInRecord(record, options) {
     const valid = validateEditorStoreRecord(record);
     if (!isObject(options)) fail('invalidData');
