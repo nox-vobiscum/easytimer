@@ -25,6 +25,13 @@ commit, staging and production deployment are distinct events.
   the returned in-memory running view. These are unreleased internal capabilities
   only; no Editor UI integration, unified visible library or production recovery
   availability is included.
+- **EDITOR-001 native portability foundation:** versioned Schema-2 JSON contracts
+  can serialize and strictly parse complete Template/Execution backups and
+  individual Template or Execution snapshots. ACTIVE exports require their
+  matching validated runtime, while suspended checkpoints remain attached to
+  their Execution. These passive documents grant no ownership and parsing never
+  restores, activates or persists data. Public import/export UI, restore policy,
+  COMPLETED support and V1 conversion are not included.
 
 ## PWA v67 — 2026-11-01
 
