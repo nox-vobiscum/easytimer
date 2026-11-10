@@ -41,7 +41,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
-| ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
+| ADHOC-002 | Minimal Ad-hoc Timer Overlay | After EDITOR-001 including the Facilitator Panel | Ephemeral independent overlay; separate scope and explicit approval required |
 | QT-002 | Optional manual Quick Timer duration entry | Later | Subtraction and contextual controls are delivered; preserve current one-timer simplicity |
 | REL-001 | Remaining runtime recovery hardening | Later | REL-001A/B are deployed; real-device and four-hour-policy UX remain open |
 | SIGNAL-001 | Configurable visual/audio signals | Later | Meaningful runtime events |
@@ -161,11 +161,11 @@ Later: edit the current and upcoming phases without stopping the running session
 
 **Status:** Later; depends on ST-002.
 
-### ADHOC-001 — Independent ad-hoc timer
+### ADHOC-002 — Minimal Ad-hoc Timer Overlay
 
-Temporary timebox that suspends the main session/Quick countdown or overtime according to the previously accepted ET-001 behavior, while keeping its own duration and explicit return/resume controls. Ad-hoc time must not contaminate the workshop total.
+**Priority:** Strictly after EDITOR-001, including the Facilitator Panel. **Status:** Deferred separate feature; implementation requires explicit Product Owner approval and is not part of EDITOR-001 or 0AM.
 
-**Status:** Later; depends on a clear runtime-state design.
+Provide a small accessible DE/EN countdown overlay above a still-visible, independently continuing Session Rundown. It is not another application mode and must never modify the Session Timer, rundown, phase transitions or Execution lifecycle. Reuse existing timer calculations with one separate ephemeral timer starting at `00:00`, `+1 min` and `+5 min` adjustments, and appropriate Start/Pause/Resume controls. At completion it remains at `00:00` until an explicit **Stop & Close** action. Stop & Close—and Escape if supported—requires confirmation before discarding and closing; there is no separate close button. Do not persist or recover this temporary timer after reload or crash, and add a brief FAQ explanation only when the feature is implemented.
 
 ### QT-002 — Optional Quick Timer refinements
 
