@@ -306,6 +306,8 @@ UX-008 endgame highlighting is implemented locally and always enabled in both ti
 **Status:** Released to staging and production in PWA v67 at commit
 `72b2d28435ebb6b6e77739c454add57a49eee0f7`; verified production workflow run
 [`41323065346`](https://github.com/nox-vobiscum/easytimer/actions/runs/41323065346).
+An unreleased follow-up guard is implemented locally so that dialog Escape does
+not also invoke the global fullscreen or expanded-view exit.
 
 Firefox can hide a browser-native `window.confirm()` prompt behind its fullscreen
 surface, leaving Workshop Stop visibly blocked until fullscreen is exited. The

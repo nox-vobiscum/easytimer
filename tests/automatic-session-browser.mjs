@@ -17,6 +17,10 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
     ]};
     const saved=JSON.stringify({schemaVersion:1,templates:[template]});
     const menu=async selector=>{await click('#menu-toggle');await click(selector);};
+    const wait=async expression=>{
+        for(let i=0;i<100;i++){if(await evaluate(expression))return;await delay(50);}
+        assert.fail('Automatic Session timeout: '+expression);
+    };
     const prepare=async()=>{
         await evaluate('window.autoAccept=true;window.autoConfirmAdvance=0');
         if(await evaluate(`document.body.dataset.mode==='session'`))await menu('#open-quick');
@@ -85,12 +89,21 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
             if(selector==='#open-quick')await click('#menu-toggle');
             await evaluate('window.autoAccept=false;window.autoConfirmAdvance=50000');
             await rawClick(200000,selector);
-            const prompt=await evaluate('window.autoPrompts.at(-1)');
-            assert.equal(prompt.phase,'Phase 3 of 3');assert.equal(prompt.time,'00:40','Action reconciles before confirmation');
+            if(selector==='#stop') {
+                assert.equal(await evaluate(`document.querySelector('#stop-workshop-dialog').open`),true);
+                assert.equal(await text('#phase-number'),'Phase 3 of 3');assert.equal(await text('#time'),'00:40','Stop reconciles before opening its confirmation');
+                await evaluate('globalThis.__easyTimerTestClock.now+=50000');await click('#stop-workshop-cancel');
+                await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.querySelector('#time').textContent==='+00:10'`);
+            } else {
+                const prompt=await evaluate('window.autoPrompts.at(-1)');
+                assert.equal(prompt.phase,'Phase 3 of 3');assert.equal(prompt.time,'00:40','Action reconciles before confirmation');
+            }
             assert.equal(await text('#time'),'+00:10','Cancelled confirmation catches up across its elapsed time');
             if(selector==='#open-quick')await click('#menu-toggle');
         }
         await prepare();await click('#primary');await rawClick(200000,'#stop');
+        assert.equal(await evaluate(`document.querySelector('#stop-workshop-dialog').open`),true);await click('#stop-workshop-confirm');
+        await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.querySelector('#phase-number').textContent==='Phase 1 of 3'&&document.querySelector('#status').textContent==='Ready'&&document.querySelector('#time').textContent==='01:00'`);
         assert.equal(await text('#phase-number'),'Phase 1 of 3');assert.equal(await text('#status'),'Ready');
         await clock.advance('1h');assert.equal(await text('#time'),'01:00');
         await click('#primary');await click('#menu-toggle');await rawClick(250000,'#open-quick');

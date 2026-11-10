@@ -6,6 +6,11 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **BUG-001 follow-up:** Escape now cancels the document-modal Session Stop
+  confirmation without invoking the global fullscreen or expanded-view exit.
+  The active Session and fullscreen presentation remain unchanged; ordinary
+  Escape outside the dialog retains its existing presentation-exit behavior.
+
 ### Added
 
 - **EDITOR-001 internal foundation:** the native Schema-2 Editor Store can

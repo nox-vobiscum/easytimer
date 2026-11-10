@@ -825,6 +825,7 @@ document.addEventListener('keydown', event => {
         setClockOnly(false);
         return;
     }
+    if (event.key === 'Escape' && stopWorkshopDialog.open) return;
     if (event.key === 'Escape' && document.fullscreenElement) {
         fullscreenRequestId += 1;
         fullscreenRequested = false;

@@ -76,6 +76,23 @@ Use `Unreleased` until production is verified. A later release-status update may
 be a separately authorized documentation commit; it does not require an
 application/PWA version bump by itself.
 
+### Definition of Done — Test Maintenance
+
+Every implementation slice must review and maintain all tests affected by its
+changes, including existing regression tests whose assumptions become obsolete
+due to intentional changes in behavior, UI, formatting, timing, or interaction.
+
+- Update affected tests within the same implementation slice.
+- Preserve meaningful assertions; never weaken tests merely to obtain a passing
+  result.
+- Execute relevant focused tests and report their actual results.
+- Run the complete regression suite before merging; document any unresolved
+  failures or execution blockers explicitly.
+- Keep test maintenance and relevant documentation updates within the same slice
+  and commit.
+- Do not declare a slice fully verified while relevant tests remain failing or
+  unexecuted without a documented exception.
+
 ## Communication and language
 
 - Communicate with the Product Owner in German.

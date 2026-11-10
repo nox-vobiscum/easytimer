@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createVirtualClock } from './virtual-clock.mjs';
 
 export async function checkSessionNavigation({ evaluate, click, text, cdp, configure }) {
@@ -14,6 +15,16 @@ export async function checkSessionNavigation({ evaluate, click, text, cdp, confi
     ] };
     const clock = createVirtualClock(evaluate);
     const record = () => evaluate("JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1')))");
+    const wait = async expression => {
+        for (let i = 0; i < 100; i++) { if (await evaluate(expression)) return; await delay(50); }
+        assert.fail('Session navigation timeout: ' + expression);
+    };
+    const stopSession = async () => {
+        await click('#stop');
+        assert.equal(await evaluate("document.querySelector('#stop-workshop-dialog').open"), true);
+        await click('#stop-workshop-confirm');
+        await wait("!document.querySelector('#stop-workshop-dialog').open&&document.querySelector('#status').textContent==='Ready'&&document.querySelector('#phase-number').textContent==='Phase 1 of 2'");
+    };
     const menu = async selector => {
         if (await evaluate("document.getElementById('preferences').hidden")) await click('#menu-toggle');
         await click(selector);
@@ -85,13 +96,13 @@ export async function checkSessionNavigation({ evaluate, click, text, cdp, confi
         await click('[data-language="en"]'); await click('.planner-back'); await click('#primary');
         const paused = await record(); await editor(); await cancelQuickSwitch('End the current Rundown and switch to Quick Timer? The current Session progress will be discarded.');
         assert.equal((await record()).clock.status, 'PAUSED'); assert.equal((await record()).clock.remainingMs, paused.clock.remainingMs);
-        await click('.planner-back'); await evaluate('window.navigationAnswers=[true]'); await click('#stop');
+        await click('.planner-back'); await evaluate('window.navigationAnswers=[true]'); await stopSession();
         await click('#next'); const progressedReady = await record(); await editor();
         await cancelQuickSwitch('End the current Rundown and switch to Quick Timer? The current Session progress will be discarded.');
         assert.equal((await record()).clock.status, 'READY'); await expectSameRun(progressedReady); await click('.planner-back');
 
         // Phase overtime and replacement use the same guard with destination-specific copy.
-        await evaluate('window.navigationAnswers=[true]'); await click('#stop'); await click('#primary'); await clock.advance('70s'); await editor();
+        await evaluate('window.navigationAnswers=[true]'); await stopSession(); await click('#primary'); await clock.advance('70s'); await editor();
         await cancelQuickSwitch('End the current Rundown and switch to Quick Timer? The current Session progress will be discarded.');
         const phaseOvertime = await record(); await evaluate('window.navigationAnswers=[false];window.navigationPrompts=[]'); await click('[data-rundown-id="nav-automatic"]');
         assert.deepEqual(await evaluate('window.navigationPrompts'), ['Replace the current Rundown with the selected Rundown? The current Session progress will be discarded. The replacement will remain Ready until you start it.']);
@@ -108,12 +119,17 @@ export async function checkSessionNavigation({ evaluate, click, text, cdp, confi
         assert.deepEqual(await evaluate('window.navigationPrompts'), ['End the current Rundown and switch to Quick Timer? The current Session progress will be discarded.']);
 
         // Responsive same-mode return keeps a visible focus target and never overflows.
+        await cdp('Emulation.setTouchEmulationEnabled',{enabled:true});
         await cdp('Emulation.setDeviceMetricsOverride',{width:320,height:640,screenWidth:320,screenHeight:640,mobile:true,deviceScaleFactor:1});
+        await wait("document.body.dataset.device==='smartphone'");
+        assert.equal(await evaluate("document.body.dataset.device==='smartphone'"), true);
         await editor(); await menu('#open-quick');
-        assert.equal(await evaluate("document.activeElement.id==='primary'&&document.documentElement.scrollWidth<=innerWidth"), true);
+        const responsive = await evaluate("({focus:document.activeElement.id,overflow:document.documentElement.scrollWidth>innerWidth})");
+        assert.equal(responsive.focus, 'primary');
+        assert.equal(responsive.overflow, false);
         console.log('PASS: UX-011 same-mode Quick/Session returns, dirty-draft guard, untouched READY exception, Manual/Automatic progress protection, destination copy, replacement, focus and 320px.');
     } finally {
-        await clock.restore(); await cdp('Emulation.clearDeviceMetricsOverride');
+        await clock.restore(); await cdp('Emulation.setTouchEmulationEnabled',{enabled:false}); await cdp('Emulation.clearDeviceMetricsOverride');
         await evaluate(`window.confirm=window.navigationConfirm;${saved===null?"localStorage.removeItem('easyTimerTemplates')":`localStorage.setItem('easyTimerTemplates',${JSON.stringify(saved)})`}`);
     }
 }
