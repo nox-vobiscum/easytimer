@@ -197,6 +197,9 @@ create a historical-data migration requirement.
   handles manual/automatic phase progression and overtime.
 - `src/js/planner.js` and `src/js/templates.mjs` implement the Session Editor and
   validated browser-local Rundown library.
+  `src/js/planner-v1.mjs` isolates the public V1 Planner's pure draft mapping and
+  Save/Delete/import aggregate preparation; UI state and guarded I/O remain in
+  `planner.js`. This refactoring does not perform the native Schema-2 cutover.
 - `src/js/recovery.mjs` validates durable runtime records and coordinates
   tab/context ownership. `sessionStorage` associates a tab with its context;
   durable records remain in `localStorage`.

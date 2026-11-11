@@ -1,4 +1,5 @@
-import { createDraft, createTemplateStore, repositionPhase, phaseDuration, STORAGE_KEY, totalDuration, validateTemplate } from './templates.mjs?v=37';
+import { createTemplateStore, repositionPhase, STORAGE_KEY, totalDuration } from './templates.mjs?v=37';
+import { preparePlannerDraft, materializePlannerDraft, savePlannerDraft, deletePlannerTemplate, appendPlannerImports } from './planner-v1.mjs?v=69';
 import { parseRundowns, independentCopies, rundownCollisions, downloadRundowns, exportFilename, MAX_IMPORT_BYTES } from './portability.mjs?v=37';
 
 const copy = {
@@ -271,9 +272,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
     }
     function begin(template, imported = false) {
         fileReadId += 1; review = null;
-        draft = createDraft(template);
-        if (!template) draft.phases.push({ id: crypto.randomUUID(), title: '', durationSeconds: 600 });
-        draft.phases.forEach(phase => { phase.minutes = String(phase.durationSeconds / 60); });
+        draft = preparePlannerDraft(template);
         // Populated imported drafts are unsaved even before the first edit.
         original = imported ? '' : JSON.stringify(materialize());
         feedback('');
@@ -297,14 +296,8 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
         label.append(element('span', labelText), input);
         return label;
     }
-    // Incomplete minute input remains in the isolated draft until Save validates it.
-    function phaseSeconds(phase) {
-        try { return phaseDuration(phase.minutes); }
-        catch (e) { e.phaseId = phase.id; throw e; }
-    }
     function materialize() {
-        return { id: draft.id, name: draft.name.trim(), transitionMode: draft.transitionMode,
-            phases: draft.phases.map(p => ({ id: p.id, title: p.title.trim(), durationSeconds: phaseSeconds(p) })) };
+        return materializePlannerDraft(draft);
     }
     function updateTotal() {
         const output = root.querySelector('#planner-total');
@@ -331,10 +324,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
     }
     async function save() {
         try {
-            const valid = validateTemplate(materialize());
-            const templates = library.templates.some(item => item.id === valid.id)
-                ? library.templates.map(item => item.id === valid.id ? valid : item) : [...library.templates, valid];
-            let saved = io('save', { schemaVersion: 1, templates }); if (saved?.then) saved = await saved; library = saved;
+            let saved = io('save', savePlannerDraft(library, draft)); if (saved?.then) saved = await saved; library = saved;
             draft = null;
             feedback('saved', false);
             render(); focusHeading();
@@ -385,7 +375,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
         try {
             const copies = independentCopies(review.data, library);
             if (copies.templates.length === 1) { begin(copies.templates[0], true); return; }
-            let saved = io('save', { schemaVersion: 1, templates: [...library.templates, ...copies.templates] }); if (saved?.then) saved = await saved; library = saved;
+            let saved = io('save', appendPlannerImports(library, copies)); if (saved?.then) saved = await saved; library = saved;
             review = null; feedback('imported', false); render(); focusHeading();
         } catch (e) { feedback(e.message); root.querySelector('#planner-feedback').focus(); }
     }
@@ -487,7 +477,7 @@ export function createPlanner(root, onClose, initialLanguage, services = null, o
                 const remove = phaseAction(`${text.remove}: ${item.name}`, 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6m4-6v6', async () => {
                     if (!window.confirm(text.deleteConfirm(item.name))) return;
                     try {
-                        let saved = io('save', { schemaVersion: 1, templates: library.templates.filter(p => p.id !== item.id) }); if (saved?.then) saved = await saved; library = saved;
+                        let saved = io('save', deletePlannerTemplate(library, item.id)); if (saved?.then) saved = await saved; library = saved;
                         message = 'deleted'; error = false; render(); focusHeading();
                     } catch (e) { feedback(e.message); }
                 });

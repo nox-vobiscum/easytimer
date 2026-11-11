@@ -85,6 +85,12 @@ lifecycle and archive workflows, Facilitator Panel work and their focused
 reviews remain open; every subsequent slice requires explicit Product Owner
 approval.
 
+The public V1 Planner's draft mapping and Save/Delete/import aggregate
+preparation are isolated in a pure V1-specific module, with focused Store-backed
+tests. This unreleased refactoring preserves public behavior and creates an
+explicit replacement boundary; it does not integrate the native public Editor.
+Production dependency/precache references are aligned for unreleased PWA v69.
+
 Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability and simplicity. No initial file uploads, own backend/accounts, confidentiality model or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private or role-specific notes. See the [concept and open design questions](SESSION_EDITOR_EVOLUTION.md).
 
 **Binding data decision:** No historical user Rundowns require migration.

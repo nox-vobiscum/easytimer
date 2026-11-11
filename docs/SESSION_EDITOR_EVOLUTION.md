@@ -12,6 +12,13 @@ lifecycle/archive workflows and the Facilitator Panel remain pending.
 **Priority:** High / Near-term. Every subsequent implementation slice requires
 separate explicit Product Owner approval.
 
+**Public Planner preparation:** The existing public V1 Planner now isolates its
+draft mapping and Save/Delete/import aggregate preparation in `planner-v1.mjs`.
+These pure V1 operations retain the released data shape; they are not a native
+adapter. The Planner still owns UI state, asynchronous I/O guards, navigation,
+backup and launch callbacks. Native UI integration remains pending. The new
+module is packaged and precached with unreleased PWA v69 asset references.
+
 **Internal Planner integration boundary:** The UI-neutral native Planner service
 loads copy-isolated Template Library snapshots, prepares complete isolated create
 or edit drafts, and carries the captured aggregate and Template revisions into

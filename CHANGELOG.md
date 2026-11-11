@@ -13,6 +13,13 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal Planner separation:** the public V1 Planner delegates
+  draft preparation/materialization and Save/Delete/import aggregate preparation
+  to a pure V1-specific module. Existing storage snapshots, asynchronous guards,
+  navigation, backup and launch behavior remain in the existing Planner. The
+  new production dependency is allowlisted and precached with PWA v69 asset
+  references. This is unreleased refactoring; no native Editor cutover is included.
+
 - **EDITOR-001 internal foundation:** the native Schema-2 Editor Store can
   validate, persist and conflict-safely update templates, and create independent
   PLANNED executions from stored templates. A UI-neutral integration boundary
