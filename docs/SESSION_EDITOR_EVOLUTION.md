@@ -45,6 +45,39 @@ details design. Name/transition and Rundown metadata controls, Notes/Resources
 overlays and insertion/removal/reorder UI remain pending. No public Planner
 import, packaging or Service Worker cutover is included.
 
+**Internal native Template import contract (unreleased):**
+`createNativeTemplateImportService({ writer, createId })` in
+`editor-template-import.mjs` separates `prepareImport(text,
+expectedAggregateRevision)` from the explicit `persistImport(candidate)` decision.
+Preparation uses the existing strict, versioned portability parser and its
+10 MiB UTF-8 limit, reads/writes nothing and returns `prepared` with an isolated
+candidate. Only an individual `editor-template` document is accepted. Its fresh
+Template ID must differ from the source ID; revision starts at 1. All planning
+fields and phase IDs are retained: phase uniqueness is scoped to each plan, so
+there are no cross-Template phase references to remap. ID collisions are rejected
+without regeneration. The candidate retains the caller's observed aggregate
+revision; persistence checks it under the existing exclusive Store writer lock,
+inserts once and returns `confirmed`, the imported `templateId` and the full
+confirmed `record`. No existing Template, Execution or ACTIVE runtime is changed.
+
+Failures return structured `error` outcomes and preserve a valid candidate.
+Unconfirmed/mismatching readback, or a LockManager rejection after the insertion
+callback ran, returns `uncertain` with a caller-retained `reconciliation` ticket
+containing the candidate and complete source/target records. There is no pending
+registry, automatic retry, merge or second ID allocation. `reconcileImport(ticket)`
+validates those records against the insertion and performs only `writer.read()`:
+the exact target is `confirmed`, the exact source is `absent`, and any other
+snapshot or failed read is `unresolved`. Absence describes the current unchanged
+source snapshot, not proof that a write never occurred. Unresolved outcomes retain
+the ticket; the caller must retain it until an explicit resolution. Tickets are
+not durably stored and do not provide crash recovery of an unfinished import.
+
+Execution documents and backups, even valid ones containing ACTIVE runtime, are
+not persistent imports. Passive parsing/export remains supported, but Execution
+identity/checkpoint import policy and full-backup replacement/ownership policy
+require separate review. No restore, activation, timer ownership claim, V1
+conversion, public import UI or public Editor cutover is included.
+
 **Internal Planner integration boundary:** The UI-neutral native Planner service
 loads copy-isolated Template Library snapshots, prepares complete isolated create
 or edit drafts, and carries the captured aggregate and Template revisions into

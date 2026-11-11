@@ -19,6 +19,16 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal native Template import:** a UI-neutral service strictly
+  parses a single Schema-2 Template document into an isolated review candidate
+  with a fresh Template ID and revision 1, retaining phase identities and all
+  planning content. Explicit confirmation inserts once through the existing
+  locked Store writer with the reviewed aggregate revision. Uncertain write
+  acknowledgements retain full source/target snapshots and the stable candidate
+  for read-only reconciliation; there is no automatic retry or overwrite.
+  Existing Templates, Executions and ACTIVE runtime remain unchanged. Execution
+  import and backup restore remain unsupported; the public V1 Editor is unchanged.
+
 - **EDITOR-001 internal phase presentation:** a reusable native phase field group
   edits title, minute duration and category through the existing native draft
   operations, with expandable category details, DE/EN labels, host-supplied

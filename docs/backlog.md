@@ -127,6 +127,18 @@ untouched. A future operation may create a new independent Execution from an
 existing Execution with a fresh identity and independent progress; that cloning
 capability is not implemented and requires a separate approved slice.
 
+An unreleased internal native Template import service now separates strict JSON
+preview from explicit persistence. A single Template document becomes an
+independent Template with a fresh ID and revision 1, retaining phase IDs and all
+planning fields. Confirmation checks the reviewed aggregate revision under the
+existing Store writer lock and preserves all existing Templates, Executions and
+ACTIVE runtime. Conflicts never rebase or overwrite. Uncertain acknowledgement
+retains full source/target snapshots and the stable candidate for read-only
+reconciliation, without retry or a second ID. This does not integrate public
+import UI. Execution import and full-backup restore remain unsupported pending
+explicit identity, replacement and ownership policies; passive portability is
+unchanged. No historical migration is introduced.
+
 Native backups include all currently supported Templates and independent
 Executions, including suspended checkpoints and a matching saved runtime for an
 ACTIVE Execution. Individual exports use the same passive snapshot rule. Export
