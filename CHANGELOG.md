@@ -22,6 +22,12 @@ commit, staging and production deployment are distinct events.
   prepares complete isolated native drafts, carries their optimistic revision
   bases through save/delete operations, refreshes confirmed library snapshots
   after writes and preserves rejected unsaved drafts for later UI feedback.
+  A separate UI-neutral launch service can create one independent PLANNED
+  Execution from a Template and activate an explicitly selected PLANNED
+  Execution into a confirmed READY runtime through the existing Runtime Bridge.
+  Planning success remains durable if activation fails; ambiguous planning or
+  activation writes are reported as uncertain and are never retried implicitly.
+  Activation does not create an Attempt or start the countdown.
   Deleting a Template leaves every independent
   Execution, historical source reference and ACTIVE runtime unchanged. The Runtime
   Bridge can also claim ownership and adopt a

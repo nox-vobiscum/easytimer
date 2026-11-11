@@ -43,9 +43,24 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         }
     }
 
-    async function reconcile(expectedKind, includeKind) {
+    async function reconcile(expectedKind, includeKind, expectedIdentity = null) {
         if (pendingOperation === null || (expectedKind !== null && pendingOperation.kind !== expectedKind)) {
             fail(expectedKind === 'activation' ? 'noPendingActivation' : 'noPendingOperation');
+        }
+        if (expectedIdentity !== null) {
+            if (typeof expectedIdentity !== 'object' || Array.isArray(expectedIdentity)
+                || Object.keys(expectedIdentity).length !== 2
+                || !Object.hasOwn(expectedIdentity, 'executionId')
+                || !Object.hasOwn(expectedIdentity, 'runtimeRunId')
+                || typeof expectedIdentity.executionId !== 'string'
+                || !expectedIdentity.executionId.trim()
+                || typeof expectedIdentity.runtimeRunId !== 'string'
+                || !expectedIdentity.runtimeRunId.trim()) fail('invalidPendingActivationIdentity');
+            const targetRuntime = pendingOperation.target?.activeRuntime;
+            if (targetRuntime?.executionId !== expectedIdentity.executionId
+                || targetRuntime.run?.runId !== expectedIdentity.runtimeRunId) {
+                fail('pendingActivationMismatch');
+            }
         }
         if (!activeLock.held) fail('activeLockRequired');
         if (busy) fail('bridgeBusy');
@@ -135,8 +150,8 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
             return writeOperation('resume', options, resumeSuspendedExecutionInRecord, true);
         },
         adoptPersistedActive,
-        reconcilePendingActivation() {
-            return reconcile('activation', false);
+        reconcilePendingActivation(expectedIdentity = null) {
+            return reconcile('activation', false, expectedIdentity);
         },
         reconcilePendingOperation() {
             return reconcile(null, true);

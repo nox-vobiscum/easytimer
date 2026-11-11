@@ -338,6 +338,36 @@ test('reconciles an unconfirmed activation as the complete target without writin
     assert.equal(locks.held.size, 0);
 });
 
+test('activation identity guard rejects foreign reconciliation before reading or clearing pending', async () => {
+    const events = [];
+    const locks = lockManager(events);
+    const storage = memory(initialRecord(), locks, events);
+    storage.state.failReadAfterWrite = true;
+    const { activeLock, bridge } = setup({ locks, storage });
+
+    await assert.rejects(bridge.activatePlanned(activationOptions()), /storageUnconfirmed/);
+    storage.state.failReadAfterWrite = false;
+    const writes = storage.state.writes;
+    const reads = events.filter(event => event[0] === 'read').length;
+    await assert.rejects(bridge.reconcilePendingActivation({
+        executionId: 'foreign-execution', runtimeRunId: 'runtime-ready-1',
+    }), /pendingActivationMismatch/);
+    await assert.rejects(bridge.reconcilePendingActivation({
+        executionId: 'execution-1', runtimeRunId: 'foreign-runtime',
+    }), /pendingActivationMismatch/);
+    assert.equal(storage.state.writes, writes);
+    assert.equal(events.filter(event => event[0] === 'read').length, reads);
+    assert.equal(activeLock.held, true);
+
+    const result = await bridge.reconcilePendingActivation({
+        executionId: 'execution-1', runtimeRunId: 'runtime-ready-1',
+    });
+    assert.equal(result.outcome, 'target');
+    assert.equal(storage.state.writes, writes);
+    assert.equal(activeLock.held, true);
+    await activeLock.release();
+});
+
 test('reconciles a failed readback as the complete source and clears pending', async () => {
     const locks = lockManager();
     const source = initialRecord();

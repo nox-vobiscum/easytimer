@@ -78,7 +78,8 @@ verified locally, including read-only ownership-protected adoption of a persiste
 ACTIVE runtime after reload, conflict-safe native template updates and a
 UI-neutral lock-protected Template Library read/create/update/delete boundary and
 a stateless Planner-facing draft and structured-outcome service, plus a versioned
-passive Schema-2 JSON portability contract, but unreleased. Public
+passive Schema-2 JSON portability contract and a UI-neutral native Session-launch
+orchestration boundary, but unreleased. Public
 Editor UI and unified-library integration, remaining
 lifecycle and archive workflows, Facilitator Panel work and their focused
 reviews remain open; every subsequent slice requires explicit Product Owner
@@ -120,6 +121,16 @@ integration, and returns refreshed confirmed library snapshots. Validation,
 conflict, missing-record, storage and lock failures remain structured and retain
 the caller's unsaved draft. This is an unreleased UI-neutral contract only; the
 public Editor, visible library and Session Picker still use their existing paths.
+
+The internal launch service separates three operations: creating an independent
+PLANNED Execution from a selected Template, activating an explicitly selected
+PLANNED Execution into READY through the existing ownership-protected Runtime
+Bridge, and the later explicit timer START that alone creates an Attempt and
+begins counting. If activation fails after confirmed planning, the PLANNED
+Execution is retained without rollback or duplication. Ambiguous planning writes
+must be observed explicitly by their stable Execution ID; ambiguous activation
+writes remain pending in the existing Runtime Bridge until explicitly reconciled.
+No public Session Picker or Direct Launch path uses this service yet.
 
 ### EDITOR-002 — Unsaved Workshop-Notizen draft recovery („Für lange Winternächte“)
 

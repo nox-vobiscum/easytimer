@@ -3,7 +3,8 @@
 **Status:** Strategic direction agreed; the native Schema-2 domain, persistence,
 runtime-transition, UI-neutral Template Library read/create/update/delete boundary
 and Planner-facing draft/outcome service, plus a passive Schema-2 JSON portability
-contract, are implemented and verified
+contract and UI-neutral native Session-launch orchestration boundary, are
+implemented and verified
 locally but not released. The boundaries
 map prepared Editor data to native Templates and use the lock-protected Editor
 Store without exposing a second library. Public Editor UI and unified-library integration, remaining
@@ -20,6 +21,17 @@ and preserve the unsaved draft without merge, retry or overwrite. The service
 does not cache library state, access V1 storage or change the public Editor,
 Session Picker or timer UI. Their cutover remains separately reviewable and
 requires explicit approval.
+
+**Internal Session launch boundary:** Native launch orchestration first creates
+one independent PLANNED Execution through the existing locked Store writer and
+then activates that same Execution into READY through the existing Runtime
+Bridge. Confirmed planning is never rolled back or repeated merely because
+activation fails. An unconfirmed planning write returns its stable Execution ID
+for explicit read-only observation; an unconfirmed activation remains subject to
+the Runtime Bridge's existing pending-operation reconciliation. READY has no
+Attempt and does not count time: only a later explicit START may create the first
+Attempt and begin the authoritative Session clock. This boundary does not yet
+change the public Session Picker, Direct Launch or Editor UI.
 
 **Binding EDITOR-001 data decision:** There are no historical user Rundowns that
 require migration. New templates and independent executions are created directly
