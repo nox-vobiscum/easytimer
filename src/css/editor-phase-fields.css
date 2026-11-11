@@ -1,0 +1,15 @@
+/* Internal native phase fields; loaded with the existing Planner stylesheet. */
+.native-phase-fields .native-phase-details,
+.native-phase-fields .native-phase-feedback { grid-column:1 / -1; }
+.native-phase-fields .native-phase-details[hidden] { display:none; }
+.native-phase-fields .native-phase-details { padding:.5rem 0 .5rem 1.875rem; min-width:0; }
+.native-phase-fields .native-phase-details label > span {
+    position:static; width:auto; height:auto; overflow:visible; clip-path:none;
+}
+.native-phase-details select {
+    width:100%; min-width:0; min-height:44px; padding:.6rem;
+    font:inherit; background:var(--surface); color:var(--text);
+    border:1px solid var(--border); border-radius:.5rem;
+}
+.native-phase-fields input[aria-invalid="true"],
+.native-phase-fields select[aria-invalid="true"] { border-color:var(--error); }

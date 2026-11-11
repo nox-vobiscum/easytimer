@@ -98,6 +98,13 @@ insertion/removal/reordering are covered. Revision bases are retained and only
 explicit Planner Service Save validates/persists data. No native form, overlay
 or public Editor integration is included; those UI requirements remain open.
 
+An internal native phase field group now consumes those operations for phase
+title, minute duration and category, with expandable category details, DE/EN,
+keyboard/focus handling and host-supplied validation feedback. Browser tests use
+real native drafts and services. The public V1 Planner does not load this group.
+Native name/transition and Rundown metadata fields, prepared Notes/Resources
+overlays, phase structural controls and the public integration remain open.
+
 Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability and simplicity. No initial file uploads, own backend/accounts, confidentiality model or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private or role-specific notes. See the [concept and open design questions](SESSION_EDITOR_EVOLUTION.md).
 
 **Binding data decision:** No historical user Rundowns require migration.

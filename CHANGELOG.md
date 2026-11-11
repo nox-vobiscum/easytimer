@@ -13,6 +13,13 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal phase presentation:** a reusable native phase field group
+  edits title, minute duration and category through the existing native draft
+  operations, with expandable category details, DE/EN labels, host-supplied
+  validation feedback and keyboard/focus behavior. Incomplete numeric input is
+  retained without persistence. The field group and its stylesheet are internal
+  preparation only; the public V1 Planner and production imports are unchanged.
+
 - **EDITOR-001 native draft editing foundation:** pure operations edit complete
   native Planner Service drafts, including categories, prepared information,
   phase notes and labeled resources, and insert/remove/reposition phases by

@@ -6,6 +6,7 @@ import { join, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { checkPlanner } from './planner-browser.mjs';
+import { checkNativePhaseFields } from './editor-phase-fields-browser.mjs';
 import { checkSession } from './session-browser.mjs';
 import { checkTimeVisuals } from './time-visuals-browser.mjs';
 import { checkClockView } from './clock-view-browser.mjs';
@@ -160,6 +161,9 @@ try {
     if(timeTravelOptions.names.length) {
         await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
         assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_NATIVE_PHASE_FIELDS_ONLY === '1') {
+        await checkNativePhaseFields({evaluate,click,cdp});
+        assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_EDITOR_RUNTIME_ONLY === '1') {
         await checkEditorRuntimeApp({evaluate,click,text,cdp});
         assert.equal(errors.length,0,JSON.stringify(errors));
@@ -168,6 +172,7 @@ try {
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else {
     assert.equal(await text('#time'), '00:00');
+    await checkNativePhaseFields({evaluate,click,cdp});
     await checkTimeboxControls({ evaluate, click, text, cdp, configure });
     await checkRecovery({ evaluate, click, text, cdp, configure });
     await checkRecoveryCorrections({ evaluate, click, text, cdp, configure });

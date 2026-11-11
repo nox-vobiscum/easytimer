@@ -30,6 +30,21 @@ native domain. Discarding a draft has no persistence effect. This module has no
 UI, storage or lifecycle operations and is not imported by the public Planner;
 native presentation and the public cutover remain pending.
 
+**Internal native phase field group:** `editor-phase-fields.mjs` provides title,
+minute-duration and category inputs for one stable phase ID, using the existing
+`editor-template-draft.mjs` operations. The host supplies its current native
+Planner Service draft through `getDraft`, adopts edits synchronously through
+`onDraftChange`, and may call `refresh`, `setLanguage` and
+`showValidationError` after explicit native validation. No draft or library is
+cached, and the component never saves. It reuses the Planner's phase-row CSS;
+`css/editor-phase-fields.css` supplies its expandable category details. Escape
+collapses details and restores focus. Language changes retain the active input
+and selection; invalid minute text stays in the draft for the native Save
+validator. This is an internal presentation boundary only, not the final phase
+details design. Name/transition and Rundown metadata controls, Notes/Resources
+overlays and insertion/removal/reorder UI remain pending. No public Planner
+import, packaging or Service Worker cutover is included.
+
 **Internal Planner integration boundary:** The UI-neutral native Planner service
 loads copy-isolated Template Library snapshots, prepares complete isolated create
 or edit drafts, and carries the captured aggregate and Template revisions into
