@@ -17,7 +17,7 @@ draft mapping and Save/Delete/import aggregate preparation in `planner-v1.mjs`.
 These pure V1 operations retain the released data shape; they are not a native
 adapter. The Planner still owns UI state, asynchronous I/O guards, navigation,
 backup and launch callbacks. Native UI integration remains pending. The new
-module is packaged and precached with unreleased PWA v69 asset references.
+module is packaged and precached with the current unreleased PWA asset references.
 
 **Native Template draft editing foundation:** `editor-template-draft.mjs` edits
 the existing native Planner Service draft envelope without V1 materialization.
@@ -36,8 +36,8 @@ minute-duration and category inputs for one stable phase ID, using the existing
 Planner Service draft through `getDraft`, adopts edits synchronously through
 `onDraftChange`, and may call `refresh`, `setLanguage` and
 `showValidationError` after explicit native validation. No draft or library is
-cached, and the component never saves. It reuses the Planner's phase-row CSS;
-`css/editor-phase-fields.css` supplies its expandable category details. Escape
+cached, and the component never saves. Its phase-row and expandable category
+detail styles are part of the central `css/styles.css` stylesheet. Escape
 collapses details and restores focus. Language changes retain the active input
 and selection; invalid minute text stays in the draft for the native Save
 validator. This is an internal presentation boundary only, not the final phase

@@ -32,12 +32,6 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
                 theme: document.documentElement.dataset.theme,
                 originalFocus: document.activeElement,
             };
-            fixture.sheet = document.createElement('link');
-            fixture.sheet.rel = 'stylesheet'; fixture.sheet.href = '/css/editor-phase-fields.css';
-            const loaded = new Promise((resolve, reject) => {
-                fixture.sheet.onload = resolve; fixture.sheet.onerror = reject;
-            });
-            document.head.append(fixture.sheet); await loaded;
             const storage = {
                 getItem(key) {
                     if (key !== 'easyTimerEditor.v1') throw new Error('V1 storage access');
@@ -78,6 +72,16 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             fixture.list.append(...fixture.fields.map(fields => fields.element));
             fixture.operations = operations;
         })()`);
+
+        assert.deepEqual(await evaluate(`(() => {
+            const sheet = [...document.styleSheets].find(sheet =>
+                new URL(sheet.href || 'about:blank').pathname === '/css/styles.css');
+            const rules = [...sheet.cssRules].filter(rule => rule.selectorText?.includes('native-phase'));
+            const select = rules.find(rule => rule.selectorText === '.native-phase-details select');
+            const hidden = rules.find(rule => rule.selectorText.endsWith('[hidden]'));
+            const label = rules.find(rule => rule.selectorText.endsWith('label > span'));
+            return [rules.length, select.style.minHeight, hidden.style.display, label.style.clipPath];
+        })()`), [6, '44px', 'none', 'none'], 'all native phase rules parse in the central stylesheet');
 
         await field('phase-a', 'title', 'Edited <safe>');
         await field('phase-a', 'duration', '17');
@@ -137,6 +141,9 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
         assert.equal(await evaluate(`nativePhaseFixture.fields[0].element.querySelector('[data-action="details"]').getAttribute('aria-expanded')`), 'true');
         await key('Tab', 'Tab', 9);
         assert.equal(await evaluate(`document.activeElement === nativePhaseFixture.fields[0].element.querySelector('[data-field="category"]')`), true);
+        assert.equal(await evaluate(`getComputedStyle(document.activeElement).outlineStyle !== 'none'
+            && parseFloat(getComputedStyle(document.activeElement).outlineWidth) > 0`), true,
+        'keyboard focus remains visible with the consolidated CSS');
 
         await evaluate(`(() => {
             const f = nativePhaseFixture;
@@ -203,7 +210,7 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
         await evaluate(`(() => {
             const f = window.nativePhaseFixture;
             if (!f) return;
-            f.root?.remove(); f.sheet?.remove();
+            f.root?.remove();
             document.body.classList.toggle('planner-open', f.wasPlannerOpen);
             document.documentElement.dataset.theme = f.theme;
             if (f.originalFocus?.isConnected) f.originalFocus.focus({ preventScroll: true });

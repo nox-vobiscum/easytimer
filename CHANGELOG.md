@@ -6,6 +6,12 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 internal CSS consolidation:** native phase-field styles now live
+  in the central application stylesheet; their declarations and UI behavior are
+  unchanged. Tests use that stylesheet directly. The briefing records the file
+  architecture convention, and CSS/App shell references advance together to
+  unreleased PWA v70. Native Editor UI is not publicly available.
+
 - **BUG-001 follow-up:** Escape now cancels the document-modal Session Stop
   confirmation without invoking the global fullscreen or expanded-view exit.
   The active Session and fullscreen presentation remain unchanged; ordinary
@@ -17,8 +23,9 @@ commit, staging and production deployment are distinct events.
   edits title, minute duration and category through the existing native draft
   operations, with expandable category details, DE/EN labels, host-supplied
   validation feedback and keyboard/focus behavior. Incomplete numeric input is
-  retained without persistence. The field group and its stylesheet are internal
-  preparation only; the public V1 Planner and production imports are unchanged.
+  retained without persistence. The field group is internal preparation only;
+  its styles live in the central stylesheet. The public V1 Planner does not
+  import the native component.
 
 - **EDITOR-001 native draft editing foundation:** pure operations edit complete
   native Planner Service drafts, including categories, prepared information,

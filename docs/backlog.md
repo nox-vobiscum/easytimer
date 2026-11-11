@@ -89,7 +89,7 @@ The public V1 Planner's draft mapping and Save/Delete/import aggregate
 preparation are isolated in a pure V1-specific module, with focused Store-backed
 tests. This unreleased refactoring preserves public behavior and creates an
 explicit replacement boundary; it does not integrate the native public Editor.
-Production dependency/precache references are aligned for unreleased PWA v69.
+Production dependency/precache references are aligned for unreleased PWA v70.
 
 Native Template draft editing is prepared internally through pure copy-isolated
 operations on existing Planner Service drafts. Name, transition mode, categories,

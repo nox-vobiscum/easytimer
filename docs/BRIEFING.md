@@ -180,6 +180,14 @@ silently reinterpret them here.
 easyTimer is a static HTML/CSS/JavaScript PWA. There is no production build
 framework or application backend.
 
+**File architecture convention:** Prefer existing files and established project
+structures. Create new source files only when separation provides a concrete
+architectural, maintainability or testability benefit. Keep application styles
+in `src/css/styles.css` by default. Separate stylesheets require a demonstrated
+technical or maintenance need; introducing a JavaScript component alone does not
+justify a new CSS file. Avoid inline styles. This is a project convention, not an
+absolute prohibition against new files.
+
 **Binding EDITOR-001 data decision:** The repository still contains the released
 V1 Rundown implementation, but there is no historical user Rundown data that
 requires migration. EDITOR-001 creates new templates and independent executions
