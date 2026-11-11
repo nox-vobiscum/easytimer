@@ -13,6 +13,14 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 native draft editing foundation:** pure operations edit complete
+  native Planner Service drafts, including categories, prepared information,
+  phase notes and labeled resources, and insert/remove/reposition phases by
+  stable identity. Each edit returns an isolated copy with unchanged Template
+  identity and revision bases. Incomplete inputs remain in the draft; validation
+  and persistence still occur only through an explicit existing Planner Service
+  Save. This is unreleased internal preparation without public UI integration.
+
 - **EDITOR-001 internal Planner separation:** the public V1 Planner delegates
   draft preparation/materialization and Save/Delete/import aggregate preparation
   to a pure V1-specific module. Existing storage snapshots, asynchronous guards,

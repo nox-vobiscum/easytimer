@@ -91,6 +91,13 @@ tests. This unreleased refactoring preserves public behavior and creates an
 explicit replacement boundary; it does not integrate the native public Editor.
 Production dependency/precache references are aligned for unreleased PWA v69.
 
+Native Template draft editing is prepared internally through pure copy-isolated
+operations on existing Planner Service drafts. Name, transition mode, categories,
+prepared information, phase titles/durations/notes/resources and stable-ID phase
+insertion/removal/reordering are covered. Revision bases are retained and only
+explicit Planner Service Save validates/persists data. No native form, overlay
+or public Editor integration is included; those UI requirements remain open.
+
 Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability and simplicity. No initial file uploads, own backend/accounts, confidentiality model or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private or role-specific notes. See the [concept and open design questions](SESSION_EDITOR_EVOLUTION.md).
 
 **Binding data decision:** No historical user Rundowns require migration.

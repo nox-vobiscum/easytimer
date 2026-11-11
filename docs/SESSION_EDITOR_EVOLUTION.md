@@ -19,6 +19,17 @@ adapter. The Planner still owns UI state, asynchronous I/O guards, navigation,
 backup and launch callbacks. Native UI integration remains pending. The new
 module is packaged and precached with unreleased PWA v69 asset references.
 
+**Native Template draft editing foundation:** `editor-template-draft.mjs` edits
+the existing native Planner Service draft envelope without V1 materialization.
+It provides isolated field edits and phase insertion/removal/final-position
+reordering while retaining Template/phase identities, revision bases and all
+unrelated planning fields. New phases use explicit caller-provided IDs, empty
+titles, ten-minute duration and neutral categories. Invalid field contents stay
+in the draft until an explicit Planner Service Save validates them through the
+native domain. Discarding a draft has no persistence effect. This module has no
+UI, storage or lifecycle operations and is not imported by the public Planner;
+native presentation and the public cutover remain pending.
+
 **Internal Planner integration boundary:** The UI-neutral native Planner service
 loads copy-isolated Template Library snapshots, prepares complete isolated create
 or edit drafts, and carries the captured aggregate and Template revisions into
