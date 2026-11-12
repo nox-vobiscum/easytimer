@@ -62,6 +62,42 @@ observation, not proof that a write never happened. Tickets do not survive crash
 automatically. No new Execution, public UI, Workshop-note persistence,
 ACTIVE/SUSPENDED editing or runtime integration is included.
 
+**Internal ACTIVE/SUSPENDED prepared-information correction (unreleased):**
+`createNativeExecutionInformationService({ writer })` loads a copy-isolated,
+information-only draft for one existing ACTIVE or SUSPENDED Execution. The draft
+contains the rundown `preparedInformation` and one exact `{ phaseId, notes,
+resources }` entry for every phase currently present in the configured plan,
+plus the observed aggregate, Execution, runtime, lifecycle, Attempt and Run
+preconditions. Stable phase IDs bind every correction; positions are never used.
+
+`saveDraft(draft)` delegates to
+`updateExecutionPreparedInformationInRecord()` through the existing locked Store
+writer. The Store applies only those prepared-information fields to the selected
+Execution and strictly validates the resulting complete record. Aggregate and
+Execution revisions advance once. Execution/Attempt/source identities,
+`runtimeRevision`, lifecycle, all plan structure and timing, the immutable first-
+START snapshot, actual phase outcomes, Workshop-Notizen, ACTIVE Runtime/Clock and
+SUSPENDED checkpoint remain unchanged. Source Templates and every unrelated
+Execution remain independent. No Active Lock or Runtime Bridge involvement is
+required because the operation neither owns nor changes timekeeping state.
+
+Every save requires the exact observed aggregate and Execution/runtime revisions,
+lifecycle, Attempt identity and Run identity. Therefore a persisted Timer
+transition, concurrent informational save or any other newer Store write rejects
+the stale draft as a conflict; there is no merge, rebase or automatic retry. This
+strict aggregate boundary can require the later UI to reload and deliberately
+reapply a correction after concurrent Timer persistence. Invalid or incomplete
+information, unknown phase IDs, structural fields and unsupported lifecycles fail
+closed while the caller's complete draft remains available.
+
+Unconfirmed readback, mismatched readback and late Store-lock acknowledgement
+return the same caller-held `{ draft, source, target }` reconciliation contract as
+PLANNED editing. Reconciliation validates the exact field-scoped transformation
+and reads only: target is confirmed, source is absent and every other state is
+unresolved. It never repeats the write. This internal capability does not add
+public Session Editor or Facilitator Panel UI, independent Workshop-Notizen
+persistence, structural/timing editing, Runtime synchronization or a new Store.
+
 **Internal native phase field group:** `editor-phase-fields.mjs` provides title,
 minute-duration and category inputs for one stable phase ID, using the existing
 `editor-template-draft.mjs` operations. The host supplies its current native

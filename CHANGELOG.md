@@ -19,6 +19,17 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal ACTIVE/SUSPENDED information correction:** prepared
+  rundown information and stable-ID phase notes/resources can now be corrected
+  on one existing native Execution through the locked Store writer. Exact
+  revision, lifecycle, Attempt and Run preconditions protect concurrent Timer
+  persistence; stale saves fail without merge or retry. Runtime/Clock,
+  checkpoints, structure/timing, first-START baseline, outcomes, Workshop-
+  Notizen, source Templates and unrelated records remain unchanged. Uncertain
+  writes retain complete source/target snapshots for read-only reconciliation.
+  This adds no public Editor or Facilitator Panel UI and does not implement
+  independent Workshop-Notizen persistence.
+
 - **EDITOR-001 internal PLANNED editing:** an isolated Execution draft reuses the
   existing native planning-field/phase operations and explicitly saves its full
   current plan to the same PLANNED Execution through the locked Store writer.

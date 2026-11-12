@@ -114,8 +114,22 @@ once while runtime revision, source, workshop notes and unrelated ACTIVE state
 remain unchanged. Full drafts survive rejected saves; uncertain acknowledgements
 use caller-held source/target tickets and read-only reconciliation without retry.
 This is unreleased internal functionality. Existing Template editing remains
-separate; ACTIVE/SUSPENDED editing, Workshop-note persistence and public Editor,
-Library and Panel integration are not implemented by this slice.
+separate; public Editor, Library and Panel integration are not implemented by
+this slice.
+
+Internal ACTIVE/SUSPENDED prepared-information correction now updates only the
+selected Execution's rundown information and phase notes/resources through the
+existing locked Store writer. Stable phase IDs and exact aggregate, Execution,
+runtime, lifecycle, Attempt and Run preconditions protect ACTIVE Runtime/Clock,
+SUSPENDED checkpoints and newer Timer transitions. Aggregate and Execution
+revisions advance once; runtime revision, source Template, plan structure/timing,
+first-START snapshot, phase outcomes, Workshop-Notizen and unrelated records stay
+unchanged. Failed saves retain the full information draft. Uncertain writes use
+validated source/target tickets and read-only reconciliation without retry,
+merge or rebase. Strict aggregate conflicts during concurrent Timer persistence
+are an intentional correctness-first limitation for later UI integration. This
+is internal only: general ACTIVE/SUSPENDED plan editing, independent Workshop-
+Notizen persistence and the public Editor/Facilitator Panel remain pending.
 
 An internal native phase field group now consumes those operations for phase
 title, minute duration and category, with expandable category details, DE/EN,

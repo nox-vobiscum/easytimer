@@ -602,6 +602,58 @@ function executionExitSource(record, options) {
     return { valid, index, execution };
 }
 
+export function updateExecutionPreparedInformationInRecord(record, options) {
+    exactFields(options, [
+        'executionId', 'expectedLifecycle', 'expectedAggregateRevision',
+        'expectedExecutionRevision', 'expectedRuntimeRevision', 'expectedAttemptId',
+        'expectedRunId', 'preparedInformation', 'phases',
+    ], 'invalidData');
+    const { valid, index, execution } = executionExitSource(record, options);
+    if (execution.revision === Number.MAX_SAFE_INTEGER) fail('invalidRevision');
+    if (!Array.isArray(options.phases)) fail('invalidData');
+
+    const informationByPhaseId = new Map();
+    for (const phase of options.phases) {
+        exactFields(phase, ['phaseId', 'notes', 'resources'], 'invalidData');
+        if (typeof phase.phaseId !== 'string' || !phase.phaseId.trim()) fail('invalidData');
+        if (informationByPhaseId.has(phase.phaseId)) fail('invalidData');
+        informationByPhaseId.set(phase.phaseId, phase);
+    }
+    if (informationByPhaseId.size !== execution.currentPlan.phases.length
+        || execution.currentPlan.phases.some(phase => !informationByPhaseId.has(phase.id))) {
+        fail('phaseNotFound');
+    }
+
+    const currentPlan = {
+        ...execution.currentPlan,
+        preparedInformation: options.preparedInformation,
+        phases: execution.currentPlan.phases.map(phase => {
+            const information = informationByPhaseId.get(phase.id);
+            return { ...phase, notes: information.notes, resources: information.resources };
+        }),
+    };
+    const updated = {
+        ...execution,
+        revision: execution.revision + 1,
+        currentPlan,
+    };
+    let validated;
+    if (execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE) {
+        validated = execution.attempt === null
+            ? validateReadyExecution(updated) : validateStartedExecution(updated);
+    } else {
+        validated = execution.attempt === null
+            ? validateSuspendedReadyExecution(updated) : validateSuspendedStartedExecution(updated);
+    }
+
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions: valid.executions.map((entry, entryIndex) => entryIndex === index
+            ? { ...entry, execution: validated } : entry),
+    });
+}
+
 export function retainExecutionPlanInRecord(record, options) {
     const { valid, index, execution } = executionExitSource(record, options);
     return validateEditorStoreRecord({

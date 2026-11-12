@@ -27,6 +27,7 @@ import {
     resumeSuspendedExecutionInRecord,
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
+    updateExecutionPreparedInformationInRecord,
     updateTemplateInRecord,
     updatePlannedExecutionPlanInRecord,
     validateEditorStoreRecord,
@@ -159,6 +160,145 @@ const startOptions = (changes = {}) => ({
     attemptId: 'attempt-1',
     startedAt: 2000,
     ...changes,
+});
+
+function preparedInformationOptions(source, executionId = 'execution-1', changes = {}) {
+    const entry = source.executions.find(entry => entry.execution.id === executionId);
+    const { execution } = entry;
+    const expectedRunId = execution.lifecycle === 'active'
+        ? source.activeRuntime.run.runId
+        : entry.suspendedCheckpoint?.run.runId ?? null;
+    return {
+        executionId,
+        expectedLifecycle: execution.lifecycle,
+        expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision,
+        expectedAttemptId: execution.attempt?.id ?? null,
+        expectedRunId,
+        preparedInformation: execution.currentPlan.preparedInformation,
+        phases: execution.currentPlan.phases.map(phase => ({
+            phaseId: phase.id,
+            notes: phase.notes,
+            resources: structuredClone(phase.resources),
+        })),
+        ...changes,
+    };
+}
+
+test('prepared-information correction supports every ACTIVE/SUSPENDED READY/STARTED clock state', () => {
+    const activeReady = activatePlannedExecutionInRecord(
+        record({ executions: [entry(planned())] }), activationOptions(),
+    );
+    const activeRunning = startedRecord();
+    const activePaused = applyStartedSessionActionInRecord(activeRunning,
+        sessionActionOptions(activeRunning, 'PAUSE', 12_000));
+    const activeAdvanced = applyStartedSessionActionInRecord(activeRunning,
+        sessionActionOptions(activeRunning, 'NEXT', 12_000));
+    const suspendedReadyExecution = suspendReadyExecution(activeReady.executions[0].execution);
+    const suspendedReady = record({
+        revision: activeReady.revision + 1,
+        executions: [entry(suspendedReadyExecution)],
+    });
+    const frozen = suspendedStarted();
+    const suspendedRunning = record({
+        revision: 7,
+        executions: [entry(frozen.execution, frozen.checkpoint)],
+    });
+
+    for (const source of [activeReady, activeRunning, activePaused, activeAdvanced,
+        suspendedReady, suspendedRunning]) {
+        const before = structuredClone(source);
+        const options = preparedInformationOptions(source);
+        options.preparedInformation = '**Corrected rundown information**';
+        options.phases[0].notes = 'Corrected current or conducted phase note';
+        options.phases[1].notes = 'Corrected upcoming phase note';
+        options.phases[1].resources = [
+            { label: 'Board', url: 'https://example.test/board' },
+            { label: 'Slides', url: 'https://example.test/slides' },
+        ];
+        const result = updateExecutionPreparedInformationInRecord(source, options);
+        const changed = result.executions[0].execution;
+        const original = before.executions[0].execution;
+
+        assert.equal(result.revision, before.revision + 1);
+        assert.equal(changed.revision, original.revision + 1);
+        assert.equal(changed.runtimeRevision, original.runtimeRevision);
+        assert.equal(changed.currentPlan.preparedInformation, options.preparedInformation);
+        assert.deepEqual(changed.currentPlan.phases.map(phase => phase.id), ['phase-1', 'phase-2']);
+        assert.equal(changed.currentPlan.phases[0].notes, options.phases[0].notes);
+        assert.deepEqual(changed.currentPlan.phases[1].resources, options.phases[1].resources);
+        assert.deepEqual(changed.attempt, original.attempt);
+        assert.deepEqual(changed.phaseOutcomes, original.phaseOutcomes);
+        assert.deepEqual(changed.workshopNotes, original.workshopNotes);
+        assert.deepEqual(result.activeRuntime, before.activeRuntime);
+        assert.deepEqual(result.executions[0].suspendedCheckpoint,
+            before.executions[0].suspendedCheckpoint);
+        assert.deepEqual(source, before);
+    }
+});
+
+test('prepared-information correction targets stable phase IDs and preserves Templates and unrelated Executions', () => {
+    const frozen = suspendedStarted('suspended-1', 'run-suspended-1');
+    const active = started('active-1', 'run-active-1');
+    const current = session('run-active-1');
+    const running = transitionSession(current.run, current.clock, { type: 'START' }, 1000);
+    const source = record({
+        revision: 9,
+        templates: [template()],
+        executions: [entry(frozen.execution, frozen.checkpoint), entry(active)],
+        activeRuntime: activeRuntime(active, running, 1000),
+    });
+    const before = structuredClone(source);
+    const options = preparedInformationOptions(source, 'suspended-1');
+    options.phases.reverse();
+    options.phases.find(phase => phase.phaseId === 'phase-1').notes = 'Stable-ID correction';
+    const result = updateExecutionPreparedInformationInRecord(source, options);
+
+    assert.equal(result.executions[0].execution.currentPlan.phases[0].notes, 'Stable-ID correction');
+    assert.deepEqual(result.templates, before.templates);
+    assert.deepEqual(result.executions[1], before.executions[1]);
+    assert.deepEqual(result.activeRuntime, before.activeRuntime);
+    assert.deepEqual(result.executions[0].suspendedCheckpoint, before.executions[0].suspendedCheckpoint);
+});
+
+test('prepared-information correction rejects stale, unknown, invalid and structural inputs without mutation', () => {
+    const source = startedRecord();
+    const before = structuredClone(source);
+    const valid = preparedInformationOptions(source);
+    for (const [change, code] of [
+        [options => { options.expectedAggregateRevision--; }, 'conflict'],
+        [options => { options.expectedExecutionRevision--; }, 'conflict'],
+        [options => { options.expectedRuntimeRevision--; }, 'conflict'],
+        [options => { options.expectedAttemptId = 'stale-attempt'; }, 'invalidAttemptBinding'],
+        [options => { options.expectedRunId = 'stale-run'; }, 'invalidActiveRuntimeBinding'],
+        [options => { options.phases[0].phaseId = 'unknown'; }, 'phaseNotFound'],
+        [options => { options.phases.pop(); }, 'phaseNotFound'],
+        [options => { options.phases[0].notes = null; }, 'invalidNotes'],
+        [options => { options.phases[0].resources = [{ label: 'File', url: 'file:///tmp/a' }]; }, 'invalidResource'],
+        [options => { options.phases[0].title = 'Structural change'; }, 'invalidData'],
+        [options => { options.currentPlan = {}; }, 'invalidData'],
+    ]) {
+        const options = structuredClone(valid);
+        change(options);
+        assert.throws(() => updateExecutionPreparedInformationInRecord(source, options), new RegExp(code));
+        assert.deepEqual(source, before);
+    }
+    const plannedSource = record({ executions: [entry(planned())] });
+    assert.throws(() => updateExecutionPreparedInformationInRecord(plannedSource, {
+        ...preparedInformationOptions(source), expectedLifecycle: 'planned',
+    }), /invalidLifecycle/);
+});
+
+test('a concurrent Timer transition makes a prepared-information correction stale', () => {
+    const source = startedRecord();
+    const draft = preparedInformationOptions(source);
+    draft.preparedInformation = 'Must remain in the caller draft';
+    const transitioned = applyStartedSessionActionInRecord(source,
+        sessionActionOptions(source, 'PAUSE', 12_000));
+    assert.throws(() => updateExecutionPreparedInformationInRecord(transitioned, draft), /conflict/);
+    assert.equal(draft.preparedInformation, 'Must remain in the caller draft');
+    assert.equal(transitioned.activeRuntime.clock.status, 'PAUSED');
 });
 
 test('PLANNED plan update preserves execution identity, notes, runtime revision and every unrelated record', () => {

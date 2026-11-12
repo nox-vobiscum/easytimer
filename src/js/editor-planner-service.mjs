@@ -2,6 +2,7 @@ import { DEFAULT_RUNDOWN_CATEGORY, validatePlannedExecution } from './editor-dom
 import {
     EDITOR_STORE_SCHEMA_VERSION,
     validateEditorStoreRecord,
+    updateExecutionPreparedInformationInRecord,
     updatePlannedExecutionPlanInRecord,
 } from './editor-storage.mjs';
 
@@ -11,7 +12,7 @@ const isObject = value => value !== null && typeof value === 'object' && !Array.
 const validationErrors = new Set([
     'invalidData', 'invalidRevision', 'invalidStoreRevision', 'name', 'phaseTitle',
     'duration', 'totalLimit', 'phasesRequired', 'invalidCategory', 'invalidNotes',
-    'invalidResource', 'invalidStore', 'invalidLifecycle',
+    'invalidResource', 'invalidStore', 'invalidLifecycle', 'invalidRuntimeRevision',
 ]);
 const storageErrors = new Set([
     'storageRead', 'storageWrite', 'storageQuota', 'storageUnconfirmed',
@@ -45,8 +46,9 @@ function errorOutcome(error, draft) {
     const code = typeof error?.message === 'string' ? error.message : 'unexpectedError';
     let type = 'unexpected';
     if (validationErrors.has(code)) type = 'validation';
-    else if (code === 'conflict' || code === 'duplicateId') type = 'conflict';
-    else if (code === 'templateNotFound' || code === 'executionNotFound') type = 'missing';
+    else if (['conflict', 'duplicateId', 'invalidAttemptBinding',
+        'invalidActiveRuntimeBinding'].includes(code)) type = 'conflict';
+    else if (code === 'templateNotFound' || code === 'executionNotFound' || code === 'phaseNotFound') type = 'missing';
     else if (storageErrors.has(code)) type = 'storage';
     else if (lockErrors.has(code)) type = 'lock';
     return {
@@ -250,6 +252,119 @@ export function createNativePlannedExecutionService({ writer } = {}) {
             } catch (error) {
                 return { ...errorOutcome(error, valid?.draft), status: valid ? 'unresolved' : 'error',
                     ...(valid ? { reconciliation: structuredClone(valid) } : {}) };
+            }
+        },
+    });
+}
+
+function preparedInformationDraftOptions(draft) {
+    exactFields(draft, [
+        'executionId', 'expectedLifecycle', 'expectedAggregateRevision',
+        'expectedExecutionRevision', 'expectedRuntimeRevision', 'expectedAttemptId',
+        'expectedRunId', 'preparedInformation', 'phases',
+    ]);
+    return structuredClone(draft);
+}
+
+export function createNativeExecutionInformationService({ writer } = {}) {
+    if (!writer || typeof writer.read !== 'function' || typeof writer.write !== 'function') fail('invalidPlannerService');
+
+    function selected(record, executionId) {
+        const entry = record.executions.find(entry => entry.execution.id === executionId);
+        if (!entry) fail('executionNotFound');
+        if (!['active', 'suspended'].includes(entry.execution.lifecycle)) fail('invalidLifecycle');
+        return entry;
+    }
+
+    function draftFromRecord(record, executionId) {
+        const entry = selected(record, executionId);
+        const { execution, suspendedCheckpoint } = entry;
+        const expectedRunId = execution.lifecycle === 'active'
+            ? record.activeRuntime.run.runId
+            : suspendedCheckpoint?.run.runId ?? null;
+        return {
+            executionId,
+            expectedLifecycle: execution.lifecycle,
+            expectedAggregateRevision: record.revision,
+            expectedExecutionRevision: execution.revision,
+            expectedRuntimeRevision: execution.runtimeRevision,
+            expectedAttemptId: execution.attempt?.id ?? null,
+            expectedRunId,
+            preparedInformation: execution.currentPlan.preparedInformation,
+            phases: execution.currentPlan.phases.map(phase => ({
+                phaseId: phase.id,
+                notes: phase.notes,
+                resources: structuredClone(phase.resources),
+            })),
+        };
+    }
+
+    return Object.freeze({
+        async loadDraft(executionId) {
+            try {
+                if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+                const record = await writer.read();
+                return { status: 'success', draft: draftFromRecord(record, executionId) };
+            } catch (error) { return errorOutcome(error); }
+        },
+
+        async saveDraft(draft) {
+            let snapshot;
+            try { snapshot = structuredClone(draft); }
+            catch { return { status: 'error', error: { type: 'validation', code: 'invalidData' } }; }
+            let source = null;
+            let target = null;
+            try {
+                const options = preparedInformationDraftOptions(snapshot);
+                const record = await writer.write(current => {
+                    source = structuredClone(current);
+                    target = updateExecutionPreparedInformationInRecord(current, options);
+                    return target;
+                });
+                return {
+                    status: 'success',
+                    record,
+                    execution: structuredClone(selected(record, options.executionId).execution),
+                };
+            } catch (error) {
+                const result = errorOutcome(error, snapshot ?? draft);
+                if (target !== null && ['storageUnconfirmed', 'storageReadback', 'lockRequest'].includes(error?.message)) {
+                    return { ...result, status: 'uncertain', reconciliation: structuredClone({
+                        draft: snapshot, source, target,
+                    }) };
+                }
+                return result;
+            }
+        },
+
+        async reconcileSave(ticket) {
+            let valid;
+            try {
+                exactFields(ticket, ['draft', 'source', 'target']);
+                const draft = preparedInformationDraftOptions(ticket.draft);
+                const source = validateEditorStoreRecord(ticket.source);
+                const target = validateEditorStoreRecord(ticket.target);
+                if (JSON.stringify(target)
+                    !== JSON.stringify(updateExecutionPreparedInformationInRecord(source, draft))) fail('invalidData');
+                valid = { draft, source, target };
+                const record = await writer.read();
+                const raw = JSON.stringify(record);
+                const status = raw === JSON.stringify(target) ? 'confirmed'
+                    : raw === JSON.stringify(source) ? 'absent' : 'unresolved';
+                return {
+                    status,
+                    record,
+                    draft,
+                    ...(status === 'unresolved'
+                        ? { reconciliation: structuredClone(valid) }
+                        : { execution: structuredClone(selected(record, draft.executionId).execution) }),
+                };
+            } catch (error) {
+                return {
+                    ...errorOutcome(error, valid?.draft),
+                    status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}),
+                };
             }
         },
     });

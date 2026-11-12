@@ -1,13 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createNativePlannerService, createNativePlannedExecutionService } from '../src/js/editor-planner-service.mjs';
+import { createNativeExecutionInformationService, createNativePlannerService,
+    createNativePlannedExecutionService } from '../src/js/editor-planner-service.mjs';
 import { editNativeTemplateDraft, editNativePhaseDraft, insertNativeDraftPhase,
     removeNativeDraftPhase, repositionNativeDraftPhase } from '../src/js/editor-template-draft.mjs';
 import { createNativeEditorTemplateIntegration } from '../src/js/editor-template-integration.mjs';
 import {
     EDITOR_STORAGE_KEY,
+    applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     planExecutionFromTemplateInRecord,
+    suspendActiveExecutionInRecord,
+    updateExecutionPreparedInformationInRecord,
     updatePlannedExecutionPlanInRecord,
     startReadyExecutionInRecord,
 } from '../src/js/editor-storage.mjs';
@@ -504,4 +508,161 @@ test('PLANNED reconciliation rejects altered tickets before reading and retains 
     assert.deepEqual(result.record, changed);
     assert.deepEqual(result.reconciliation, saved.reconciliation);
     assert.equal(c.storage.state.writes, writes);
+});
+
+test('ACTIVE and SUSPENDED prepared-information drafts save through the real Writer without Runtime changes', async () => {
+    const c = await executionSetup();
+    const service = createNativeExecutionInformationService({ writer: c.writer });
+    const loaded = await service.loadDraft('active-1');
+    assert.equal(loaded.status, 'success');
+    assert.deepEqual(loaded.draft, {
+        executionId: 'active-1',
+        expectedLifecycle: 'active',
+        expectedAggregateRevision: c.record.revision,
+        expectedExecutionRevision: c.record.executions[1].execution.revision,
+        expectedRuntimeRevision: c.record.executions[1].execution.runtimeRevision,
+        expectedAttemptId: 'active-attempt',
+        expectedRunId: 'active-run',
+        preparedInformation: '**Prepared** information',
+        phases: c.record.executions[1].execution.currentPlan.phases.map(phase => ({
+            phaseId: phase.id, notes: phase.notes, resources: phase.resources,
+        })),
+    });
+    const beforeDraft = structuredClone(loaded.draft);
+    const runtime = structuredClone(c.record.activeRuntime);
+    loaded.draft.preparedInformation = 'Corrected rundown';
+    loaded.draft.phases[0].notes = 'Corrected current phase';
+    loaded.draft.phases[1].resources = [
+        { label: 'Board', url: 'https://example.test/board' },
+        { label: 'Slides', url: 'https://example.test/slides' },
+    ];
+    const saved = await service.saveDraft(loaded.draft);
+    assert.equal(saved.status, 'success');
+    assert.equal(saved.record.revision, c.record.revision + 1);
+    assert.equal(saved.execution.revision, c.record.executions[1].execution.revision + 1);
+    assert.equal(saved.execution.runtimeRevision, c.record.executions[1].execution.runtimeRevision);
+    assert.deepEqual(saved.record.activeRuntime, runtime);
+    assert.deepEqual(saved.execution.attempt, c.record.executions[1].execution.attempt);
+    assert.deepEqual(saved.execution.phaseOutcomes, c.record.executions[1].execution.phaseOutcomes);
+    assert.deepEqual(saved.execution.workshopNotes, c.record.executions[1].execution.workshopNotes);
+    assert.deepEqual(c.record.executions[0], saved.record.executions[0]);
+    assert.deepEqual(c.record.templates, saved.record.templates);
+    assert.notDeepEqual(loaded.draft, beforeDraft);
+
+    const suspended = await c.writer.write(record => suspendActiveExecutionInRecord(record, {
+        executionId: 'active-1', expectedAggregateRevision: record.revision,
+        expectedExecutionRevision: saved.execution.revision,
+        expectedRuntimeRevision: saved.execution.runtimeRevision,
+        expectedAttemptId: saved.execution.attempt.id,
+        expectedRunId: saved.execution.attempt.runtimeRunId,
+        suspendedAt: 3000,
+        workshopNotes: saved.execution.workshopNotes,
+    }));
+    const suspendedDraft = await service.loadDraft('active-1');
+    assert.equal(suspendedDraft.status, 'success');
+    assert.equal(suspendedDraft.draft.expectedLifecycle, 'suspended');
+    const checkpoint = structuredClone(suspended.executions[1].suspendedCheckpoint);
+    suspendedDraft.draft.phases[1].notes = 'Corrected while suspended';
+    const suspendedSaved = await service.saveDraft(suspendedDraft.draft);
+    assert.equal(suspendedSaved.status, 'success');
+    assert.deepEqual(suspendedSaved.record.executions[1].suspendedCheckpoint, checkpoint);
+    assert.equal(suspendedSaved.record.activeRuntime, null);
+});
+
+test('prepared-information service preserves invalid/stale drafts and never retries Timer conflicts', async () => {
+    const c = await executionSetup();
+    const service = createNativeExecutionInformationService({ writer: c.writer });
+    assert.deepEqual((await service.loadDraft('missing')).error,
+        { type: 'missing', code: 'executionNotFound' });
+    assert.deepEqual((await service.loadDraft('planned-1')).error,
+        { type: 'validation', code: 'invalidLifecycle' });
+    const draft = (await service.loadDraft('active-1')).draft;
+    draft.preparedInformation = 'Caller content survives';
+    const invalid = structuredClone(draft);
+    invalid.phases[0].resources = [{ label: '', url: 'https://example.test' }];
+    const rejected = await service.saveDraft(invalid);
+    assert.equal(rejected.status, 'error');
+    assert.deepEqual(rejected.error, { type: 'validation', code: 'invalidResource' });
+    assert.deepEqual(rejected.draft, invalid);
+
+    const transitioned = await c.writer.write(record => applyStartedSessionActionInRecord(record, {
+        executionId: 'active-1', expectedAggregateRevision: record.revision,
+        expectedExecutionRevision: record.executions[1].execution.revision,
+        expectedRuntimeRevision: record.executions[1].execution.runtimeRevision,
+        expectedAttemptId: 'active-attempt', expectedRunId: 'active-run',
+        actionType: 'PAUSE', occurredAt: 3000,
+    }));
+    const writes = c.storage.state.writes;
+    const stale = await service.saveDraft(draft);
+    assert.deepEqual(stale, {
+        status: 'error', error: { type: 'conflict', code: 'conflict' }, draft,
+    });
+    assert.equal(c.storage.state.writes, writes);
+    assert.deepEqual(await c.writer.read(), transitioned);
+});
+
+test('prepared-information service reports lock/storage failures with complete drafts', async () => {
+    const c = await executionSetup();
+    const draft = (await createNativeExecutionInformationService({ writer: c.writer }).loadDraft('active-1')).draft;
+    for (const [lockManager, code] of [[null, 'lockUnavailable'], [locks(false), 'lockBusy'],
+        [{ request() { throw new Error('Denied'); } }, 'lockRequest']]) {
+        const service = createNativeExecutionInformationService({
+            writer: createEditorStoreWriter({ getStorage: () => c.storage, locks: lockManager }),
+        });
+        const result = await service.saveDraft(draft);
+        assert.equal(result.error.code, code);
+        assert.deepEqual(result.draft, draft);
+    }
+    for (const [field, value, code] of [['failRead', true, 'storageRead'],
+        ['failWrite', 'QuotaExceededError', 'storageQuota'], ['failWrite', 'Error', 'storageWrite']]) {
+        c.storage.state[field] = value;
+        const result = await createNativeExecutionInformationService({ writer: c.writer }).saveDraft(draft);
+        assert.equal(result.error.code, code);
+        assert.deepEqual(result.draft, draft);
+        c.storage.state[field] = field === 'failRead' ? false : null;
+    }
+    assert.throws(() => createNativeExecutionInformationService(), /invalidPlannerService/);
+});
+
+test('uncertain prepared-information saves reconcile source/target/conflict read-only without retry', async () => {
+    for (const failure of ['unconfirmed', 'readback', 'lateRequest']) {
+        for (const outcome of ['source', 'target', 'conflict']) {
+            const c = await executionSetup();
+            const normalService = createNativeExecutionInformationService({ writer: c.writer });
+            const draft = (await normalService.loadDraft('active-1')).draft;
+            const service = failure === 'lateRequest'
+                ? createNativeExecutionInformationService({ writer: createEditorStoreWriter({
+                    getStorage: () => c.storage,
+                    locks: { async request(name, options, callback) {
+                        await locks().request(name, options, callback);
+                        throw new Error('Late acknowledgement lost');
+                    } },
+                }) })
+                : normalService;
+            draft.preparedInformation = 'Uncertain caller content';
+            c.storage.state.faultAfterWrites = c.storage.state.writes;
+            if (failure === 'unconfirmed') c.storage.state.failReadAfterWrite = true;
+            if (failure === 'readback') c.storage.state.readback = 'Different readback';
+            const result = await service.saveDraft(draft);
+            assert.equal(result.status, 'uncertain');
+            assert.deepEqual(result.draft, draft);
+            assert.deepEqual(result.reconciliation.source, c.record);
+            assert.deepEqual(result.reconciliation.target,
+                updateExecutionPreparedInformationInRecord(c.record, draft));
+            c.storage.state.failReadAfterWrite = false;
+            c.storage.state.readback = undefined;
+            const observed = structuredClone(outcome === 'source' ? c.record : result.reconciliation.target);
+            if (outcome === 'conflict') {
+                observed.revision++;
+                observed.templates[0].plan.name = 'Concurrent Template change';
+            }
+            c.storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(observed));
+            const writes = c.storage.state.writes;
+            const reconciled = await normalService.reconcileSave(result.reconciliation);
+            assert.equal(reconciled.status,
+                { source: 'absent', target: 'confirmed', conflict: 'unresolved' }[outcome]);
+            assert.deepEqual(reconciled.record, observed);
+            assert.equal(c.storage.state.writes, writes);
+        }
+    }
 });
