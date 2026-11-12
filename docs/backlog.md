@@ -107,6 +107,16 @@ insertion/removal/reordering are covered. Revision bases are retained and only
 explicit Planner Service Save validates/persists data. No native form, overlay
 or public Editor integration is included; those UI requirements remain open.
 
+Internal PLANNED Execution plan editing now reuses the same native draft
+operations with an explicit Execution mapping. A locked save updates only the
+existing selected Execution's current plan; aggregate/Execution revisions advance
+once while runtime revision, source, workshop notes and unrelated ACTIVE state
+remain unchanged. Full drafts survive rejected saves; uncertain acknowledgements
+use caller-held source/target tickets and read-only reconciliation without retry.
+This is unreleased internal functionality. Existing Template editing remains
+separate; ACTIVE/SUSPENDED editing, Workshop-note persistence and public Editor,
+Library and Panel integration are not implemented by this slice.
+
 An internal native phase field group now consumes those operations for phase
 title, minute duration and category, with expandable category details, DE/EN,
 keyboard/focus handling and host-supplied validation feedback. Browser tests use

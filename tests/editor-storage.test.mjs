@@ -28,6 +28,7 @@ import {
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
     updateTemplateInRecord,
+    updatePlannedExecutionPlanInRecord,
     validateEditorStoreRecord,
 } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
@@ -158,6 +159,62 @@ const startOptions = (changes = {}) => ({
     attemptId: 'attempt-1',
     startedAt: 2000,
     ...changes,
+});
+
+test('PLANNED plan update preserves execution identity, notes, runtime revision and every unrelated record', () => {
+    const source = startedRecord();
+    const retained = retainExecutionPlanInRecord(source, executionExitOptions(source)).executions[0].execution;
+    const dormant = { ...retained, id: 'planned-edit' };
+    dormant.workshopNotes = { rundown: 'Preserved', phases: [{ phaseId: 'phase-1', text: 'Preserved phase note' }] };
+    source.templates.push(template());
+    source.executions.push(entry(dormant));
+    const before = structuredClone(source);
+    const currentPlan = { ...structuredClone(dormant.currentPlan), name: 'Independent plan', category: 'training',
+        preparedInformation: '**Full** information', transitionMode: 'automatic',
+        phases: [...dormant.currentPlan.phases].reverse().map(phase => ({ ...phase,
+            notes: '*Full* phase notes', resources: [{ label: 'Board', url: 'https://example.test/board' }] })) };
+    const target = updatePlannedExecutionPlanInRecord(source, { executionId: dormant.id,
+        expectedAggregateRevision: source.revision, expectedExecutionRevision: dormant.revision, currentPlan });
+    assert.deepEqual(target, { ...before, revision: before.revision + 1,
+        executions: [before.executions[0], entry({ ...dormant, revision: dormant.revision + 1, currentPlan })] });
+    assert.deepEqual(source, before);
+    target.executions[1].execution.currentPlan.phases[0].resources[0].label = 'Output only';
+    assert.equal(currentPlan.phases[0].resources[0].label, 'Board');
+    assert.deepEqual(source, before);
+    const withoutNotedPhase = structuredClone(currentPlan);
+    withoutNotedPhase.phases = withoutNotedPhase.phases.filter(phase => phase.id !== 'phase-1');
+    assert.throws(() => updatePlannedExecutionPlanInRecord(source, { executionId: dormant.id,
+        expectedAggregateRevision: source.revision, expectedExecutionRevision: dormant.revision,
+        currentPlan: withoutNotedPhase }), /invalidNotes/, 'Plan editing must not silently delete separate notes');
+});
+
+test('PLANNED plan update rejects invalid lifecycles, revisions, overflow and malformed planning data', () => {
+    const source = record({ executions: [entry(planned())] });
+    const options = { executionId: 'execution-1', expectedAggregateRevision: 0,
+        expectedExecutionRevision: 1, currentPlan: plan() };
+    for (const [changes, error] of [
+        [{ executionId: 'missing' }, 'executionNotFound'], [{ executionId: null }, 'invalidData'],
+        [{ expectedAggregateRevision: 1 }, 'conflict'], [{ expectedExecutionRevision: 2 }, 'conflict'],
+        [{ expectedAggregateRevision: -1 }, 'invalidStoreRevision'], [{ expectedExecutionRevision: NaN }, 'invalidRevision'],
+        [{ currentPlan: { ...plan(), extra: true } }, 'invalidData'],
+        [{ currentPlan: { ...plan(), phases: [plan().phases[0], plan().phases[0]] } }, 'invalidData'],
+        [{ currentPlan: { ...plan(), phases: [] } }, 'phasesRequired'],
+        [{ currentPlan: { ...plan(), category: 'unknown' } }, 'invalidCategory'],
+    ]) assert.throws(() => updatePlannedExecutionPlanInRecord(source, { ...options, ...changes }), new RegExp(error));
+    for (const overflowField of ['aggregate', 'execution']) {
+        const overflow = structuredClone(source);
+        if (overflowField === 'aggregate') overflow.revision = Number.MAX_SAFE_INTEGER;
+        else overflow.executions[0].execution.revision = Number.MAX_SAFE_INTEGER;
+        assert.throws(() => updatePlannedExecutionPlanInRecord(overflow, { ...options,
+            expectedAggregateRevision: overflow.revision,
+            expectedExecutionRevision: overflow.executions[0].execution.revision }), /invalidStoreRevision|invalidRevision/);
+    }
+    for (const other of [startedRecord(), record({ executions: [entry(suspendReadyExecution(activatePlannedExecution(planned())))] }),
+        completeExecutionInRecord(startedRecord(), completionOptions(startedRecord(), 12_000))]) {
+        assert.throws(() => updatePlannedExecutionPlanInRecord(other, { ...options,
+            expectedAggregateRevision: other.revision }), /invalidLifecycle/);
+    }
+    assert.deepEqual(source, record({ executions: [entry(planned())] }));
 });
 
 function executionExitOptions(source, executionId = 'execution-1', changes = {}) {

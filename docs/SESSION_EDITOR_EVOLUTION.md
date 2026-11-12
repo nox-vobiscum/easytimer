@@ -30,6 +30,38 @@ native domain. Discarding a draft has no persistence effect. This module has no
 UI, storage or lifecycle operations and is not imported by the public Planner;
 native presentation and the public cutover remain pending.
 
+**Internal PLANNED Execution plan editing (unreleased):**
+`createNativePlannedExecutionService({ writer })` in `editor-planner-service.mjs`
+loads one existing PLANNED Execution with `loadDraft(executionId)`. Its isolated
+draft contains `executionId`, `expectedAggregateRevision`,
+`expectedExecutionRevision` and `template: { id: executionId, ...currentPlan }`.
+The `template` slot is only the existing draft-operation carrier, not a Template
+entity: all native field edits and stable-ID phase insertion/removal/reordering
+reuse `editor-template-draft.mjs` directly. No Template revision is used and no
+Template CRUD operation is called.
+
+`saveDraft(draft)` explicitly maps that carrier to `currentPlan` of the same
+Execution through `updatePlannedExecutionPlanInRecord()` and the existing locked
+Store writer. It returns `success` with the confirmed full `record` and isolated
+updated `execution`. Aggregate and Execution revisions increase once;
+`runtimeRevision`, source, PLANNED lifecycle, null Attempt/checkpoint and separate
+Workshop-Notizen are preserved. All unrelated Templates, Executions and ACTIVE
+runtime remain unchanged. Unknown fields and invalid plans fail native validation;
+removing a phase still referenced by separate notes is rejected rather than
+silently changing those notes. ACTIVE, SUSPENDED and COMPLETED edits are rejected.
+
+Rejected saves return structured error information and a complete isolated copy
+of the serializable draft without mutating caller input. An uncertain readback or
+late Store-lock acknowledgement returns `uncertain` and a caller-held
+`reconciliation: { draft, source, target }` ticket, not another pending registry.
+`reconcileSave(ticket)` validates the ticket against the pure transformation and
+reads only: exact target is `confirmed`, exact source is `absent`, any other record
+or read failure is `unresolved`. Unresolved results retain the ticket; no write,
+merge, automatic retry or revision refresh occurs. Absence is a current source
+observation, not proof that a write never happened. Tickets do not survive crashes
+automatically. No new Execution, public UI, Workshop-note persistence,
+ACTIVE/SUSPENDED editing or runtime integration is included.
+
 **Internal native phase field group:** `editor-phase-fields.mjs` provides title,
 minute-duration and category inputs for one stable phase ID, using the existing
 `editor-template-draft.mjs` operations. The host supplies its current native

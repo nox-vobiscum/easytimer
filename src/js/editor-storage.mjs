@@ -227,6 +227,31 @@ export function planExecutionFromTemplateInRecord(record, options) {
     });
 }
 
+export function updatePlannedExecutionPlanInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    exactFields(options, ['executionId', 'expectedAggregateRevision', 'expectedExecutionRevision', 'currentPlan'], 'invalidData');
+    const { executionId, expectedAggregateRevision, expectedExecutionRevision, currentPlan } = options;
+    if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+    safeRevision(expectedAggregateRevision);
+    if (!Number.isSafeInteger(expectedExecutionRevision) || expectedExecutionRevision < 0) fail('invalidRevision');
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+    const index = valid.executions.findIndex(entry => entry.execution.id === executionId);
+    if (index < 0) fail('executionNotFound');
+    const selected = valid.executions[index];
+    if (selected.execution.lifecycle !== EXECUTION_LIFECYCLES.PLANNED) fail('invalidLifecycle');
+    if (selected.execution.revision !== expectedExecutionRevision) fail('conflict');
+    if (selected.execution.revision === Number.MAX_SAFE_INTEGER) fail('invalidRevision');
+    const execution = validatePlannedExecution({
+        ...selected.execution, revision: selected.execution.revision + 1, currentPlan,
+    });
+    return validateEditorStoreRecord({
+        ...valid, revision: valid.revision + 1,
+        executions: valid.executions.map((entry, entryIndex) => entryIndex === index
+            ? { ...entry, execution } : entry),
+    });
+}
+
 export function activatePlannedExecutionInRecord(record, options) {
     const valid = validateEditorStoreRecord(record);
     if (!isObject(options)) fail('invalidData');

@@ -19,6 +19,15 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal PLANNED editing:** an isolated Execution draft reuses the
+  existing native planning-field/phase operations and explicitly saves its full
+  current plan to the same PLANNED Execution through the locked Store writer.
+  Aggregate and Execution revisions advance once; source Template, runtime
+  revision, separate workshop notes and unrelated records remain unchanged.
+  Uncertain writes return a caller-held source/target ticket for read-only
+  reconciliation without retry. No public Editor or ACTIVE/SUSPENDED editing is
+  included.
+
 - **EDITOR-001 internal App handoff:** confirmed native suspend, retain-plan,
   discard and completion now have an application-side exit boundary. It guards
   local identities and navigation, detaches before releasing ownership, and
