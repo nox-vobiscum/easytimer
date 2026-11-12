@@ -230,10 +230,15 @@ acknowledgement is uncertain. The Planner service validates caller-held tickets
 against the exact original transformation and reconciles by reading only:
 target is confirmed, source is absent and every divergent or unreadable state is
 unresolved. No retry, merge, identity regeneration or pending registry is used.
-The same internal boundary can read one validated, copy-isolated full native
-aggregate for a future combined Template/Execution workspace. It remains
-UI-neutral and does not change the public V1 Planner, lifecycle navigation,
-Timer ownership, Recovery or the PWA shell.
+The same internal boundary supplies one validated, copy-isolated full native
+aggregate to `editor-workspace.mjs`. That directly mountable internal UI groups
+Templates and Executions by lifecycle and reuses the existing native Template,
+PLANNED Execution, launch, import/export and draft contracts. Unsaved edits stay
+in caller-owned drafts; ambiguous writes expose only the established read-only
+reconciliation paths. The module is absent from `app.js`, public HTML and the V1
+Planner import graph. Its browser harness mounts it into a temporary root, so
+public navigation, lifecycle orchestration, Timer ownership and Recovery remain
+unchanged until the coordinated cutover.
 
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.
@@ -245,6 +250,9 @@ Timer ownership, Recovery or the PWA shell.
   `src/js/planner-v1.mjs` isolates the public V1 Planner's pure draft mapping and
   Save/Delete/import aggregate preparation; UI state and guarded I/O remain in
   `planner.js`. This refactoring does not perform the native Schema-2 cutover.
+- `src/js/editor-workspace.mjs` is the internal Schema-2 Workspace presentation.
+  It is not a production startup dependency or public route; the browser harness
+  mounts it directly for UI verification until the coordinated cutover.
 - `src/js/recovery.mjs` validates durable runtime records and coordinates
   tab/context ownership. `sessionStorage` associates a tab with its context;
   durable records remain in `localStorage`.

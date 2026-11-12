@@ -10,7 +10,7 @@ commit, staging and production deployment are distinct events.
   in the central application stylesheet; their declarations and UI behavior are
   unchanged. Tests use that stylesheet directly. The briefing records the file
   architecture convention, and CSS/App shell references advance together to
-  unreleased PWA v70. Native Editor UI is not publicly available.
+  unreleased PWA v72. Native Editor UI is not publicly available.
 
 - **BUG-001 follow-up:** Escape now cancels the document-modal Session Stop
   confirmation without invoking the global fullscreen or expanded-view exit.
@@ -18,6 +18,19 @@ commit, staging and production deployment are distinct events.
   Escape outside the dialog retains its existing presentation-exit behavior.
 
 ### Added
+
+- **EDITOR-001 internal native Editor Workspace:** one directly mountable,
+  localized Schema-2 workspace now presents Templates and Executions by
+  lifecycle, complete Template editing, independent PLANNED Execution creation
+  and editing, prepared rundown/phase information, labeled resource links and
+  single-Template JSON portability. It reuses the authoritative Store Writer,
+  Planner, draft, launch and import services. Edits remain local until explicit
+  Save; Cancel is write-free, stale revisions retain the complete draft, and
+  uncertain writes expose read-only reconciliation without retry or duplicate
+  creation. ACTIVE, SUSPENDED and COMPLETED entries remain informational. The
+  module is mounted only by the internal browser harness: public navigation,
+  the V1 Editor/Picker, Timer/Runtime ownership and lifecycle controls are
+  unchanged. Central style additions advance the unreleased PWA shell to v72.
 
 - **EDITOR-001 internal Template CRUD reconciliation and workspace read:**
   native Template Create, Update and Delete now retain their exact operation and

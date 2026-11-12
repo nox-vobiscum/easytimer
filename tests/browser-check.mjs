@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { checkPlanner } from './planner-browser.mjs';
 import { checkNativePhaseFields } from './editor-phase-fields-browser.mjs';
+import { checkNativeEditorWorkspace } from './editor-workspace-browser.mjs';
 import { checkSession } from './session-browser.mjs';
 import { checkTimeVisuals } from './time-visuals-browser.mjs';
 import { checkClockView } from './clock-view-browser.mjs';
@@ -164,6 +165,9 @@ try {
     } else if (process.env.EASYTIMER_NATIVE_PHASE_FIELDS_ONLY === '1') {
         await checkNativePhaseFields({evaluate,click,cdp});
         assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_NATIVE_WORKSPACE_ONLY === '1') {
+        await checkNativeEditorWorkspace({evaluate,click,cdp});
+        assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_EDITOR_RUNTIME_ONLY === '1') {
         await checkEditorRuntimeApp({evaluate,click,text,cdp});
         assert.equal(errors.length,0,JSON.stringify(errors));
@@ -173,6 +177,7 @@ try {
     } else {
     assert.equal(await text('#time'), '00:00');
     await checkNativePhaseFields({evaluate,click,cdp});
+    await checkNativeEditorWorkspace({evaluate,click,cdp});
     await checkTimeboxControls({ evaluate, click, text, cdp, configure });
     await checkRecovery({ evaluate, click, text, cdp, configure });
     await checkRecoveryCorrections({ evaluate, click, text, cdp, configure });
@@ -185,8 +190,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=71'&&js==='js/app.js?v=71'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'71','app.js':'71','info.js':'59','header.mjs':'59','recovery.mjs':'54','planner.js':'69','planner-v1.mjs':'69','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including the V1 Planner mapping, information pages, recovery, the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=72'&&js==='js/app.js?v=72'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'72','app.js':'72','info.js':'59','header.mjs':'59','recovery.mjs':'54','planner.js':'69','planner-v1.mjs':'69','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including the V1 Planner mapping, information pages, recovery, the engine, Session and shared visual helper');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');

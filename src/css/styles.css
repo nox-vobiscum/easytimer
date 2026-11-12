@@ -563,3 +563,37 @@ body.clock-only.presentation main { padding-top:env(safe-area-inset-top); paddin
 }
 .native-phase-fields input[aria-invalid="true"],
 .native-phase-fields select[aria-invalid="true"] { border-color:var(--error); }
+
+/* Internal native Editor Workspace; it is mounted only by the browser harness until cutover. */
+.native-editor-workspace { width:100%; max-width:58rem; margin:0 auto; container-type:inline-size; }
+.native-editor-workspace textarea,
+.native-editor-workspace .native-workspace-control {
+    width:100%; min-width:0; min-height:44px; padding:.6rem;
+    border:1px solid var(--border); border-radius:.5rem;
+    background:var(--surface); color:var(--text); font:inherit;
+}
+.native-editor-workspace textarea { resize:vertical; line-height:1.45; }
+.native-editor-workspace .native-phase-details { display:grid; gap:.75rem; }
+.native-editor-workspace .native-phase-details h3 { margin:.25rem 0 0; font-size:.85rem; }
+.native-workspace-resource {
+    display:grid; grid-template-columns:minmax(8rem,.65fr) minmax(12rem,1fr) auto auto;
+    align-items:end; gap:.5rem;
+}
+.native-workspace-resource > a,
+.native-workspace-resource > button { display:inline-flex; align-items:center; min-height:44px; overflow-wrap:anywhere; }
+.native-workspace-phase-actions,
+.native-workspace-save-actions { margin-top:.75rem; }
+.native-editor-workspace details > summary { min-height:44px; }
+.native-editor-workspace .rundown-actions {
+    width:100%; grid-template-columns:repeat(3,minmax(44px,1fr));
+}
+.native-editor-workspace .rundown-actions .rundown-launch { grid-column:1 / -1; }
+@container (max-width:34rem) {
+  .native-workspace-resource { grid-template-columns:minmax(0,1fr) auto; }
+  .native-workspace-resource > label { grid-column:1 / -1; }
+}
+@container (max-width:20rem) {
+  .native-editor-workspace .native-phase-fields .native-phase-details,
+  .native-editor-workspace .native-phase-fields .native-phase-feedback { grid-column:1 / -1; }
+  .native-workspace-phase-actions > button { flex:1 1 8rem; }
+}

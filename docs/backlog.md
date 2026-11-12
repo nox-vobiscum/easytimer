@@ -89,7 +89,19 @@ The public V1 Planner's draft mapping and Save/Delete/import aggregate
 preparation are isolated in a pure V1-specific module, with focused Store-backed
 tests. This unreleased refactoring preserves public behavior and creates an
 explicit replacement boundary; it does not integrate the native public Editor.
-Production dependency/precache references are aligned for unreleased PWA v71.
+Production dependency/precache references are aligned for unreleased PWA v72.
+
+The internally mountable native Editor Workspace is now implemented and covered
+by a direct browser harness. One native snapshot presents Templates and all
+Execution lifecycle groups. Template CRUD, complete rundown/phase editing,
+independent PLANNED creation/editing and single-Template JSON portability reuse
+the authoritative native services. Explicit Save is the only persistence path;
+Cancel is write-free, conflicts retain drafts, and uncertain acknowledgements
+offer read-only reconciliation without retry or merge. ACTIVE, SUSPENDED and
+COMPLETED entries expose information only. The module is deliberately absent
+from public startup/navigation: the released V1 Editor/Picker and all Timer,
+Runtime, Recovery and lifecycle behavior remain unchanged pending the coordinated
+0AV-T cutover. The Facilitator Panel remains open work.
 
 Internal native Template Create, Update and Delete now preserve the exact
 validated operation and complete Store source/target snapshots after an
@@ -115,8 +127,8 @@ Native Template draft editing is prepared internally through pure copy-isolated
 operations on existing Planner Service drafts. Name, transition mode, categories,
 prepared information, phase titles/durations/notes/resources and stable-ID phase
 insertion/removal/reordering are covered. Revision bases are retained and only
-explicit Planner Service Save validates/persists data. No native form, overlay
-or public Editor integration is included; those UI requirements remain open.
+explicit Planner Service Save validates/persists data. The internal Workspace
+now consumes these operations; public Editor integration and cutover remain open.
 
 Internal PLANNED Execution plan editing now reuses the same native draft
 operations with an explicit Execution mapping. A locked save updates only the
@@ -162,8 +174,9 @@ An internal native phase field group now consumes those operations for phase
 title, minute duration and category, with expandable category details, DE/EN,
 keyboard/focus handling and host-supplied validation feedback. Browser tests use
 real native drafts and services. The public V1 Planner does not load this group.
-Native name/transition and Rundown metadata fields, prepared Notes/Resources
-overlays, phase structural controls and the public integration remain open.
+The internal Workspace now supplies name/transition and Rundown metadata fields,
+prepared Notes/Resources and phase structural controls. Public integration
+remains open.
 
 Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability and simplicity. No initial file uploads, own backend/accounts, confidentiality model or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private or role-specific notes. See the [concept and open design questions](SESSION_EDITOR_EVOLUTION.md).
 

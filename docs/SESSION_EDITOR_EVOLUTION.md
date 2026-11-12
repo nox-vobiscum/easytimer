@@ -7,8 +7,10 @@ contract and UI-neutral native Session-launch orchestration boundary, are
 implemented and verified
 locally but not released. The boundaries
 map prepared Editor data to native Templates and use the lock-protected Editor
-Store without exposing a second library. Public Editor UI and unified-library integration, remaining
-public lifecycle/archive workflows and the Facilitator Panel remain pending.
+Store without exposing a second library. A complete native Workspace UI is now
+implemented behind an internal-only direct mount boundary. Public cutover and
+unified navigation, remaining public lifecycle/archive workflows and the
+Facilitator Panel remain pending.
 **Priority:** High / Near-term. Every subsequent implementation slice requires
 separate explicit Product Owner approval.
 
@@ -18,6 +20,35 @@ These pure V1 operations retain the released data shape; they are not a native
 adapter. The Planner still owns UI state, asynchronous I/O guards, navigation,
 backup and launch callbacks. Native UI integration remains pending. The new
 module is packaged and precached with the current unreleased PWA asset references.
+
+**Internal native Editor Workspace (unreleased):**
+`createNativeEditorWorkspace()` mounts one coherent Schema-2 Library and Editor
+into a caller-supplied root. It reads the complete native Workspace snapshot and
+groups Templates plus PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions with
+stable IDs, revisions and explicit lifecycle copy. Templates support Create,
+Update, confirmed Delete, all native rundown/phase fields, expandable notes and
+labeled HTTP(S) resources. PLANNED Executions can be created from a Template and
+then edit their independent current plan without changing the source Template.
+ACTIVE, SUSPENDED and COMPLETED records are informational only.
+
+New Execution editing stays entirely local before the first explicit Save. That
+Save uses the existing stable Template-to-PLANNED launch operation and then the
+PLANNED plan service. Once creation is confirmed, the editor adopts the actual
+Execution identity before any plan update, so a failed second stage cannot
+create a duplicate. If creation acknowledgement is uncertain, the full local
+plan is retained and only `observeExecution()` is offered; observation never
+resubmits the write. Template, Execution, Delete and single-Template import
+uncertainty similarly use their existing caller-held reconciliation tickets.
+Stale writes never merge or rebase.
+
+The Workspace also exports one validated native Template document and reviews
+one imported Template copy before explicit persistence. DE/EN copy, semantic
+forms, expandable phases, safe external links, 44 px controls, accessible
+Delete confirmation with Escape/focus restoration and responsive portrait/
+landscape rules reuse the existing Planner design. The module has no import from
+`app.js`, `planner.js` or production HTML. The browser harness mounts it directly;
+the public V1 Editor/Picker, Direct Launch, Timer/Runtime and Recovery remain
+unchanged until 0AV-T. The Facilitator Panel is still pending.
 
 **Internal Template CRUD reconciliation and workspace read (unreleased):**
 `createNativePlannerService()` now treats ambiguous Template Create, Update and
