@@ -28,6 +28,7 @@ import {
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
     updateExecutionPreparedInformationInRecord,
+    updateExecutionWorkshopNotesInRecord,
     updateTemplateInRecord,
     updatePlannedExecutionPlanInRecord,
     validateEditorStoreRecord,
@@ -185,6 +186,153 @@ function preparedInformationOptions(source, executionId = 'execution-1', changes
         ...changes,
     };
 }
+
+function workshopNotesOptions(source, executionId = 'execution-1', changes = {}) {
+    const entry = source.executions.find(entry => entry.execution.id === executionId);
+    const { execution } = entry;
+    const expectedRunId = execution.lifecycle === 'active'
+        ? source.activeRuntime.run.runId
+        : entry.suspendedCheckpoint?.run.runId ?? null;
+    return {
+        executionId,
+        expectedLifecycle: execution.lifecycle,
+        expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision,
+        expectedAttemptId: execution.attempt?.id ?? null,
+        expectedRunId,
+        workshopNotes: structuredClone(execution.workshopNotes),
+        ...changes,
+    };
+}
+
+test('Workshop Notes Save supports ACTIVE/SUSPENDED READY/STARTED and explicit clearing', () => {
+    const activeReady = activatePlannedExecutionInRecord(
+        record({ executions: [entry(planned())] }), activationOptions(),
+    );
+    const activeStarted = startedRecord();
+    const activeAdvanced = applyStartedSessionActionInRecord(activeStarted,
+        sessionActionOptions(activeStarted, 'NEXT', 12_000));
+    const suspendedReadyExecution = suspendReadyExecution(activeReady.executions[0].execution);
+    const suspendedReady = record({
+        revision: activeReady.revision + 1,
+        executions: [entry(suspendedReadyExecution)],
+    });
+    const frozen = suspendedStarted();
+    const suspendedStartedRecord = record({
+        revision: 7,
+        executions: [entry(frozen.execution, frozen.checkpoint)],
+    });
+
+    for (const source of [activeReady, activeStarted, activeAdvanced,
+        suspendedReady, suspendedStartedRecord]) {
+        const before = structuredClone(source);
+        const savedNotes = {
+            rundown: 'Rundown observation',
+            phases: [
+                { phaseId: 'phase-2', text: 'Upcoming phase note' },
+                { phaseId: 'phase-1', text: 'Current or previously conducted phase note' },
+            ],
+        };
+        const saved = updateExecutionWorkshopNotesInRecord(source,
+            workshopNotesOptions(source, 'execution-1', { workshopNotes: savedNotes }));
+        const changed = saved.executions[0].execution;
+        const original = before.executions[0].execution;
+
+        assert.equal(saved.revision, before.revision + 1);
+        assert.equal(changed.revision, original.revision + 1);
+        assert.equal(changed.runtimeRevision, original.runtimeRevision);
+        assert.deepEqual(changed.workshopNotes, savedNotes);
+        assert.deepEqual(changed.currentPlan, original.currentPlan);
+        assert.deepEqual(changed.attempt, original.attempt);
+        assert.deepEqual(changed.phaseOutcomes, original.phaseOutcomes);
+        assert.deepEqual(saved.activeRuntime, before.activeRuntime);
+        assert.deepEqual(saved.executions[0].suspendedCheckpoint,
+            before.executions[0].suspendedCheckpoint);
+
+        const clearedNotes = {
+            rundown: '',
+            phases: [{ phaseId: 'phase-2', text: 'Updated remaining note' }],
+        };
+        const cleared = updateExecutionWorkshopNotesInRecord(saved,
+            workshopNotesOptions(saved, 'execution-1', { workshopNotes: clearedNotes }));
+        assert.deepEqual(cleared.executions[0].execution.workshopNotes, clearedNotes);
+        assert.equal(cleared.revision, saved.revision + 1);
+        assert.equal(cleared.executions[0].execution.revision, changed.revision + 1);
+        assert.deepEqual(cleared.activeRuntime, before.activeRuntime);
+        assert.deepEqual(cleared.executions[0].suspendedCheckpoint,
+            before.executions[0].suspendedCheckpoint);
+        assert.deepEqual(source, before);
+    }
+});
+
+test('Workshop Notes Save preserves unrelated Templates, Executions and ACTIVE Runtime', () => {
+    const frozen = suspendedStarted('suspended-1', 'run-suspended-1');
+    const active = started('active-1', 'run-active-1');
+    const current = session('run-active-1');
+    const running = transitionSession(current.run, current.clock, { type: 'START' }, 1000);
+    const source = record({
+        revision: 9,
+        templates: [template()],
+        executions: [entry(frozen.execution, frozen.checkpoint), entry(active)],
+        activeRuntime: activeRuntime(active, running, 1000),
+    });
+    const before = structuredClone(source);
+    const workshopNotes = { rundown: 'Suspended notes', phases: [
+        { phaseId: 'phase-1', text: 'Stable-ID note' },
+    ] };
+    const result = updateExecutionWorkshopNotesInRecord(source,
+        workshopNotesOptions(source, 'suspended-1', { workshopNotes }));
+
+    assert.deepEqual(result.executions[0].execution.workshopNotes, workshopNotes);
+    assert.deepEqual(result.templates, before.templates);
+    assert.deepEqual(result.executions[1], before.executions[1]);
+    assert.deepEqual(result.activeRuntime, before.activeRuntime);
+    assert.deepEqual(result.executions[0].suspendedCheckpoint, before.executions[0].suspendedCheckpoint);
+});
+
+test('Workshop Notes Save rejects stale identities and invalid phase associations without mutation', () => {
+    const source = startedRecord();
+    const before = structuredClone(source);
+    const valid = workshopNotesOptions(source, 'execution-1', { workshopNotes: {
+        rundown: 'Draft', phases: [{ phaseId: 'phase-1', text: 'Phase note' }],
+    } });
+    for (const [change, code] of [
+        [options => { options.expectedAggregateRevision--; }, 'conflict'],
+        [options => { options.expectedExecutionRevision--; }, 'conflict'],
+        [options => { options.expectedRuntimeRevision--; }, 'conflict'],
+        [options => { options.expectedAttemptId = 'stale-attempt'; }, 'invalidAttemptBinding'],
+        [options => { options.expectedRunId = 'stale-run'; }, 'invalidActiveRuntimeBinding'],
+        [options => { options.workshopNotes.phases[0].phaseId = 'unknown'; }, 'invalidNotes'],
+        [options => { options.workshopNotes.phases.push({ phaseId: 'phase-1', text: 'Duplicate' }); }, 'invalidNotes'],
+        [options => { options.workshopNotes.phases[0].text = ''; }, 'invalidNotes'],
+        [options => { options.workshopNotes.rundown = null; }, 'invalidNotes'],
+        [options => { options.workshopNotes.extra = true; }, 'invalidData'],
+        [options => { options.currentPlan = {}; }, 'invalidData'],
+    ]) {
+        const options = structuredClone(valid);
+        change(options);
+        assert.throws(() => updateExecutionWorkshopNotesInRecord(source, options), new RegExp(code));
+        assert.deepEqual(source, before);
+    }
+});
+
+test('newer Workshop Notes and Timer persistence reject stale note snapshots without retry', () => {
+    const source = startedRecord();
+    const stale = workshopNotesOptions(source, 'execution-1', { workshopNotes: {
+        rundown: 'Older caller draft', phases: [],
+    } });
+    const newer = updateExecutionWorkshopNotesInRecord(source,
+        workshopNotesOptions(source, 'execution-1', { workshopNotes: {
+            rundown: 'Newer persisted notes', phases: [{ phaseId: 'phase-1', text: 'Newer phase note' }],
+        } }));
+    assert.throws(() => updateExecutionWorkshopNotesInRecord(newer, stale), /conflict/);
+    const transitioned = applyStartedSessionActionInRecord(source,
+        sessionActionOptions(source, 'PAUSE', 12_000));
+    assert.throws(() => updateExecutionWorkshopNotesInRecord(transitioned, stale), /conflict/);
+    assert.equal(stale.workshopNotes.rundown, 'Older caller draft');
+    assert.equal(newer.executions[0].execution.workshopNotes.rundown, 'Newer persisted notes');
+});
 
 test('prepared-information correction supports every ACTIVE/SUSPENDED READY/STARTED clock state', () => {
     const activeReady = activatePlannedExecutionInRecord(
@@ -638,6 +786,31 @@ function completionOptions(source, completedAt, executionId = 'execution-1', cha
     return { ...executionExitOptions(source, executionId), completedAt,
         workshopNotes: execution.workshopNotes, ...changes };
 }
+
+test('Suspend and Completion reject older caller note snapshots after a newer Note Save', () => {
+    const source = startedRecord();
+    const olderNotes = { rundown: 'Older staged notes', phases: [] };
+    const newerNotes = { rundown: 'Newer persisted notes', phases: [
+        { phaseId: 'phase-1', text: 'Newer phase note' },
+    ] };
+    const staleSuspend = suspendOptions(source, 13_000, olderNotes);
+    const staleCompletion = completionOptions(source, 13_000, 'execution-1', {
+        workshopNotes: olderNotes,
+    });
+    const newer = updateExecutionWorkshopNotesInRecord(source,
+        workshopNotesOptions(source, 'execution-1', { workshopNotes: newerNotes }));
+
+    assert.throws(() => suspendActiveExecutionInRecord(newer, staleSuspend), /conflict/);
+    assert.throws(() => completeExecutionInRecord(newer, staleCompletion), /conflict/);
+    assert.deepEqual(newer.executions[0].execution.workshopNotes, newerNotes);
+
+    const suspended = suspendActiveExecutionInRecord(newer,
+        suspendOptions(newer, 13_000, newerNotes));
+    const completed = completeExecutionInRecord(newer,
+        completionOptions(newer, 13_000, 'execution-1', { workshopNotes: newerNotes }));
+    assert.deepEqual(suspended.executions[0].execution.workshopNotes, newerNotes);
+    assert.deepEqual(completed.executions[0].execution.workshopNotes, newerNotes);
+});
 
 function reflectionOptions(source, reflection, changes = {}) {
     const execution = source.executions.find(entry => entry.execution.lifecycle === 'completed').execution;

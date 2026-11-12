@@ -128,8 +128,24 @@ unchanged. Failed saves retain the full information draft. Uncertain writes use
 validated source/target tickets and read-only reconciliation without retry,
 merge or rebase. Strict aggregate conflicts during concurrent Timer persistence
 are an intentional correctness-first limitation for later UI integration. This
-is internal only: general ACTIVE/SUSPENDED plan editing, independent Workshop-
-Notizen persistence and the public Editor/Facilitator Panel remain pending.
+is internal only: general ACTIVE/SUSPENDED plan editing and the public
+Editor/Facilitator Panel remain pending; Workshop-Notizen use the separate
+explicit persistence contract below.
+
+Internal ACTIVE/SUSPENDED Workshop-Notizen persistence now loads and explicitly
+saves the complete existing `{ rundown, phases }` snapshot through the locked
+Store writer. Sparse phase entries retain stable IDs; removing an entry clears
+that phase note, while an empty rundown note remains valid. Exact aggregate,
+Execution/runtime, lifecycle, Attempt and Run preconditions reject concurrent
+Timer, plan/information, lifecycle and note changes. Aggregate and Execution
+revisions advance once; runtime state, checkpoints, current plan/prepared
+information, first-START baseline, outcomes, Templates and unrelated Executions
+remain unchanged. Failed drafts survive, and uncertain writes reconcile full
+source/target snapshots read-only without retry. Existing Suspend and Completion
+still accept complete caller snapshots; their revision checks prevent an older
+staged snapshot from overwriting a newer independent note save. This internal
+contract is separate from COMPLETED reflection and does not implement the public
+Facilitator Panel, autosave or crash-draft recovery.
 
 An internal native phase field group now consumes those operations for phase
 title, minute duration and category, with expandable category details, DE/EN,

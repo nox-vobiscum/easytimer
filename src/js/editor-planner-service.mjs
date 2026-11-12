@@ -3,6 +3,7 @@ import {
     EDITOR_STORE_SCHEMA_VERSION,
     validateEditorStoreRecord,
     updateExecutionPreparedInformationInRecord,
+    updateExecutionWorkshopNotesInRecord,
     updatePlannedExecutionPlanInRecord,
 } from './editor-storage.mjs';
 
@@ -346,6 +347,114 @@ export function createNativeExecutionInformationService({ writer } = {}) {
                 const target = validateEditorStoreRecord(ticket.target);
                 if (JSON.stringify(target)
                     !== JSON.stringify(updateExecutionPreparedInformationInRecord(source, draft))) fail('invalidData');
+                valid = { draft, source, target };
+                const record = await writer.read();
+                const raw = JSON.stringify(record);
+                const status = raw === JSON.stringify(target) ? 'confirmed'
+                    : raw === JSON.stringify(source) ? 'absent' : 'unresolved';
+                return {
+                    status,
+                    record,
+                    draft,
+                    ...(status === 'unresolved'
+                        ? { reconciliation: structuredClone(valid) }
+                        : { execution: structuredClone(selected(record, draft.executionId).execution) }),
+                };
+            } catch (error) {
+                return {
+                    ...errorOutcome(error, valid?.draft),
+                    status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}),
+                };
+            }
+        },
+    });
+}
+
+function workshopNotesDraftOptions(draft) {
+    exactFields(draft, [
+        'executionId', 'expectedLifecycle', 'expectedAggregateRevision',
+        'expectedExecutionRevision', 'expectedRuntimeRevision', 'expectedAttemptId',
+        'expectedRunId', 'workshopNotes',
+    ]);
+    return structuredClone(draft);
+}
+
+export function createNativeExecutionWorkshopNotesService({ writer } = {}) {
+    if (!writer || typeof writer.read !== 'function' || typeof writer.write !== 'function') fail('invalidPlannerService');
+
+    function selected(record, executionId) {
+        const entry = record.executions.find(entry => entry.execution.id === executionId);
+        if (!entry) fail('executionNotFound');
+        if (!['active', 'suspended'].includes(entry.execution.lifecycle)) fail('invalidLifecycle');
+        return entry;
+    }
+
+    function draftFromRecord(record, executionId) {
+        const entry = selected(record, executionId);
+        const { execution, suspendedCheckpoint } = entry;
+        const expectedRunId = execution.lifecycle === 'active'
+            ? record.activeRuntime.run.runId
+            : suspendedCheckpoint?.run.runId ?? null;
+        return {
+            executionId,
+            expectedLifecycle: execution.lifecycle,
+            expectedAggregateRevision: record.revision,
+            expectedExecutionRevision: execution.revision,
+            expectedRuntimeRevision: execution.runtimeRevision,
+            expectedAttemptId: execution.attempt?.id ?? null,
+            expectedRunId,
+            workshopNotes: structuredClone(execution.workshopNotes),
+        };
+    }
+
+    return Object.freeze({
+        async loadDraft(executionId) {
+            try {
+                if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+                const record = await writer.read();
+                return { status: 'success', draft: draftFromRecord(record, executionId) };
+            } catch (error) { return errorOutcome(error); }
+        },
+
+        async saveDraft(draft) {
+            let snapshot;
+            try { snapshot = structuredClone(draft); }
+            catch { return { status: 'error', error: { type: 'validation', code: 'invalidData' } }; }
+            let source = null;
+            let target = null;
+            try {
+                const options = workshopNotesDraftOptions(snapshot);
+                const record = await writer.write(current => {
+                    source = structuredClone(current);
+                    target = updateExecutionWorkshopNotesInRecord(current, options);
+                    return target;
+                });
+                return {
+                    status: 'success',
+                    record,
+                    execution: structuredClone(selected(record, options.executionId).execution),
+                };
+            } catch (error) {
+                const result = errorOutcome(error, snapshot ?? draft);
+                if (target !== null && ['storageUnconfirmed', 'storageReadback', 'lockRequest'].includes(error?.message)) {
+                    return { ...result, status: 'uncertain', reconciliation: structuredClone({
+                        draft: snapshot, source, target,
+                    }) };
+                }
+                return result;
+            }
+        },
+
+        async reconcileSave(ticket) {
+            let valid;
+            try {
+                exactFields(ticket, ['draft', 'source', 'target']);
+                const draft = workshopNotesDraftOptions(ticket.draft);
+                const source = validateEditorStoreRecord(ticket.source);
+                const target = validateEditorStoreRecord(ticket.target);
+                if (JSON.stringify(target)
+                    !== JSON.stringify(updateExecutionWorkshopNotesInRecord(source, draft))) fail('invalidData');
                 valid = { draft, source, target };
                 const record = await writer.read();
                 const raw = JSON.stringify(record);

@@ -94,9 +94,48 @@ Unconfirmed readback, mismatched readback and late Store-lock acknowledgement
 return the same caller-held `{ draft, source, target }` reconciliation contract as
 PLANNED editing. Reconciliation validates the exact field-scoped transformation
 and reads only: target is confirmed, source is absent and every other state is
-unresolved. It never repeats the write. This internal capability does not add
-public Session Editor or Facilitator Panel UI, independent Workshop-Notizen
-persistence, structural/timing editing, Runtime synchronization or a new Store.
+unresolved. It never repeats the write. This internal information capability does
+not add public Session Editor or Facilitator Panel UI, structural/timing editing,
+Runtime synchronization or a new Store. It does not persist Workshop-Notizen;
+the separate explicit contract follows below.
+
+**Internal ACTIVE/SUSPENDED Workshop-Notizen persistence (unreleased):**
+`createNativeExecutionWorkshopNotesService({ writer })` loads one existing ACTIVE
+or SUSPENDED Execution's complete native Workshop-Notizen snapshot into an
+isolated draft. The existing shape remains `{ rundown, phases }`: `rundown` is a
+String including the empty String, while `phases` is a sparse array of exact
+`{ phaseId, text }` entries. Phase IDs are unique and must still exist in the
+current configured plan. A phase note is cleared by removing its entry; an empty
+phase entry remains invalid. There is no additional note-length limit beyond the
+existing String, Store quota and JSON boundaries.
+
+Explicit `saveDraft(draft)` delegates to
+`updateExecutionWorkshopNotesInRecord()` through the existing locked Store
+writer. Only `execution.workshopNotes` changes. Aggregate and selected Execution
+revisions advance once; `runtimeRevision`, lifecycle, Execution/Attempt/source
+identities, `currentPlan` and all prepared information, first-START snapshot,
+phase outcomes, ACTIVE Runtime/Run/Clock and SUSPENDED checkpoint remain
+unchanged. Source Templates and unrelated Executions remain independent. Draft
+preparation and editing perform no write. No Active Lock or Runtime Bridge is
+needed because Workshop-Notizen persistence does not own or alter timekeeping.
+
+The exact aggregate, Execution/runtime, lifecycle, Attempt and Run preconditions
+reject concurrent Timer persistence, another note save, information/plan changes
+and lifecycle transitions without merge, rebase or retry. Suspend and Completion
+retain their existing complete caller-snapshot behavior. Because a successful
+independent note save advances aggregate and Execution revisions, an older staged
+Suspend/Completion caller fails before its older notes can replace the newer
+snapshot; a caller using the current revisions may deliberately supply the latest
+applicable complete snapshot.
+
+Validation, structured errors, failed-draft retention and uncertain-write
+handling reuse the Planner Service conventions. Unconfirmed or mismatched
+readback and late Store-lock acknowledgement retain complete `{ draft, source,
+target }` snapshots. Reconciliation validates the exact transformation and reads
+only: target is `confirmed`, source is `absent`, and every other state is
+`unresolved`. This capability is distinct from prepared-information corrections
+and the separate editable reflection on a COMPLETED archive. It adds no public
+Facilitator Panel, autosave or EDITOR-002 crash-draft recovery.
 
 **Internal native phase field group:** `editor-phase-fields.mjs` provides title,
 minute-duration and category inputs for one stable phase ID, using the existing

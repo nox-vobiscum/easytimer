@@ -654,6 +654,36 @@ export function updateExecutionPreparedInformationInRecord(record, options) {
     });
 }
 
+export function updateExecutionWorkshopNotesInRecord(record, options) {
+    exactFields(options, [
+        'executionId', 'expectedLifecycle', 'expectedAggregateRevision',
+        'expectedExecutionRevision', 'expectedRuntimeRevision', 'expectedAttemptId',
+        'expectedRunId', 'workshopNotes',
+    ], 'invalidData');
+    const { valid, index, execution } = executionExitSource(record, options);
+    if (execution.revision === Number.MAX_SAFE_INTEGER) fail('invalidRevision');
+    const updated = {
+        ...execution,
+        revision: execution.revision + 1,
+        workshopNotes: options.workshopNotes,
+    };
+    let validated;
+    if (execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE) {
+        validated = execution.attempt === null
+            ? validateReadyExecution(updated) : validateStartedExecution(updated);
+    } else {
+        validated = execution.attempt === null
+            ? validateSuspendedReadyExecution(updated) : validateSuspendedStartedExecution(updated);
+    }
+
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions: valid.executions.map((entry, entryIndex) => entryIndex === index
+            ? { ...entry, execution: validated } : entry),
+    });
+}
+
 export function retainExecutionPlanInRecord(record, options) {
     const { valid, index, execution } = executionExitSource(record, options);
     return validateEditorStoreRecord({

@@ -19,6 +19,18 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal Workshop-Notizen persistence:** complete rundown and
+  sparse stable-phase note snapshots can now be explicitly loaded, saved,
+  updated and cleared on an existing ACTIVE or SUSPENDED native Execution.
+  Exact revision and identity checks reject concurrent Timer, note,
+  plan/information and lifecycle changes; failed drafts remain available and
+  uncertain writes reconcile complete source/target records read-only without
+  retry. Runtime/Clock, checkpoints, prepared plans, first-START history,
+  outcomes, Templates and unrelated Executions remain unchanged. Existing
+  Suspend and Completion caller snapshots remain compatible, while stale callers
+  cannot replace a newer note save. This is distinct from prepared information
+  and COMPLETED reflection and adds no public Facilitator Panel or autosave.
+
 - **EDITOR-001 internal ACTIVE/SUSPENDED information correction:** prepared
   rundown information and stable-ID phase notes/resources can now be corrected
   on one existing native Execution through the locked Store writer. Exact
@@ -27,8 +39,8 @@ commit, staging and production deployment are distinct events.
   checkpoints, structure/timing, first-START baseline, outcomes, Workshop-
   Notizen, source Templates and unrelated records remain unchanged. Uncertain
   writes retain complete source/target snapshots for read-only reconciliation.
-  This adds no public Editor or Facilitator Panel UI and does not implement
-  independent Workshop-Notizen persistence.
+  This operation remains separate from Workshop-Notizen persistence and adds no
+  public Editor or Facilitator Panel UI.
 
 - **EDITOR-001 internal PLANNED editing:** an isolated Execution draft reuses the
   existing native planning-field/phase operations and explicitly saves its full
