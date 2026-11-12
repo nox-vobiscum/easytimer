@@ -169,9 +169,11 @@ function validateSource(source) {
 }
 
 function validateExecution(execution, lifecycle, validateAttempt) {
+    const completed = lifecycle === EXECUTION_LIFECYCLES.COMPLETED;
     exactFields(execution, [
         'schemaVersion', 'kind', 'id', 'revision', 'runtimeRevision', 'source', 'lifecycle',
         'currentPlan', 'workshopNotes', 'attempt',
+        ...(completed ? ['completion', 'reflection'] : []),
     ], ['phaseOutcomes']);
     if (execution.schemaVersion !== EDITOR_SCHEMA_VERSION || execution.kind !== EDITOR_KINDS.EXECUTION) fail('invalidData');
     if (execution.lifecycle !== lifecycle) fail('invalidLifecycle');
@@ -181,6 +183,8 @@ function validateExecution(execution, lifecycle, validateAttempt) {
     const currentPlan = validateRundownPlan(execution.currentPlan);
     const attempt = validateAttempt(execution.attempt);
     if (attempt === null && Object.hasOwn(execution, 'phaseOutcomes')) fail('invalidPhaseOutcomes');
+    const phaseOutcomes = attempt === null ? null
+        : validatePhaseOutcomes(execution.phaseOutcomes, attempt.startSnapshot, currentPlan);
     return {
         schemaVersion: EDITOR_SCHEMA_VERSION,
         kind: EDITOR_KINDS.EXECUTION,
@@ -192,10 +196,23 @@ function validateExecution(execution, lifecycle, validateAttempt) {
         currentPlan,
         workshopNotes: validateWorkshopNotes(execution.workshopNotes, currentPlan),
         attempt,
-        ...(attempt === null ? {} : { phaseOutcomes: validatePhaseOutcomes(
-            execution.phaseOutcomes, attempt.startSnapshot, currentPlan,
-        ) }),
+        ...(attempt === null ? {} : { phaseOutcomes }),
+        ...(completed ? {
+            completion: validateCompletion(execution.completion, attempt.startedAt, phaseOutcomes),
+            reflection: note(execution.reflection, 'invalidReflection'),
+        } : {}),
     };
+}
+
+function validateCompletion(completion, startedAt, phaseOutcomes) {
+    exactFields(completion, ['completedAt', 'workshopOvertimeMs']);
+    if (!Number.isSafeInteger(completion.completedAt) || completion.completedAt < startedAt
+        || !Number.isSafeInteger(completion.workshopOvertimeMs) || completion.workshopOvertimeMs < 0) {
+        fail('invalidCompletion');
+    }
+    const activeMs = phaseOutcomes.reduce((sum, outcome) => sum + outcome.activeMs, completion.workshopOvertimeMs);
+    if (!Number.isSafeInteger(activeMs) || activeMs > completion.completedAt - startedAt) fail('invalidCompletion');
+    return { completedAt: completion.completedAt, workshopOvertimeMs: completion.workshopOvertimeMs };
 }
 
 function validatePhaseOutcomes(outcomes, baseline, currentPlan) {
@@ -261,6 +278,28 @@ export function validateSuspendedReadyExecution(execution) {
 
 export function validateSuspendedStartedExecution(execution) {
     return validateExecution(execution, EXECUTION_LIFECYCLES.SUSPENDED, validateAttempt);
+}
+
+export function validateCompletedExecution(execution) {
+    return validateExecution(execution, EXECUTION_LIFECYCLES.COMPLETED, validateAttempt);
+}
+
+export function completeStartedExecution(execution, options) {
+    if (![EXECUTION_LIFECYCLES.ACTIVE, EXECUTION_LIFECYCLES.SUSPENDED].includes(execution?.lifecycle)) {
+        fail('invalidLifecycle');
+    }
+    const started = execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE
+        ? validateStartedExecution(execution) : validateSuspendedStartedExecution(execution);
+    exactFields(options, ['completedAt', 'workshopOvertimeMs', 'workshopNotes']);
+    return validateCompletedExecution({
+        ...started,
+        lifecycle: EXECUTION_LIFECYCLES.COMPLETED,
+        revision: nextRevision(started.revision),
+        runtimeRevision: nextRevision(started.runtimeRevision),
+        workshopNotes: options.workshopNotes,
+        completion: { completedAt: options.completedAt, workshopOvertimeMs: options.workshopOvertimeMs },
+        reflection: '',
+    });
 }
 
 export function createPlannedExecution(template, executionId = crypto.randomUUID()) {

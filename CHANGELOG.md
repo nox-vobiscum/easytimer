@@ -19,6 +19,17 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal completion and archive:** explicit archival completion
+  captures final authoritative phase results, caller-supplied Workshop-Notizen
+  and separate workshop overtime, retains the original baseline and final plan,
+  and removes the matching runtime/checkpoint in one confirmed Store write.
+  Started suspended executions archive without activation or suspended-time
+  accrual. Existing archived history is protected at write time; only the single
+  reflection and its permitted revisions may change. COMPLETED backups and
+  individual exports now round-trip passively. Conduct and removal remain
+  independent historical facts. No public completion/archive UI, local timer
+  detachment, ownership release, archive deletion or cloning is included.
+
 - **EDITOR-001 internal actual phase outcomes:** started native executions now
   require compact per-phase conducted/active-duration/overtime records. Native
   Store transitions sample the existing authoritative clock before manual phase

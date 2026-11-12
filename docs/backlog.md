@@ -117,15 +117,26 @@ regression safety; preserve released timer, editor and recovery behavior until
 separately approved replacement. The internal Schema-2 portability contract can
 strictly serialize and parse complete Template/Execution backups and individual
 Template or Execution snapshots without persistence or activation. Public
-import/export UI, restore policy and COMPLETED/archive support remain separate
-new-model requirements, not historical migration tasks.
+import/export UI and restore policy remain separate new-model requirements, not
+historical migration tasks. COMPLETED archival persistence is now internal only.
 
 Deleting a reusable native Template does not cascade into its independent
-Executions: PLANNED, ACTIVE, SUSPENDED and future COMPLETED records retain their
+Executions: PLANNED, ACTIVE, SUSPENDED and COMPLETED records retain their
 plans, progress and historical source Template ID, and an ACTIVE runtime remains
 untouched. A future operation may create a new independent Execution from an
 existing Execution with a fresh identity and independent progress; that cloning
 capability is not implemented and requires a separate approved slice.
+
+Internal COMPLETED persistence now archives a deliberately ended, previously
+started ACTIVE or SUSPENDED execution with its original baseline, final plan,
+phase outcomes, full caller-supplied Workshop-Notizen and separate workshop
+overtime. The Store atomically removes only its matching runtime/checkpoint and
+protects already archived history at write time. Only the single reflection and
+its permitted revisions may change; whole-archive deletion is not implemented.
+COMPLETED records round-trip passively in backups and individual exports.
+Removed and conducted remain independent historical facts. Public completion
+dialogs, archive/reflection views, local detachment, ownership release and
+navigation remain pending; no public cutover or automatic completion is included.
 
 Internal actual phase outcomes are now recorded for started native executions,
 using stable phase IDs, conducted status, active milliseconds and phase overtime.
@@ -136,7 +147,7 @@ the contract, with full-record uncertain-write reconciliation. Retain/discard
 removes the selected outcome history. Incomplete started native development
 records are deliberately rejected without migration, inferred history, repair or
 overwrite; unstarted native records and released V1 data are unaffected. This is
-unreleased internal functionality, not COMPLETED/archive or public UI integration.
+unreleased internal functionality supporting archival, not public UI integration.
 
 Internal persistent non-archiving exits now support ACTIVE and SUSPENDED READY
 and STARTED executions. Retain-plan returns the same execution to PLANNED with
@@ -147,7 +158,7 @@ the same record write, while unrelated active runtime remains unchanged.
 Uncertain outcomes retain read-only source/target reconciliation without retries.
 Neither exit releases ownership or detaches the local timer. Public confirmation,
 detachment, ownership release and navigation remain unimplemented; actual phase
-results and COMPLETED/archive are separate pending work. These internal exits
+results and COMPLETED archival use the separate internal contracts above. These exits
 do not implement PLANNED library deletion or change the NO-MIGRATION decision.
 
 An unreleased internal native Template import service now separates strict JSON
@@ -166,8 +177,9 @@ Native backups include all currently supported Templates and independent
 Executions, including suspended checkpoints and a matching saved runtime for an
 ACTIVE Execution. Individual exports use the same passive snapshot rule. Export
 documents do not grant timer ownership, and parsing never restores, activates or
-writes anything. COMPLETED records remain unsupported until their native
-lifecycle contract exists.
+writes anything. COMPLETED records now preserve their immutable history and
+single reflection through the same passive format; persistent Execution import
+and backup restore remain unsupported.
 
 The internal Planner service prepares copy-isolated create/edit drafts containing
 all native planning fields, captures aggregate and Template revisions for

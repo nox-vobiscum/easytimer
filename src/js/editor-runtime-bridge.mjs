@@ -2,6 +2,8 @@ import {
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     discardExecutionInRecord,
+    completeExecutionInRecord,
+    updateCompletedReflectionInRecord,
     retainExecutionPlanInRecord,
     resumeSuspendedExecutionInRecord,
     startReadyExecutionInRecord,
@@ -33,7 +35,7 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
             });
         } catch (error) {
             if ((error?.message === 'storageUnconfirmed' || error?.message === 'storageReadback'
-                || (['retainPlan', 'discard'].includes(kind) && error?.message === 'lockRequest'))
+                || (['retainPlan', 'discard', 'complete', 'reflection'].includes(kind) && error?.message === 'lockRequest'))
                 && source !== null && target !== null) {
                 pendingOperation = {
                     kind,
@@ -167,6 +169,17 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
             const snapshot = { ...options };
             return writeOperation('discard', snapshot, discardExecutionInRecord, false,
                 snapshot.expectedLifecycle !== 'suspended');
+        },
+        async completeExecution(options) {
+            let snapshot;
+            try { snapshot = structuredClone(options); }
+            catch { fail('invalidData'); }
+            return writeOperation('complete', snapshot, completeExecutionInRecord, false,
+                snapshot?.expectedLifecycle !== 'suspended');
+        },
+        updateCompletedReflection(options) {
+            const snapshot = { ...options };
+            return writeOperation('reflection', snapshot, updateCompletedReflectionInRecord, false, false);
         },
         adoptPersistedActive,
         reconcilePendingActivation(expectedIdentity = null) {

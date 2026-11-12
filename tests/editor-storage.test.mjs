@@ -17,6 +17,8 @@ import {
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     createEditorStore,
+    completeExecutionInRecord,
+    updateCompletedReflectionInRecord,
     discardExecutionInRecord,
     deleteTemplateInRecord,
     insertTemplateInRecord,
@@ -432,6 +434,233 @@ test('stale concurrent progress cannot overwrite recorded phase outcomes', async
         applyStartedSessionActionInRecord(current, sessionActionOptions(source, 'PAUSE', 13_000))), /conflict/);
     assert.deepEqual(await writer.read(), target);
     assert.equal(storage.state.writes, 0);
+});
+
+function completionOptions(source, completedAt, executionId = 'execution-1', changes = {}) {
+    const execution = source.executions.find(entry => entry.execution.id === executionId).execution;
+    return { ...executionExitOptions(source, executionId), completedAt,
+        workshopNotes: execution.workshopNotes, ...changes };
+}
+
+function reflectionOptions(source, reflection, changes = {}) {
+    const execution = source.executions.find(entry => entry.execution.lifecycle === 'completed').execution;
+    return { executionId: execution.id, expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision, reflection, ...changes };
+}
+
+test('archival completion captures RUNNING, PAUSED and phase overtime without advancing the agenda', () => {
+    const running = startedRecord();
+    const paused = advance(running, 'PAUSE', 12_000);
+    for (const [input, completedAt, activeMs, overtimeMs] of [
+        [running, 12_000, 10_000, 0], [paused, 112_000, 10_000, 0],
+        [running, 72_000, 70_000, 10_000],
+        [advance(running, 'PAUSE', 72_000), 172_000, 70_000, 10_000],
+    ]) {
+        const source = structuredClone(input);
+        source.templates.push(template());
+        source.executions.push(entry(planned('unrelated')));
+        source.executions[0].execution.currentPlan.preparedInformation = '**Corrected information**';
+        source.executions[0].execution.currentPlan.phases[0].resources = [{ label: 'Final board', url: 'https://example.test/final' }];
+        const notes = { rundown: 'All open rundown notes', phases: [
+            { phaseId: 'phase-1', text: 'All open phase one notes' }, { phaseId: 'phase-2', text: 'Future phase notes' },
+        ] };
+        const before = structuredClone(source);
+        const completed = completeExecutionInRecord(source, completionOptions(source, completedAt, 'execution-1', { workshopNotes: notes }));
+        const execution = before.executions[0].execution;
+        assert.deepEqual(completed, { ...before, revision: before.revision + 1, activeRuntime: null,
+            executions: [{ execution: { ...execution, lifecycle: 'completed', revision: execution.revision + 1,
+                runtimeRevision: execution.runtimeRevision + 1, workshopNotes: notes,
+                phaseOutcomes: [outcome('phase-1', true, activeMs, overtimeMs), outcome('phase-2', false)],
+                completion: { completedAt, workshopOvertimeMs: 0 }, reflection: '' }, suspendedCheckpoint: null },
+            before.executions[1]] });
+        assert.deepEqual(source, before);
+        assert.deepEqual(validateEditorStoreRecord(completed), completed);
+        completed.executions[0].execution.currentPlan.phases[0].resources[0].label = 'Output only';
+        completed.executions[0].execution.workshopNotes.rundown = 'Output only';
+        assert.deepEqual(source, before);
+        assert.equal(notes.rundown, 'All open rundown notes');
+    }
+});
+
+test('completion preserves READY between phases, final overtime and automatic catch-up independently', () => {
+    const running = startedRecord();
+    const next = advance(running, 'NEXT', 12_000);
+    const readyArchive = completeExecutionInRecord(next, completionOptions(next, 500_000));
+    assert.deepEqual(phaseResults(readyArchive), [outcome('phase-1', true, 10_000), outcome('phase-2', false)]);
+    const last = advance(next, 'START', 20_000);
+    const endedAgenda = advance(last, 'COMPLETE', 25_000);
+    const stopped = advance(endedAgenda, 'STOP_OVERTIME', 35_000);
+    for (const [source, at, overtime] of [[endedAgenda, 45_000, 20_000], [stopped, 500_000, 10_000]]) {
+        const archived = completeExecutionInRecord(source, completionOptions(source, at));
+        assert.deepEqual(phaseResults(archived), phaseResults(source));
+        assert.equal(archived.executions[0].execution.completion.workshopOvertimeMs, overtime);
+    }
+    const automatic = startedRecord({ currentPlan: { ...planned().currentPlan, transitionMode: 'automatic' } });
+    const archived = completeExecutionInRecord(automatic, completionOptions(automatic, 200_000));
+    assert.deepEqual(phaseResults(archived), [outcome('phase-1', true, 60_000), outcome('phase-2', true, 120_000)]);
+    assert.deepEqual(archived.executions[0].execution.completion, { completedAt: 200_000, workshopOvertimeMs: 18_000 });
+});
+
+test('suspended archival completion preserves frozen history and another ACTIVE execution without reactivation', () => {
+    const running = startedRecord();
+    const suspended = suspendActiveExecutionInRecord(running, suspendOptions(running, 12_000, { rundown: 'Saved', phases: [] }));
+    suspended.executions.push(entry(planned('other')));
+    const source = activatePlannedExecutionInRecord(suspended, { ...activationOptions(), executionId: 'other',
+        expectedAggregateRevision: suspended.revision, runtimeRunId: 'other-run', savedAt: 20_000 });
+    const before = structuredClone(source);
+    const target = completeExecutionInRecord(source, completionOptions(source, 1_000_000));
+    assert.deepEqual(target.activeRuntime, source.activeRuntime);
+    assert.deepEqual(target.executions[1], source.executions[1]);
+    assert.deepEqual(phaseResults(target), phaseResults(source));
+    assert.equal(target.executions[0].suspendedCheckpoint, null);
+    assert.equal(target.executions[0].execution.lifecycle, 'completed');
+    assert.equal(target.executions[0].execution.completion.workshopOvertimeMs, 0);
+    assert.deepEqual(source, before);
+});
+
+test('removed and conducted are independent archive facts with an unchanged first-START baseline', () => {
+    const source = advance(startedRecord(), 'NEXT', 12_000);
+    for (const phaseId of ['phase-1', 'phase-2']) {
+        const modified = structuredClone(source);
+        modified.executions[0].execution.currentPlan.phases = modified.executions[0].execution.currentPlan.phases.filter(phase => phase.id !== phaseId);
+        const archived = completeExecutionInRecord(modified, completionOptions(modified, 20_000));
+        assert.deepEqual(phaseResults(archived), [outcome('phase-1', true, 10_000), outcome('phase-2', false)]);
+        assert.deepEqual(archived.executions[0].execution.attempt, source.executions[0].execution.attempt);
+        assert.deepEqual(archived.executions[0].execution.currentPlan, modified.executions[0].execution.currentPlan);
+    }
+});
+
+test('suspended phase and stopped workshop overtime remain frozen until deliberate archival', () => {
+    const running = startedRecord();
+    const next = advance(running, 'NEXT', 12_000);
+    const last = advance(next, 'START', 20_000);
+    const stopped = advance(advance(last, 'COMPLETE', 25_000), 'STOP_OVERTIME', 35_000);
+    for (const [source, at, workshopOvertimeMs] of [[running, 72_000, 0], [stopped, 40_000, 10_000]]) {
+        const suspended = suspendActiveExecutionInRecord(source, suspendOptions(source, at, { rundown: '', phases: [] }));
+        const archived = completeExecutionInRecord(suspended, completionOptions(suspended, 1_000_000));
+        assert.deepEqual(phaseResults(archived), phaseResults(suspended));
+        assert.equal(archived.executions[0].execution.completion.workshopOvertimeMs, workshopOvertimeMs);
+        assert.equal(archived.executions[0].suspendedCheckpoint, null);
+    }
+});
+
+test('completion rejects never-started states, stale identities/revisions, malformed notes and clock anomalies', () => {
+    const ready = activatePlannedExecutionInRecord(record({ executions: [entry(planned())] }), activationOptions());
+    const dormant = suspendActiveExecutionInRecord(ready, suspendOptions(ready, 2000, { rundown: '', phases: [] }));
+    for (const source of [ready, dormant]) {
+        assert.throws(() => completeExecutionInRecord(source, completionOptions(source, 3000)), /invalidAttempt/);
+    }
+    const source = startedRecord();
+    const before = structuredClone(source);
+    for (const [changes, error] of [
+        [{ completedAt: 1999 }, 'CLOCK_ANOMALY'], [{ completedAt: NaN }, 'invalidCompletion'],
+        [{ expectedAggregateRevision: 0 }, 'conflict'], [{ expectedExecutionRevision: 0 }, 'conflict'],
+        [{ expectedRuntimeRevision: 0 }, 'conflict'], [{ executionId: 'missing' }, 'executionNotFound'],
+        [{ expectedAttemptId: 'foreign' }, 'invalidAttemptBinding'], [{ expectedRunId: 'foreign' }, 'invalidActiveRuntimeBinding'],
+        [{ workshopNotes: { rundown: '', phases: [{ phaseId: 'unknown', text: 'Invalid' }] } }, 'invalidNotes'],
+    ]) assert.throws(() => completeExecutionInRecord(source, completionOptions(source, 12_000, 'execution-1', changes)), new RegExp(error));
+    const suspended = suspendActiveExecutionInRecord(source, suspendOptions(source, 12_000, { rundown: '', phases: [] }));
+    assert.throws(() => completeExecutionInRecord(suspended, completionOptions(suspended, 11_999)), /CLOCK_ANOMALY/);
+    const overflow = structuredClone(source); overflow.executions[0].execution.revision = Number.MAX_SAFE_INTEGER;
+    assert.throws(() => completeExecutionInRecord(overflow, completionOptions(overflow, 12_000)), /invalidRevision/);
+    assert.deepEqual(source, before);
+});
+
+test('reflection updates advance only permitted revisions and leave complete history and other runtime intact', async () => {
+    const source = completeExecutionInRecord(startedRecord(), completionOptions(startedRecord(), 12_000));
+    source.templates.push(template());
+    source.executions.push(entry(planned('other')));
+    const withActive = activatePlannedExecutionInRecord(source, { ...activationOptions(), executionId: 'other',
+        expectedAggregateRevision: source.revision, runtimeRunId: 'other-run', savedAt: 20_000 });
+    const storage = memory(JSON.stringify(withActive));
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks: aggregateLockManager() });
+    let prior = withActive;
+    for (const reflection of ['**Retrospective**\n- Learn', 'Replacement', '']) {
+        const target = await writer.write(current => updateCompletedReflectionInRecord(current, reflectionOptions(prior, reflection)));
+        assert.deepEqual(target, { ...prior, revision: prior.revision + 1,
+            executions: [{ ...prior.executions[0], execution: { ...prior.executions[0].execution,
+                revision: prior.executions[0].execution.revision + 1, reflection } }, prior.executions[1]] });
+        assert.deepEqual(await writer.read(), target);
+        prior = target;
+    }
+    assert.equal(storage.state.writes, 3);
+    const current = prior;
+    await assert.rejects(writer.write(record => updateCompletedReflectionInRecord(record,
+        reflectionOptions(withActive, 'Stale unsaved text'))), /conflict/);
+    assert.deepEqual(await writer.read(), current);
+    const replacement = structuredClone(current.templates[0]); replacement.plan.name = 'Source edited independently';
+    const updatedTemplate = await writer.write(record => updateTemplateInRecord(record, {
+        template: replacement, expectedAggregateRevision: current.revision, expectedTemplateRevision: replacement.revision,
+    }));
+    assert.deepEqual(updatedTemplate.executions, current.executions);
+});
+
+test('write-time archive guard rejects valid-looking history changes, deletion and illegal reflection revisions', async () => {
+    const completed = completeExecutionInRecord(startedRecord(), completionOptions(startedRecord(), 12_000));
+    const mutations = [
+        execution => { execution.currentPlan.name = 'Rewritten'; },
+        execution => { execution.attempt.startSnapshot.name = 'Rewritten'; },
+        execution => { execution.attempt.startedAt -= 1; },
+        execution => { execution.phaseOutcomes[0].activeMs += 1; execution.completion.completedAt += 1; },
+        execution => { execution.workshopNotes.rundown = 'Rewritten'; },
+        execution => { execution.completion.completedAt += 1; },
+        execution => { execution.completion.workshopOvertimeMs += 1; execution.completion.completedAt += 1; },
+        execution => { execution.source.id = 'Rewritten'; },
+        execution => { execution.runtimeRevision += 1; },
+        execution => { execution.revision += 2; },
+        execution => { execution.reflection = 'Missing revision'; },
+        execution => { execution.id = 'Reassigned'; },
+    ];
+    const storage = memory(JSON.stringify(completed));
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks: aggregateLockManager() });
+    for (const mutate of mutations) {
+        await assert.rejects(writer.write(current => {
+            const target = structuredClone(current); target.revision += 1;
+            mutate(target.executions[0].execution);
+            return target;
+        }), /immutableArchive/);
+        assert.deepEqual(await writer.read(), completed);
+    }
+    await assert.rejects(writer.write(current => ({ ...current, revision: current.revision + 1, executions: [] })), /immutableArchive/);
+    assert.equal(storage.state.writes, 0);
+});
+
+test('reflection rejects invalid values, missing targets and non-completed records; quota errors preserve history', async () => {
+    const completed = completeExecutionInRecord(startedRecord(), completionOptions(startedRecord(), 12_000));
+    for (const reflection of [null, undefined, 42, {}]) {
+        assert.throws(() => updateCompletedReflectionInRecord(completed, reflectionOptions(completed, reflection)), /invalidReflection/);
+    }
+    assert.throws(() => updateCompletedReflectionInRecord(completed,
+        reflectionOptions(completed, 'Text', { executionId: 'missing' })), /executionNotFound/);
+    const active = startedRecord();
+    assert.throws(() => updateCompletedReflectionInRecord(active, { executionId: 'execution-1',
+        expectedAggregateRevision: active.revision, expectedExecutionRevision: active.executions[0].execution.revision,
+        reflection: 'Not yet archived' }), /invalidLifecycle/);
+    const storage = memory(JSON.stringify(completed)); storage.state.failWrite = 'QuotaExceededError';
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks: aggregateLockManager() });
+    await assert.rejects(writer.write(current => updateCompletedReflectionInRecord(current, reflectionOptions(completed, 'Unsaved'))), /storageQuota/);
+    assert.deepEqual(await writer.read(), completed);
+    assert.equal(storage.state.writes, 0);
+});
+
+test('unrelated retain/discard preserves existing archives through the write-time guard', async () => {
+    const completed = completeExecutionInRecord(startedRecord(), completionOptions(startedRecord(), 12_000));
+    completed.executions.push(entry(planned('other')));
+    const source = activatePlannedExecutionInRecord(completed, { ...activationOptions(), executionId: 'other',
+        expectedAggregateRevision: completed.revision, runtimeRunId: 'other-run', savedAt: 20_000 });
+    for (const operation of [retainExecutionPlanInRecord, discardExecutionInRecord]) {
+        const storage = memory(JSON.stringify(source));
+        const writer = createEditorStoreWriter({ getStorage: () => storage, locks: aggregateLockManager() });
+        const target = await writer.write(current => operation(current, executionExitOptions(source, 'other')));
+        assert.deepEqual(target.executions[0], source.executions[0]);
+        assert.deepEqual(target.templates, source.templates);
+        assert.equal(target.activeRuntime, null);
+        assert.deepEqual(await writer.read(), target);
+    }
+    const archived = source.executions[0].execution;
+    assert.throws(() => activatePlannedExecutionInRecord(source, { ...activationOptions(),
+        expectedAggregateRevision: source.revision, expectedExecutionRevision: archived.revision,
+        expectedRuntimeRevision: archived.runtimeRevision }), /invalidLifecycle/);
 });
 
 test('inserts one native Schema-2 template without changing unrelated aggregate state', () => {

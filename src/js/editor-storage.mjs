@@ -2,11 +2,13 @@ import {
     EXECUTION_LIFECYCLES,
     activatePlannedExecution,
     createPlannedExecution,
+    completeStartedExecution,
     retainCurrentPlan,
     resumeReadyExecution,
     startActiveExecution,
     suspendReadyExecution,
     validatePlannedExecution,
+    validateCompletedExecution,
     validateReadyExecution,
     validateStartedExecution,
     validateSuspendedReadyExecution,
@@ -106,7 +108,8 @@ function validateExecutionEntry(entry) {
             : validateStartedExecution(execution);
         if (entry.suspendedCheckpoint !== null) fail('unexpectedCheckpoint');
     } else if (execution?.lifecycle === EXECUTION_LIFECYCLES.COMPLETED) {
-        fail('unsupportedLifecycle');
+        validExecution = validateCompletedExecution(execution);
+        if (entry.suspendedCheckpoint !== null) fail('unexpectedCheckpoint');
     } else {
         fail('invalidLifecycle');
     }
@@ -595,6 +598,75 @@ export function discardExecutionInRecord(record, options) {
     });
 }
 
+export function completeExecutionInRecord(record, options) {
+    const { valid, index, execution } = executionExitSource(record, options);
+    if (execution.attempt === null) fail('invalidAttempt');
+    const { completedAt, workshopNotes } = options;
+    if (!Number.isSafeInteger(completedAt) || completedAt < 0) fail('invalidCompletion');
+    let checkpoint;
+    let observed = execution;
+    if (execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE) {
+        if (completedAt < valid.activeRuntime.savedAt) fail('CLOCK_ANOMALY');
+        checkpoint = captureExecutionRuntimeCheckpoint(execution,
+            valid.activeRuntime.run, valid.activeRuntime.clock, completedAt);
+        observed = recordExecutionPhaseOutcomes(execution, checkpoint.run, checkpoint.clock);
+    } else {
+        checkpoint = valid.executions[index].suspendedCheckpoint;
+        if (completedAt < checkpoint.capturedAt) fail('CLOCK_ANOMALY');
+    }
+    validateExecutionOutcomeRuntime(observed, checkpoint.run, checkpoint.clock);
+    const completed = completeStartedExecution(observed, {
+        completedAt, workshopNotes,
+        workshopOvertimeMs: checkpoint.run.stage === 'COMPLETED' ? checkpoint.clock.overtimeMs : 0,
+    });
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions: valid.executions.map((entry, entryIndex) => entryIndex === index
+            ? { execution: completed, suspendedCheckpoint: null } : entry),
+        activeRuntime: execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE ? null : valid.activeRuntime,
+    });
+}
+
+export function updateCompletedReflectionInRecord(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const { executionId, expectedAggregateRevision, expectedExecutionRevision, reflection } = options;
+    if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+    safeRevision(expectedAggregateRevision);
+    if (!Number.isSafeInteger(expectedExecutionRevision) || expectedExecutionRevision < 1) fail('invalidRevision');
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+    const index = valid.executions.findIndex(entry => entry.execution.id === executionId);
+    if (index < 0) fail('executionNotFound');
+    if (valid.executions[index].execution.lifecycle !== EXECUTION_LIFECYCLES.COMPLETED) fail('invalidLifecycle');
+    const execution = validateCompletedExecution(valid.executions[index].execution);
+    if (execution.revision !== expectedExecutionRevision) fail('conflict');
+    if (execution.revision === Number.MAX_SAFE_INTEGER) fail('invalidRevision');
+    const updated = validateCompletedExecution({ ...execution, revision: execution.revision + 1, reflection });
+    return validateEditorStoreRecord({
+        ...valid, revision: valid.revision + 1,
+        executions: valid.executions.map((entry, entryIndex) => entryIndex === index
+            ? { execution: updated, suspendedCheckpoint: null } : entry),
+    });
+}
+
+// Compare persisted history, not just its shape. Archive deletion is deliberately
+// unavailable until a separately approved library operation defines that path.
+function protectCompletedHistory(current, target) {
+    const targets = new Map(target.executions.map(entry => [entry.execution.id, entry.execution]));
+    for (const { execution } of current.executions) {
+        if (execution.lifecycle !== EXECUTION_LIFECYCLES.COMPLETED) continue;
+        const replacement = targets.get(execution.id);
+        if (!replacement) fail('immutableArchive');
+        const { revision: oldRevision, reflection: oldReflection, ...history } = execution;
+        const { revision: newRevision, reflection: newReflection, ...newHistory } = replacement;
+        if (JSON.stringify(history) !== JSON.stringify(newHistory)) fail('immutableArchive');
+        if (oldRevision === newRevision && oldReflection === newReflection) continue;
+        if (oldRevision === Number.MAX_SAFE_INTEGER || newRevision !== oldRevision + 1) fail('immutableArchive');
+    }
+}
+
 function emptyRecord() {
     return validateEditorStoreRecord({
         schemaVersion: EDITOR_STORE_SCHEMA_VERSION,
@@ -645,6 +717,7 @@ export function createEditorStore(getStorage) {
             if (currentRaw !== snapshot) fail('conflict');
             const current = parse(currentRaw);
             if (current.revision !== expectedRevision) fail('conflict');
+            protectCompletedHistory(current, valid);
 
             const raw = JSON.stringify(valid);
             try { getStorage().setItem(EDITOR_STORAGE_KEY, raw); }

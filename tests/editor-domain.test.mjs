@@ -12,6 +12,7 @@ import {
     RUNDOWN_CATEGORIES,
     activatePlannedExecution,
     createPlannedExecution,
+    completeStartedExecution,
     retainCurrentPlan,
     resumeReadyExecution,
     resumeStartedExecution,
@@ -19,6 +20,7 @@ import {
     suspendStartedExecution,
     suspendReadyExecution,
     validatePlannedExecution,
+    validateCompletedExecution,
     validateReadyExecution,
     validateRundownPlan,
     validateStartedExecution,
@@ -242,6 +244,50 @@ test('the first actual start creates one deterministic attempt and an isolated p
     assert.equal(started.attempt.startSnapshot.name, 'Workshop');
     assert.equal(started.attempt.startSnapshot.phases[0].notes, '*Welcome* everyone.');
     assert.equal(started.attempt.startSnapshot.phases[0].resources[0].label, 'Board');
+});
+
+test('deliberate completion freezes the existing execution and initializes one separate reflection', () => {
+    const ready = activatePlannedExecution(createPlannedExecution(template(), 'execution-completed'));
+    const started = startActiveExecution(ready, 'attempt-completed', 1000, 'run-completed');
+    const notes = { rundown: 'Final notes', phases: [{ phaseId: 'phase-2', text: 'Final phase notes' }] };
+    for (const source of [started, suspendStartedExecution(started)]) {
+        const before = structuredClone(source);
+        const completed = completeStartedExecution(source, { completedAt: 2000, workshopOvertimeMs: 0, workshopNotes: notes });
+        assert.deepEqual(completed, { ...before, lifecycle: 'completed', revision: before.revision + 1,
+            runtimeRevision: before.runtimeRevision + 1, workshopNotes: notes,
+            completion: { completedAt: 2000, workshopOvertimeMs: 0 }, reflection: '' });
+        assert.deepEqual(validateCompletedExecution(completed), completed);
+        assert.deepEqual(source, before);
+        completed.currentPlan.phases[0].resources[0].label = 'Output only';
+        completed.workshopNotes.rundown = 'Output only';
+        assert.deepEqual(source, before);
+        assert.equal(notes.rundown, 'Final notes');
+    }
+    assert.throws(() => completeStartedExecution(ready, { completedAt: 2000, workshopOvertimeMs: 0, workshopNotes: notes }), /invalidAttempt/);
+});
+
+test('COMPLETED validation is strict and no existing lifecycle operation can reactivate its history', () => {
+    const started = startActiveExecution(activatePlannedExecution(createPlannedExecution(template(), 'execution-completed')),
+        'attempt-completed', 1000, 'run-completed');
+    const completed = completeStartedExecution(started, { completedAt: 2000, workshopOvertimeMs: 0,
+        workshopNotes: { rundown: '', phases: [] } });
+    for (const invalid of [
+        { ...completed, attempt: null }, { ...completed, completion: null },
+        { ...completed, completion: { completedAt: 999, workshopOvertimeMs: 0 } },
+        { ...completed, completion: { completedAt: '2000', workshopOvertimeMs: 0 } },
+        { ...completed, completion: { completedAt: 2000, workshopOvertimeMs: -1 } },
+        { ...completed, completion: { completedAt: 2000, workshopOvertimeMs: 1001 } },
+        { ...completed, phaseOutcomes: completed.phaseOutcomes.map((outcome, index) => index === 0
+            ? { ...outcome, activeMs: 1001 } : outcome) },
+        { ...completed, completion: { ...completed.completion, extra: true } },
+        { ...completed, reflection: null }, { ...completed, reflection: 42 },
+    ]) assert.throws(() => validateCompletedExecution(invalid));
+    for (const operation of [activatePlannedExecution, resumeReadyExecution, resumeStartedExecution,
+        suspendReadyExecution, suspendStartedExecution, retainCurrentPlan]) {
+        assert.throws(() => operation(completed), /invalidLifecycle|invalidData/);
+    }
+    assert.throws(() => completeStartedExecution(completed, { completedAt: 3000, workshopOvertimeMs: 0,
+        workshopNotes: { rundown: '', phases: [] } }), /invalidLifecycle/);
 });
 
 test('later timer starts preserve the original attempt, baseline and revisions', () => {

@@ -8,7 +8,7 @@ implemented and verified
 locally but not released. The boundaries
 map prepared Editor data to native Templates and use the lock-protected Editor
 Store without exposing a second library. Public Editor UI and unified-library integration, remaining
-lifecycle/archive workflows and the Facilitator Panel remain pending.
+public lifecycle/archive workflows and the Facilitator Panel remain pending.
 **Priority:** High / Near-term. Every subsequent implementation slice requires
 separate explicit Product Owner approval.
 
@@ -44,6 +44,53 @@ validator. This is an internal presentation boundary only, not the final phase
 details design. Name/transition and Rundown metadata controls, Notes/Resources
 overlays and insertion/removal/reorder UI remain pending. No public Planner
 import, packaging or Service Worker cutover is included.
+
+**Internal COMPLETED/archive contract (unreleased):**
+`completeExecutionInRecord(record, options)` and Runtime Bridge
+`completeExecution(options)` explicitly archive a STARTED ACTIVE or SUSPENDED
+execution. They use the existing exit identity/revision preconditions, plus an
+explicit integer `completedAt` and complete `workshopNotes` snapshot supplied by
+the caller. Unstarted READY is rejected. ACTIVE completion reconciles/freezes the
+existing Session clock and records final phase outcomes; it does not simulate
+NEXT/COMPLETE or force the agenda to finish. SUSPENDED completion uses its frozen
+validated checkpoint, never activates it and adds no suspended time. Completion
+time cannot precede the last authoritative runtime/checkpoint timestamp.
+
+The same execution becomes COMPLETED with its source, original
+`attempt.startSnapshot`, final `currentPlan`, final `phaseOutcomes` and Workshop-
+Notizen retained. There is no duplicate final-plan snapshot. New fields are
+`completion: { completedAt, workshopOvertimeMs }` and initially `reflection: ''`.
+Measured active phase time plus workshop overtime cannot exceed the wall-clock
+span from first START to completion; this is a consistency bound, not a replacement
+for measured durations or a calculation that counts pauses as active time.
+Workshop overtime is captured separately only from the end-of-agenda clock;
+it never extends the settled last phase's duration. Aggregate, Execution and
+runtime revisions increase once. The matching ACTIVE runtime or selected
+suspended checkpoint is removed atomically; unrelated active state is unchanged.
+
+`updateCompletedReflectionInRecord()` and Bridge `updateCompletedReflection()`
+change only the one reflection value and increment aggregate/Execution revisions.
+Runtime revision, lifecycle, identity, source and all historical content remain
+fixed. The Store compares already persisted archives against every write target:
+history mutation, replacement, reactivation, removal or invalid reflection revision
+is rejected before storage. Whole-archive deletion awaits a separate approved
+library operation. Reflection is a String, with no new per-field text limit;
+invalid types fail validation, storage quota failures are controlled, and JSON
+export/import retains its existing 10 MiB UTF-8 document limit. No version history,
+new editor or renderer is introduced.
+
+ACTIVE completion requires held ownership before and at write entry. SUSPENDED
+completion and reflection need only the existing Store lock. Every new Bridge
+operation retains full source/target pending snapshots after unconfirmed readback
+or a late lock-request failure, blocks overlapping mutations and reconciles
+read-only without retry. Confirmed calls return the full Store record; pending
+reconciliation identifies `kind: 'complete' | 'reflection'` and source/target/conflict.
+No method detaches local runtime, releases ownership, closes the Panel or navigates.
+The later UI must collect every open note draft, confirm persistence/reconciliation,
+detach the local runtime, release ownership and only then leave. Failed operations
+must retain editable input. COMPLETED records now round-trip in passive backups
+and individual Execution documents; Execution import and backup restore remain
+unsupported, and Template import remains Template-only. No public cutover is included.
 
 **Internal actual phase-outcome contract (unreleased):** A native Execution with
 an Attempt must include `phaseOutcomes`, an array of exact records
@@ -87,9 +134,9 @@ without complete outcomes fail validation/loading/portability. There is no defau
 history, conversion, repair, automatic deletion, or invalid-Store-to-empty fallback.
 Unstarted native PLANNED/READY records remain valid without invented history;
 released V1 persistence, Session engine and Recovery are unchanged. This records
-results for future archival, not COMPLETED persistence, archive UI, live timing
-edits or a chronological event log. Future early finalization must sample its
-current authoritative phase clock before freezing the final result.
+results for the internal archival contract above, not archive UI, live timing
+edits or a chronological event log. Early finalization samples the current
+authoritative phase clock before freezing the final result.
 
 **Internal persistent retain/discard contract (unreleased):**
 `retainExecutionPlanInRecord(record, options)` and
@@ -130,8 +177,8 @@ These operations never release ownership, detach a local timer, close a Panel
 or navigate. Future UI must confirm intent, persist/reconcile, detach the local
 runtime, release ownership and then navigate; editable drafts stay available on
 failure. Bridge pending state is still in-memory only. Actual phase-result
-recording, archival/COMPLETED, public ending/reset UI and historical migration
-are not introduced.
+recording and archival use the separate internal contracts above. Public
+ending/reset UI and historical migration are not introduced by these exits.
 
 **Internal native Template import contract (unreleased):**
 `createNativeTemplateImportService({ writer, createId })` in
@@ -253,9 +300,9 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 
 - Distinguish **reusable templates** from **individual workshop rundowns / executions** in the user's library. A user may create and deliberately edit templates, then prepare a separate workshop-specific rundown from one (with or without customization). Starting an unchanged template still creates an **independent execution entity**, not a modification of the original.
 - An execution may be planned, active in the timer, deliberately suspended, and eventually deliberately ended. **Archiving is optional:** only executions the facilitator chooses to archive become persistent **Abgeschlossen** historical records in the library; they remain independently available rather than disappearing or being silently merged into their source template. Deliberately ending an execution must not require adding an archive entry. Precise end-without-archive disposal/preservation choices still require UX review.
-- Deleting a reusable Template is permitted and never cascades into independent Executions. Their plans, progress and historical source Template ID remain unchanged, including while an ACTIVE runtime exists. This applies to PLANNED, ACTIVE, SUSPENDED and future COMPLETED records.
+- Deleting a reusable Template is permitted and never cascades into independent Executions. Their plans, progress and historical source Template ID remain unchanged, including while an ACTIVE runtime exists. This applies to PLANNED, ACTIVE, SUSPENDED and COMPLETED records.
 - A future separately approved operation may use an existing Execution as the source for a new independent cloned Execution. The clone receives a new identity and independent progress; this capability is not implemented by the current Template Library contract.
-- A complete native backup includes all currently supported Templates and Executions, including suspended checkpoints and the matching saved runtime for an ACTIVE Execution. Individual Template and Execution exports are supported by the same versioned passive format. An ACTIVE snapshot does not transfer timer ownership, and parsing never restores, activates or persists anything. Public import/export UI and restore policy remain pending. COMPLETED/archive documents remain unsupported until that native lifecycle contract exists; no V1 migration or compatibility import is involved.
+- A complete native backup includes all currently supported Templates and Executions, including suspended checkpoints and the matching saved runtime for an ACTIVE Execution. Individual Template and Execution exports are supported by the same versioned passive format. An ACTIVE snapshot does not transfer timer ownership, and parsing never restores, activates or persists anything. Public import/export UI and restore policy remain pending. COMPLETED/archive documents now retain their frozen history and single reflection through passive serialization/parsing; no Execution import, backup restore, V1 migration or compatibility import is involved.
 - Make the distinction **unmistakable in the UI** through a meaningful icon and/or a short text label; don't rely on subtle iconography alone when template edits might be mistaken for changes to an individual execution. Decide the exact placement against real desktop/mobile layouts.
 - An ongoing execution may evolve without retroactively changing completed phases' **structure, timekeeping, progress, or outcomes**. Edits to the **current and upcoming phase structure and timing** must respect already accepted ET-001 decisions 39–43, 45–48, 53–56: completed phases remain structurally/timekeeping-protected; the current phase cannot be deleted/reordered, but allowed title/duration adjustments follow approved timing/conflict rules; upcoming phases may be changed. **Separate informational-content correction (agreed exception):** During an individual execution that has **not yet been deliberately finalized** (including READY, running, paused, suspended), the facilitator may correct or add **prepared rundown/phase information and resource links in the Session Editor, even for a previously conducted phase**, without altering that phase's historic measured time, completion status, order/history, or the immutable original first-Start planning baseline. Such changes update **only that individual execution's latest configured information** and are reflected in its final snapshot if archived; **never automatically change the reusable source template**. Once the entire execution is **Abgeschlossen**, the archived information is read-only under the separately agreed archive rule. Safe execution-aware editing, concurrency and persistence remain prerequisites. **No timer or recovery behavior change is authorized by this concept document.** Runtime-edit implementation remains separately scoped under ST-003.
 - Retain the execution's actual changes, phase outcomes, overtime and other relevant history when the facilitator deliberately archives it (precise historical data and retention contract to be designed). **Optionally** allow reusable planning content from an archived execution to be applied to its originating template, but only via an unambiguous, deliberate overwrite confirmation. **There is no template version history, automatic backup or restore flow**: confirmed changes replace the previous template content. Which planning fields are transferable, whether to offer a preview, and exclusion of actual runtime statistics from the template require a separate focused UX/data-contract review.
@@ -333,7 +380,7 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 ### Completed-execution archive: start and final states, not an audit trail — agreed direction
 
 - **Precisely two planning snapshots per archived execution:** Capture an immutable **start baseline** at the moment of the **first actual Start of timekeeping in the Session Timer** for that execution; capture the **final state** when the facilitator deliberately selects **Durchführung abschließen** and **archives its results**. A never-started READY execution is **not eligible for archival** and has no fabricated start/final history. **Session starten** in the template/library only prepares the timer in READY and is **not** this baseline trigger. The baseline includes the individually prepared rundown as it stands at the actual first Start, not necessarily the original source template. Pausing, resuming, and suspending/returning must not overwrite that baseline. After a deliberately discarded attempt resets the execution to **Geplant**, a future new first Start establishes a fresh baseline; exact atomic persistence and reset rules need data-contract tests.
-- **Default archived view is final-first, but meaningfully annotated (agreed, variant A):** Opening a completed execution is an intentional look back at its actual result, so this default view may be richer than the live rundown. Show the final agenda, actual phase outcomes/timings, edited notes/resources, and any phases **not conducted** although still planned when the facilitator ended the event. **Also show phases that existed in the start baseline but were deliberately removed during the execution**, as clearly subdued/struck-through historical entries labeled **Entfernt / Removed**. They are *not* part of the active final agenda and must never be portrayed as conducted. Subtle icons/indicators may mark modified or added phases, original-plan variance, and unperformed phases; the owner's suggested X/+/>> and colors are **illustrative only**, not approved iconography. Reserve the optional comparison for more detailed analysis, not as the only way to discover removed phases.
+- **Default archived view is final-first, but meaningfully annotated (agreed, variant A):** Opening a completed execution is an intentional look back at its actual result, so this default view may be richer than the live rundown. Show the final agenda, actual phase outcomes/timings, edited notes/resources, and any phases **not conducted** although still planned when the facilitator ended the event. **Also show phases that existed in the start baseline but were deliberately removed during the execution**, as clearly subdued/struck-through historical entries labeled **Entfernt / Removed**. They are *not* part of the active final agenda. **Removal and conduct are independent facts:** a phase conducted before removal remains conducted; one removed without conduct remains not conducted. Never rewrite actual outcomes to satisfy a presentation-only rule. Subtle icons/indicators may mark modified or added phases, original-plan variance, and unperformed phases; the owner's suggested X/+/>> and colors are **illustrative only**, not approved iconography. Reserve the optional comparison for more detailed analysis, not as the only way to discover removed phases.
 - **Skipped and never-started phases (agreed):** Use the **same factual archive result, Nicht durchgeführt / Not conducted**, for a phase deliberately bypassed during a workshop and one still planned but never started by the time the facilitator finalizes. Do **not** introduce a separate **Übersprungen / Skipped** outcome or require a reason. These phases remain part of the archived final agenda unless explicitly **removed** from it; **Entfernt / Removed** is a distinct case. A phase that was actually started counts as **Durchgeführt / Conducted**, including when its time was cut short by an explicit finalization. This decision defines archive semantics, not a new skip control or automatic transition behavior.
 - **Optional comparison on explicit request:** Let the user reveal an **initial-plan vs. finalized-execution** comparison for learning and reflection. Changes in phase presence/order, titles, planned timeboxes, prepared notes, links, and recorded execution outcomes may be compared as supported by the data. Stable phase identities distinguish true additions/removals from edits or reordering. A deleted phase may no longer be present in the final rundown but remains identifiable from the immutable start baseline. Precise comparison presentation is a separate UX design decision.
 - **Not a change log or version-control feature:** Do not store or display a sequence of intermediate planning edits, timestamps per edit, change reasons, or an audit timeline. Only the immutable start baseline, final state, and the separately required actual phase outcomes/timekeeping records are needed. They can reveal **what differs**, but not necessarily when or why an edit happened, nor any intermediate change later undone.

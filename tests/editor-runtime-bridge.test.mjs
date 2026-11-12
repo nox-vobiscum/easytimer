@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createPlannedExecution } from '../src/js/editor-domain.mjs';
 import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { createEditorRuntimeBridge } from '../src/js/editor-runtime-bridge.mjs';
-import { EDITOR_STORAGE_KEY, activatePlannedExecutionInRecord } from '../src/js/editor-storage.mjs';
+import { EDITOR_STORAGE_KEY, activatePlannedExecutionInRecord,
+    completeExecutionInRecord, updateCompletedReflectionInRecord } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
 import { transitionSession } from '../src/js/session.mjs';
 
@@ -459,6 +460,184 @@ test('adoption rejects incomplete native started history without replacing the S
     assert.equal(c.storage.values.get(EDITOR_STORAGE_KEY), raw);
     assert.equal(c.storage.state.writes, writes);
     assert.equal(c.activeLock.held, false);
+});
+
+function completionOptions(source, completedAt = 12_000, changes = {}) {
+    return { ...executionExitOptions(source), completedAt, workshopNotes: completeWorkshopNotes(), ...changes };
+}
+
+function reflectionOptions(source, reflection = 'Retrospective', changes = {}) {
+    const execution = source.executions[0].execution;
+    return { executionId: execution.id, expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision, reflection, ...changes };
+}
+
+async function archivalBridgeSetup(kind) {
+    if (kind === 'suspended') {
+        const c = await suspendedStartedBridgeSetup();
+        return { ...c, source: c.suspended, method: 'completeExecution', options: completionOptions(c.suspended, 1_000_000) };
+    }
+    const c = await startedBridgeSetup();
+    if (kind === 'active') return { ...c, source: c.started, method: 'completeExecution', options: completionOptions(c.started) };
+    const completed = await c.bridge.completeExecution(completionOptions(c.started));
+    await c.activeLock.release();
+    return { ...c, source: completed, method: 'updateCompletedReflection', options: reflectionOptions(completed) };
+}
+
+test('ACTIVE archive is one confirmed write with complete final notes and no ownership release', async () => {
+    const c = await startedBridgeSetup();
+    const options = completionOptions(c.started);
+    const before = structuredClone(c.started);
+    const writes = c.storage.state.writes;
+    const completed = await c.bridge.completeExecution(options);
+    assert.deepEqual(completed, completeExecutionInRecord(before, options));
+    assert.equal(completed.activeRuntime, null);
+    assert.deepEqual(completed.executions[0].execution.phaseOutcomes, [
+        { phaseId: 'phase-1', conducted: true, activeMs: 10_000, overtimeMs: 0 },
+        { phaseId: 'phase-2', conducted: false, activeMs: 0, overtimeMs: 0 },
+    ]);
+    assert.deepEqual(completed.executions[0].execution.workshopNotes, completeWorkshopNotes());
+    assert.deepEqual(c.started, before);
+    assert.equal(c.storage.state.writes, writes + 1);
+    assert.deepEqual(await c.writer.read(), completed);
+    assert.equal(c.activeLock.held, true);
+    await c.activeLock.release();
+});
+
+test('suspended completion and reflection preserve another ACTIVE owner and its full runtime', async () => {
+    const events = [];
+    const c = await suspendedStartedBridgeSetup(events);
+    const source = activatePlannedExecutionInRecord({ ...c.suspended, executions: [
+        ...c.suspended.executions, { execution: createPlannedExecution(template(), 'other'), suspendedCheckpoint: null },
+    ] }, { ...activationOptions(), executionId: 'other', expectedAggregateRevision: c.suspended.revision,
+        runtimeRunId: 'other-run', savedAt: 20_000 });
+    c.storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(source));
+    const otherOwner = createEditorActiveTimerLock({ locks: c.locks }); await otherOwner.claim();
+    const claims = events.filter(event => event[0] === 'request' && event[1] === 'easyTimerEditor.v1.active-runtime').length;
+    const completed = await c.bridge.completeExecution(completionOptions(source, 1_000_000));
+    assert.deepEqual(completed, completeExecutionInRecord(source, completionOptions(source, 1_000_000)));
+    assert.deepEqual(completed.activeRuntime, source.activeRuntime);
+    assert.deepEqual(completed.executions[1], source.executions[1]);
+    const updated = await c.bridge.updateCompletedReflection(reflectionOptions(completed));
+    assert.deepEqual(updated, updateCompletedReflectionInRecord(completed, reflectionOptions(completed)));
+    assert.deepEqual(updated.activeRuntime, source.activeRuntime);
+    assert.deepEqual(await c.writer.read(), updated);
+    assert.equal(otherOwner.held, true);
+    assert.equal(c.activeLock.held, false);
+    assert.equal(events.filter(event => event[0] === 'request' && event[1] === 'easyTimerEditor.v1.active-runtime').length, claims);
+    await otherOwner.release();
+});
+
+test('new archival operations preserve source records on storage/lock errors and never release ownership', async () => {
+    for (const kind of ['active', 'suspended', 'reflection']) {
+        const c = await archivalBridgeSetup(kind);
+        const writes = c.storage.state.writes;
+        const unavailable = createEditorRuntimeBridge({ activeLock: c.activeLock,
+            writer: createEditorStoreWriter({ getStorage: () => c.storage, locks: null }) });
+        await assert.rejects(unavailable[c.method](c.options), /lockUnavailable/);
+        c.locks.held.add('easyTimerEditor.v1.write');
+        await assert.rejects(c.bridge[c.method](c.options), /lockBusy/);
+        c.locks.held.delete('easyTimerEditor.v1.write');
+        await assert.rejects(c.bridge[c.method]({ ...c.options, expectedAggregateRevision: 0 }), /conflict/);
+        await assert.rejects(c.bridge[c.method]({ ...c.options, expectedExecutionRevision: 0 }), /conflict|invalidRevision/);
+        for (const [key, value, error] of [['failRead', true, 'storageRead'],
+            ['failWrite', 'QuotaExceededError', 'storageQuota'], ['failWrite', 'Error', 'storageWrite']]) {
+            c.storage.state[key] = value;
+            await assert.rejects(c.bridge[c.method](c.options), new RegExp(error));
+            c.storage.state[key] = key === 'failRead' ? false : null;
+            assert.deepEqual(await c.writer.read(), c.source);
+            assert.equal(c.storage.state.writes, writes);
+            assert.equal(c.activeLock.held, kind === 'active');
+        }
+        if (c.activeLock.held) await c.activeLock.release();
+    }
+});
+
+test('uncertain completion/reflection reconciles source, target or conflict without reconstructing or retrying', async () => {
+    for (const kind of ['active', 'suspended', 'reflection']) {
+        for (const failure of ['unconfirmed', 'readback', 'lateRequest']) {
+            for (const outcome of ['source', 'target', 'conflict']) {
+                const c = await archivalBridgeSetup(kind);
+                const normalRequest = c.locks.request;
+                c.storage.state.faultAfterWrites = c.storage.state.writes;
+                if (failure === 'unconfirmed') c.storage.state.failReadAfterWrite = true;
+                if (failure === 'readback') c.storage.state.readback = 'Mismatching readback';
+                if (failure === 'lateRequest') c.locks.request = async function(name, options, callback) {
+                    const result = await normalRequest.call(this, name, options, callback);
+                    if (name === 'easyTimerEditor.v1.write') throw new Error('Late acknowledgement failure');
+                    return result;
+                };
+                await assert.rejects(c.bridge[c.method](c.options), /storageUnconfirmed|storageReadback|lockRequest/);
+                const target = JSON.parse(c.storage.values.get(EDITOR_STORAGE_KEY));
+                c.storage.state.failReadAfterWrite = false; c.storage.state.readback = undefined;
+                c.locks.request = normalRequest;
+                const writes = c.storage.state.writes;
+                await assert.rejects(c.bridge[c.method](c.options), /pendingOperation/);
+                c.storage.state.failRead = true;
+                await assert.rejects(c.bridge.reconcilePendingOperation(), /storageRead/);
+                c.storage.state.failRead = false;
+                let observed = outcome === 'source' ? c.source : target;
+                if (outcome === 'conflict') {
+                    observed = structuredClone(target); observed.revision += 1;
+                    observed.templates[0].plan.name = 'Concurrent change';
+                }
+                c.storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(observed));
+                assert.deepEqual(await c.bridge.reconcilePendingOperation(), {
+                    kind: kind === 'reflection' ? 'reflection' : 'complete', outcome, record: observed,
+                });
+                assert.equal(c.storage.state.writes, writes);
+                assert.equal(c.activeLock.held, kind === 'active');
+                assert.deepEqual(await c.writer.read(), observed);
+                if (outcome === 'conflict') await assert.rejects(c.bridge[c.method](c.options), /pendingOperation/);
+                else await assert.rejects(c.bridge.reconcilePendingOperation(), /noPendingOperation/);
+                if (c.activeLock.held) await c.activeLock.release();
+            }
+        }
+    }
+});
+
+test('completion checks ownership at write entry, captures note input and blocks overlapping operations', async () => {
+    for (const loseOwnership of [false, true]) {
+        const c = await startedBridgeSetup();
+        const gate = deferred(); c.locks.storeGate = gate;
+        const options = completionOptions(c.started);
+        const writes = c.storage.state.writes;
+        const pending = c.bridge.completeExecution(options);
+        const checked = loseOwnership ? assert.rejects(pending, /activeLockRequired/) : pending;
+        options.workshopNotes.rundown = 'Changed while waiting';
+        await assert.rejects(c.bridge.completeExecution(options), /bridgeBusy/);
+        if (loseOwnership) await c.activeLock.release();
+        gate.resolve();
+        const result = await checked;
+        if (loseOwnership) {
+            assert.equal(c.storage.state.writes, writes);
+            assert.deepEqual(await c.writer.read(), c.started);
+            await assert.rejects(c.bridge.completeExecution(options), /activeLockRequired/);
+        } else {
+            assert.equal(result.executions[0].execution.workshopNotes.rundown, 'Complete rundown notes');
+            assert.equal(c.activeLock.held, true);
+            await c.activeLock.release();
+        }
+    }
+});
+
+test('never-started ACTIVE/SUSPENDED cannot archive and ACTIVE pending reconciliation needs retained ownership', async () => {
+    const readyContext = setup();
+    const ready = await readyContext.bridge.activatePlanned(activationOptions());
+    await assert.rejects(readyContext.bridge.completeExecution(completionOptions(ready)), /invalidAttempt/);
+    await readyContext.activeLock.release();
+    const dormant = await suspendedReadyBridgeSetup();
+    await assert.rejects(dormant.bridge.completeExecution(completionOptions(dormant.suspended)), /invalidAttempt/);
+    const c = await archivalBridgeSetup('active');
+    c.storage.state.faultAfterWrites = c.storage.state.writes;
+    c.storage.state.failReadAfterWrite = true;
+    await assert.rejects(c.bridge.completeExecution(c.options), /storageUnconfirmed/);
+    c.storage.state.failReadAfterWrite = false;
+    await c.activeLock.release();
+    await assert.rejects(c.bridge.reconcilePendingOperation(), /activeLockRequired/);
+    await c.activeLock.claim();
+    assert.equal((await c.bridge.reconcilePendingOperation()).outcome, 'target');
+    await c.activeLock.release();
 });
 
 test('activates PLANNED as confirmed ACTIVE READY after acquiring ownership first', async () => {

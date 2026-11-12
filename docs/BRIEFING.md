@@ -206,6 +206,14 @@ repair, delete or overwrite them automatically. A rejected Store never becomes a
 empty replacement. Unstarted PLANNED/READY records remain valid without outcomes.
 This deliberately incompatible internal contract does not affect released V1 data.
 
+Native COMPLETED executions now retain one immutable start baseline, their final
+`currentPlan`, actual phase outcomes, Workshop-Notizen and completion metadata.
+The locked Store write path rejects history replacement, reactivation or archive
+removal; only reflection updates with the required revisions are permitted.
+Reflection uses the existing basic String contract, storage quota and native JSON
+size boundary, without a separate character limit. Completion/reflection remain
+internal operations; public UI, local detachment and ownership release are pending.
+
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.
 - `src/js/timer.mjs` owns Quick Timer transitions and authoritative deadlines.

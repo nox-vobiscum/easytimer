@@ -5,6 +5,7 @@ import {
     createPlannedExecution,
     startActiveExecution,
     suspendReadyExecution,
+    completeStartedExecution,
 } from '../src/js/editor-domain.mjs';
 import {
     captureExecutionRuntimeCheckpoint,
@@ -21,6 +22,7 @@ import {
     serializeEditorTemplate,
 } from '../src/js/editor-portability.mjs';
 import { prepareSession, transitionSession } from '../src/js/session.mjs';
+import { completeExecutionInRecord, updateCompletedReflectionInRecord } from '../src/js/editor-storage.mjs';
 
 const plan = name => ({
     name,
@@ -227,7 +229,7 @@ test('serialization rejects output exceeding the shared UTF-8 byte limit without
     assert.deepEqual(source, before);
 });
 
-test('native validation rejects duplicate identities, invalid checkpoints and unsupported completed lifecycle', () => {
+test('native validation rejects duplicate identities, invalid checkpoints and malformed completed lifecycle', () => {
     const duplicate = completeRecord();
     duplicate.templates[1] = structuredClone(duplicate.templates[0]);
     assert.throws(() => serializeEditorBackup(duplicate), /portabilityInvalid/);
@@ -242,6 +244,50 @@ test('native validation rejects duplicate identities, invalid checkpoints and un
         lifecycle: 'completed',
     });
     assert.throws(() => serializeEditorExecution(completed), /portabilityInvalid/);
+});
+
+test('COMPLETED backup and individual Execution round-trips preserve frozen history and one editable reflection', () => {
+    const source = completeRecord();
+    const active = source.executions.find(item => item.execution.lifecycle === 'active').execution;
+    const archived = completeExecutionInRecord(source, { executionId: active.id, expectedLifecycle: 'active',
+        expectedAggregateRevision: source.revision, expectedExecutionRevision: active.revision,
+        expectedRuntimeRevision: active.runtimeRevision, expectedAttemptId: active.attempt.id,
+        expectedRunId: active.attempt.runtimeRunId, completedAt: 2000, workshopNotes: active.workshopNotes });
+    const completed = archived.executions.find(item => item.execution.lifecycle === 'completed').execution;
+    const reflected = updateCompletedReflectionInRecord(archived, { executionId: completed.id,
+        expectedAggregateRevision: archived.revision, expectedExecutionRevision: completed.revision,
+        reflection: '**Afterwards**\n- Lesson learned' });
+    const before = structuredClone(reflected);
+    assert.deepEqual(parseEditorPortability(serializeEditorBackup(reflected)).record, reflected);
+    const selected = reflected.executions.find(item => item.execution.id === completed.id);
+    assert.deepEqual(parseEditorPortability(serializeEditorExecution(selected)).entry, selected);
+    assert.equal(parseEditorPortability(serializeEditorExecution(selected)).activeRuntime, null);
+    assert.throws(() => serializeEditorExecution(selected, source.activeRuntime), /portabilityInvalid/);
+    for (const change of [
+        value => { value.execution.reflection = null; },
+        value => { delete value.execution.completion; },
+        value => { value.execution.completion.completedAt = 0; },
+        value => { value.execution.completion.workshopOvertimeMs = -1; },
+        value => { value.suspendedCheckpoint = {}; },
+        value => { delete value.execution.phaseOutcomes; },
+    ]) {
+        const invalid = structuredClone(selected); change(invalid);
+        assert.throws(() => serializeEditorExecution(invalid), /portabilityInvalid/);
+        const raw = JSON.parse(serializeEditorExecution(selected)); raw.entry = invalid;
+        assert.throws(() => parseEditorPortability(JSON.stringify(raw)), /portabilityInvalid/);
+    }
+    assert.deepEqual(reflected, before);
+});
+
+test('reflection uses the existing String contract and the unchanged UTF-8 portability size limit', () => {
+    const source = startActiveExecution(activatePlannedExecution(createPlannedExecution(template(), 'completed')),
+        'attempt', 1000, 'run');
+    const completed = completeStartedExecution(source, { completedAt: 2000, workshopOvertimeMs: 0,
+        workshopNotes: { rundown: '', phases: [] } });
+    completed.reflection = 'é'.repeat(MAX_EDITOR_PORTABILITY_BYTES / 2 + 1);
+    const before = structuredClone(completed);
+    assert.throws(() => serializeEditorExecution(entry(completed)), /portabilitySize/);
+    assert.deepEqual(completed, before);
 });
 
 test('serialization and parsing are passive and never require storage, locks, ownership or timer actions', () => {

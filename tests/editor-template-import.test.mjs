@@ -10,6 +10,7 @@ import {
     EDITOR_STORAGE_KEY, validateEditorStoreRecord, insertTemplateInRecord,
     activatePlannedExecutionInRecord, startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
+    completeExecutionInRecord,
 } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter, EDITOR_STORE_WRITE_LOCK } from '../src/js/editor-storage-lock.mjs';
 
@@ -90,6 +91,22 @@ function activeRecord() {
         attemptId: 'independent-attempt', startedAt: 1000,
     });
 }
+
+test('COMPLETED documents remain passive and cannot enter the Template-only import path', () => {
+    const source = activeRecord();
+    const execution = source.executions.find(item => item.execution.lifecycle === 'active').execution;
+    const archived = completeExecutionInRecord(source, { executionId: execution.id, expectedLifecycle: 'active',
+        expectedAggregateRevision: source.revision, expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision, expectedAttemptId: execution.attempt.id,
+        expectedRunId: execution.attempt.runtimeRunId, completedAt: 2000, workshopNotes: execution.workshopNotes });
+    const selected = archived.executions.find(item => item.execution.id === execution.id);
+    const c = setup();
+    for (const text of [serializeEditorExecution(selected), serializeEditorBackup(archived)]) {
+        assert.deepEqual(c.service.prepareImport(text, 0), { status: 'error',
+            error: { type: 'validation', code: 'unsupportedImportKind' } });
+    }
+    assert.deepEqual([c.state.reads, c.state.writes, c.state.ids], [0, 0, 0]);
+});
 
 test('preview is isolated, read/write-free and generates one fresh identity with revision one', () => {
     const c = setup();
