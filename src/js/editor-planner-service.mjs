@@ -1,7 +1,16 @@
-import { DEFAULT_RUNDOWN_CATEGORY, validatePlannedExecution } from './editor-domain.mjs';
+import {
+    DEFAULT_RUNDOWN_CATEGORY,
+    EDITOR_KINDS,
+    EDITOR_SCHEMA_VERSION,
+    validatePlannedExecution,
+    validateTemplate,
+} from './editor-domain.mjs';
 import {
     EDITOR_STORE_SCHEMA_VERSION,
+    deleteTemplateInRecord,
+    insertTemplateInRecord,
     validateEditorStoreRecord,
+    updateTemplateInRecord,
     updateExecutionPreparedInformationInRecord,
     updateExecutionWorkshopNotesInRecord,
     updatePlannedExecutionPlanInRecord,
@@ -43,6 +52,70 @@ function libraryFromRecord(record) {
     return librarySnapshot({ revision: record.revision, templates: record.templates });
 }
 
+function templateFromDraft(draft, revision) {
+    const { id, ...plan } = draft.template;
+    return validateTemplate({
+        schemaVersion: EDITOR_SCHEMA_VERSION,
+        kind: EDITOR_KINDS.TEMPLATE,
+        id,
+        revision,
+        plan,
+    });
+}
+
+function saveOperation(draft) {
+    const valid = validateDraft(draft);
+    if (valid.mode === 'create') {
+        return {
+            kind: 'create',
+            template: templateFromDraft(valid, 1),
+            expectedAggregateRevision: valid.expectedAggregateRevision,
+        };
+    }
+    return {
+        kind: 'update',
+        template: templateFromDraft(valid, valid.expectedTemplateRevision),
+        expectedAggregateRevision: valid.expectedAggregateRevision,
+        expectedTemplateRevision: valid.expectedTemplateRevision,
+    };
+}
+
+function deleteOperation(options) {
+    exactFields(options, ['templateId', 'expectedAggregateRevision', 'expectedTemplateRevision']);
+    return structuredClone({ kind: 'delete', ...options });
+}
+
+function applyTemplateOperation(record, operation) {
+    if (!isObject(operation) || !['create', 'update', 'delete'].includes(operation.kind)) fail('invalidData');
+    if (operation.kind === 'create') {
+        exactFields(operation, ['kind', 'template', 'expectedAggregateRevision']);
+        return insertTemplateInRecord(record, operation);
+    }
+    if (operation.kind === 'update') {
+        exactFields(operation, ['kind', 'template', 'expectedAggregateRevision', 'expectedTemplateRevision']);
+        return updateTemplateInRecord(record, operation);
+    }
+    exactFields(operation, ['kind', 'templateId', 'expectedAggregateRevision', 'expectedTemplateRevision']);
+    return deleteTemplateInRecord(record, operation);
+}
+
+function validateTemplateReconciliation(ticket, expectedOperation, includeDraft) {
+    exactFields(ticket, includeDraft
+        ? ['draft', 'operation', 'source', 'target']
+        : ['operation', 'source', 'target']);
+    const operation = structuredClone(ticket.operation);
+    const source = validateEditorStoreRecord(ticket.source);
+    const target = validateEditorStoreRecord(ticket.target);
+    if (JSON.stringify(operation) !== JSON.stringify(expectedOperation)
+        || JSON.stringify(target) !== JSON.stringify(applyTemplateOperation(source, operation))) fail('invalidData');
+    return {
+        ...(includeDraft ? { draft: validateDraft(ticket.draft) } : {}),
+        operation,
+        source,
+        target,
+    };
+}
+
 function errorOutcome(error, draft) {
     const code = typeof error?.message === 'string' ? error.message : 'unexpectedError';
     let type = 'unexpected';
@@ -78,11 +151,38 @@ function validateDraft(draft) {
 
 export function createNativePlannerService({ integration, createId = () => crypto.randomUUID() } = {}) {
     if (!integration
-        || ['readLibrary', 'createTemplate', 'updateTemplate', 'deleteTemplate']
+        || ['readWorkspace', 'readLibrary', 'createTemplate', 'updateTemplate', 'deleteTemplate']
             .some(method => typeof integration[method] !== 'function')
         || typeof createId !== 'function') fail('invalidPlannerService');
 
+    async function reconcile(ticket, expectedOperation, includeDraft) {
+        const valid = validateTemplateReconciliation(ticket, expectedOperation, includeDraft);
+        const record = validateEditorStoreRecord(await integration.readWorkspace());
+        const raw = JSON.stringify(record);
+        const status = raw === JSON.stringify(valid.target) ? 'confirmed'
+            : raw === JSON.stringify(valid.source) ? 'absent' : 'unresolved';
+        return {
+            status,
+            record,
+            ...(includeDraft ? { draft: valid.draft } : {}),
+            ...(status === 'unresolved'
+                ? { reconciliation: structuredClone(valid) }
+                : { library: libraryFromRecord(record) }),
+        };
+    }
+
     return Object.freeze({
+        async loadWorkspace() {
+            try {
+                return {
+                    status: 'success',
+                    workspace: validateEditorStoreRecord(await integration.readWorkspace()),
+                };
+            } catch (error) {
+                return errorOutcome(error);
+            }
+        },
+
         async loadLibrary() {
             try {
                 return { status: 'success', library: librarySnapshot(await integration.readLibrary()) };
@@ -151,23 +251,70 @@ export function createNativePlannerService({ integration, createId = () => crypt
                     });
                 return { status: 'success', library: libraryFromRecord(record) };
             } catch (error) {
-                return errorOutcome(error, valid ?? draft);
+                const result = errorOutcome(error, valid ?? draft);
+                if (valid && error?.reconciliation) {
+                    return {
+                        ...result,
+                        status: 'uncertain',
+                        reconciliation: structuredClone({ draft: valid, ...error.reconciliation }),
+                    };
+                }
+                return result;
+            }
+        },
+
+        async reconcileSave(ticket) {
+            let valid;
+            try {
+                const draft = validateDraft(ticket?.draft);
+                valid = validateTemplateReconciliation(ticket, saveOperation(draft), true);
+                return await reconcile(valid, valid.operation, true);
+            } catch (error) {
+                return {
+                    ...errorOutcome(error, valid?.draft),
+                    status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}),
+                };
             }
         },
 
         async deleteTemplate(options = {}) {
+            let operation;
             try {
-                exactFields(options, [
-                    'templateId', 'expectedAggregateRevision', 'expectedTemplateRevision',
-                ]);
-                const { templateId, expectedAggregateRevision, expectedTemplateRevision } = options;
+                operation = deleteOperation(options);
+                const { templateId, expectedAggregateRevision, expectedTemplateRevision } = operation;
                 const record = await integration.deleteTemplate(templateId, {
                     expectedAggregateRevision,
                     expectedTemplateRevision,
                 });
                 return { status: 'success', library: libraryFromRecord(record) };
             } catch (error) {
-                return errorOutcome(error);
+                const result = errorOutcome(error);
+                if (operation && error?.reconciliation) {
+                    return {
+                        ...result,
+                        status: 'uncertain',
+                        reconciliation: structuredClone(error.reconciliation),
+                    };
+                }
+                return result;
+            }
+        },
+
+        async reconcileDelete(ticket) {
+            let valid;
+            try {
+                if (!isObject(ticket?.operation) || ticket.operation.kind !== 'delete') fail('invalidData');
+                const { kind, ...options } = ticket.operation;
+                const operation = deleteOperation(options);
+                valid = validateTemplateReconciliation(ticket, operation, false);
+                return await reconcile(valid, valid.operation, false);
+            } catch (error) {
+                return {
+                    ...errorOutcome(error),
+                    status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}),
+                };
             }
         },
     });

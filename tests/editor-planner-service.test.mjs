@@ -13,6 +13,7 @@ import {
     EDITOR_STORAGE_KEY,
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
+    insertTemplateInRecord,
     planExecutionFromTemplateInRecord,
     suspendActiveExecutionInRecord,
     updateExecutionPreparedInformationInRecord,
@@ -166,6 +167,206 @@ test('creates, updates and deletes through native operations while refreshing th
     });
     assert.deepEqual(deleted, { status: 'success', library: { revision: 3, templates: [] } });
     assert.equal(storage.state.writes, 3);
+});
+
+test('loads one copy-isolated native workspace snapshot with Templates and Executions and no V1 access', async () => {
+    const c = setup();
+    const draft = c.service.prepareNewDraft((await c.service.loadLibrary()).library, 'template-1').draft;
+    draft.template = prepared();
+    await c.service.saveDraft(draft);
+    const planned = await c.writer.write(record => planExecutionFromTemplateInRecord(record, {
+        templateId: 'template-1', executionId: 'execution-1', expectedAggregateRevision: record.revision,
+    }));
+    const writes = c.storage.state.writes;
+
+    const first = await c.service.loadWorkspace();
+    const second = await c.service.loadWorkspace();
+
+    assert.equal(first.status, 'success');
+    assert.deepEqual(first, second);
+    assert.equal(first.workspace.revision, planned.revision);
+    assert.equal(first.workspace.templates[0].kind, 'template');
+    assert.equal(first.workspace.templates[0].id, 'template-1');
+    assert.equal(first.workspace.executions[0].execution.kind, 'execution');
+    assert.equal(first.workspace.executions[0].execution.id, 'execution-1');
+    assert.equal(first.workspace.executions[0].execution.lifecycle, 'planned');
+    assert.equal(first.workspace.executions[0].execution.revision, 1);
+    assert.equal(first.workspace.activeRuntime, null);
+    assert.equal(c.storage.state.writes, writes);
+    first.workspace.templates[0].plan.name = 'Changed copy';
+    first.workspace.executions[0].execution.currentPlan.name = 'Changed execution copy';
+    assert.equal(second.workspace.templates[0].plan.name, 'Workshop');
+    assert.equal(second.workspace.executions[0].execution.currentPlan.name, 'Workshop');
+    assert.equal(c.storage.values.has('easyTimerTemplates'), false);
+});
+
+test('unconfirmed and mismatched Template Create, Update and Delete reconcile without another write', async () => {
+    for (const [kind, prepare] of [
+        ['create', async c => {
+            const draft = c.service.prepareNewDraft((await c.service.loadLibrary()).library, 'stable-created-id').draft;
+            draft.template = prepared({ id: 'stable-created-id' });
+            return { execute: () => c.service.saveDraft(draft), draft };
+        }],
+        ['update', async c => {
+            const create = c.service.prepareNewDraft((await c.service.loadLibrary()).library, 'template-1').draft;
+            create.template = prepared();
+            const created = await c.service.saveDraft(create);
+            const draft = c.service.prepareEditDraft(created.library, 'template-1').draft;
+            draft.template.name = 'Uncertain update';
+            return { execute: () => c.service.saveDraft(draft), draft };
+        }],
+        ['delete', async c => {
+            const create = c.service.prepareNewDraft((await c.service.loadLibrary()).library, 'template-1').draft;
+            create.template = prepared();
+            const created = await c.service.saveDraft(create);
+            const options = { templateId: 'template-1', expectedAggregateRevision: created.library.revision,
+                expectedTemplateRevision: created.library.templates[0].revision };
+            return { execute: () => c.service.deleteTemplate(options), options };
+        }],
+    ]) {
+        for (const fault of ['unconfirmed', 'readback']) for (const outcome of ['source', 'target', 'conflict']) {
+            const c = setup();
+            const operation = await prepare(c);
+            const beforeDraft = operation.draft && structuredClone(operation.draft);
+            const beforeWrites = c.storage.state.writes;
+            c.storage.state.faultAfterWrites = beforeWrites;
+            if (fault === 'unconfirmed') c.storage.state.failReadAfterWrite = true;
+            else c.storage.state.readback = '{"mismatched":true}';
+
+            const uncertain = await operation.execute();
+
+            assert.equal(uncertain.status, 'uncertain', `${kind} is uncertain`);
+            assert.equal(uncertain.error.code, fault === 'unconfirmed' ? 'storageUnconfirmed' : 'storageReadback');
+            assert.equal(uncertain.reconciliation.operation.kind, kind);
+            assert.equal(c.storage.state.writes, beforeWrites + 1);
+            if (kind === 'create') {
+                assert.equal(uncertain.reconciliation.operation.template.id, 'stable-created-id');
+                assert.equal(uncertain.reconciliation.target.templates.filter(item => item.id === 'stable-created-id').length, 1);
+            }
+            if (operation.draft) {
+                assert.deepEqual(uncertain.draft, beforeDraft);
+                assert.deepEqual(operation.draft, beforeDraft);
+            }
+
+            c.storage.state.failReadAfterWrite = false;
+            c.storage.state.readback = undefined;
+            let observed = structuredClone(outcome === 'source'
+                ? uncertain.reconciliation.source : uncertain.reconciliation.target);
+            if (outcome === 'conflict') {
+                const { id: ignored, ...concurrentPlan } = prepared({ id: `ignored-${kind}`, name: 'Concurrent' });
+                observed = insertTemplateInRecord(observed, {
+                    template: {
+                        schemaVersion: 2, kind: 'template', id: `concurrent-${kind}`,
+                        revision: 1, plan: concurrentPlan,
+                    },
+                    expectedAggregateRevision: observed.revision,
+                });
+            }
+            c.storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(observed));
+            const writes = c.storage.state.writes;
+            const reconcile = kind === 'delete'
+                ? ticket => c.service.reconcileDelete(ticket)
+                : ticket => c.service.reconcileSave(ticket);
+
+            c.storage.state.failRead = true;
+            const unreadable = await reconcile(uncertain.reconciliation);
+            assert.equal(unreadable.status, 'unresolved');
+            assert.deepEqual(unreadable.reconciliation, uncertain.reconciliation);
+            c.storage.state.failRead = false;
+            const resolved = await reconcile(uncertain.reconciliation);
+            assert.equal(resolved.status, { source: 'absent', target: 'confirmed', conflict: 'unresolved' }[outcome]);
+            assert.deepEqual(resolved.record, observed);
+            assert.equal(c.storage.state.writes, writes, `${kind} reconciliation is read-only`);
+            if (kind === 'create' && outcome === 'target') {
+                assert.equal(resolved.library.templates.filter(item => item.id === 'stable-created-id').length, 1);
+            }
+        }
+    }
+});
+
+test('late Template CRUD lock acknowledgements retain stable tickets and never repeat the operation', async () => {
+    for (const kind of ['create', 'update', 'delete']) {
+        const storage = memory();
+        const normalLocks = locks();
+        const lateState = { armed: false };
+        const lateLocks = {
+            async request(name, options, callback) {
+                const result = await normalLocks.request(name, options, callback);
+                if (lateState.armed) {
+                    lateState.armed = false;
+                    throw new Error('Late acknowledgement lost');
+                }
+                return result;
+            },
+        };
+        const writer = createEditorStoreWriter({ getStorage: () => storage, locks: normalLocks });
+        const initialIntegration = createNativeEditorTemplateIntegration({ writer });
+        const initialService = createNativePlannerService({ integration: initialIntegration, createId: () => 'template-1' });
+        let draft = initialService.prepareNewDraft((await initialService.loadLibrary()).library, 'template-1').draft;
+        draft.template = prepared();
+        if (kind !== 'create') await initialService.saveDraft(draft);
+
+        const lateWriter = createEditorStoreWriter({ getStorage: () => storage, locks: lateLocks });
+        const service = createNativePlannerService({
+            integration: createNativeEditorTemplateIntegration({ writer: lateWriter }),
+            createId: () => 'template-1',
+        });
+        let execute;
+        if (kind === 'create') {
+            execute = () => service.saveDraft(draft);
+        } else {
+            const library = (await service.loadLibrary()).library;
+            if (kind === 'update') {
+                draft = service.prepareEditDraft(library, 'template-1').draft;
+                draft.template.name = 'Late update';
+                execute = () => service.saveDraft(draft);
+            } else {
+                execute = () => service.deleteTemplate({ templateId: 'template-1',
+                    expectedAggregateRevision: library.revision,
+                    expectedTemplateRevision: library.templates[0].revision });
+            }
+        }
+        const beforeWrites = storage.state.writes;
+        lateState.armed = true;
+        const result = await execute();
+        assert.equal(result.status, 'uncertain');
+        assert.equal(result.error.code, 'lockRequest');
+        assert.equal(result.reconciliation.operation.kind, kind);
+        assert.equal(storage.state.writes, beforeWrites + 1);
+        const reconciled = kind === 'delete'
+            ? await service.reconcileDelete(result.reconciliation)
+            : await service.reconcileSave(result.reconciliation);
+        assert.equal(reconciled.status, 'confirmed');
+        assert.equal(storage.state.writes, beforeWrites + 1);
+    }
+});
+
+test('Template CRUD reconciliation rejects modified identities, operations and targets before reading', async () => {
+    const c = setup();
+    const draft = c.service.prepareNewDraft((await c.service.loadLibrary()).library, 'stable-id').draft;
+    draft.template = prepared({ id: 'stable-id' });
+    c.storage.state.faultAfterWrites = c.storage.state.writes;
+    c.storage.state.failReadAfterWrite = true;
+    const uncertain = await c.service.saveDraft(draft);
+    assert.equal(uncertain.status, 'uncertain');
+    c.storage.state.failReadAfterWrite = false;
+    let reads = 0;
+    const integration = createNativeEditorTemplateIntegration({ writer: {
+        write: c.writer.write,
+        read() { reads++; return c.writer.read(); },
+    } });
+    const service = createNativePlannerService({ integration });
+    for (const change of [
+        value => { value.draft.template.id = 'different-id'; },
+        value => { value.operation.template.id = 'different-id'; },
+        value => { value.target.templates[0].plan.name = 'Different target'; },
+        value => { value.extra = true; },
+    ]) {
+        const changed = structuredClone(uncertain.reconciliation);
+        change(changed);
+        assert.equal((await service.reconcileSave(changed)).status, 'error');
+        assert.equal(reads, 0);
+    }
 });
 
 test('rejected validation and revision conflicts retain complete unsaved drafts without writes or retry', async () => {

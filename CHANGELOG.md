@@ -19,6 +19,17 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal Template CRUD reconciliation and workspace read:**
+  native Template Create, Update and Delete now retain their exact operation and
+  complete Store source/target snapshots when write confirmation or a late lock
+  acknowledgement is uncertain. Caller-held tickets reconcile confirmed,
+  absent or divergent state read-only without retry, identity regeneration,
+  merge or overwrite; create/update drafts remain available. The Planner service
+  also exposes one validated, copy-isolated native aggregate snapshot containing
+  Templates, Executions, lifecycle metadata and active runtime state for the
+  upcoming workspace. No cache, V1 access, public UI, lifecycle controller or
+  PWA change is included.
+
 - **EDITOR-001 internal Workshop-Notizen persistence:** complete rundown and
   sparse stable-phase note snapshots can now be explicitly loaded, saved,
   updated and cleared on an existing ACTIVE or SUSPENDED native Execution.

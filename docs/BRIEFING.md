@@ -224,6 +224,17 @@ retry cleanup only. Existing recovery records are not deleted. Public lifecycle
 controls and the Editor/Library cutover remain pending; the App handoff is tested
 directly through the existing browser runner.
 
+Native Template Create, Update and Delete now retain their stable operation plus
+complete Store source/target snapshots when readback or a late Store-lock
+acknowledgement is uncertain. The Planner service validates caller-held tickets
+against the exact original transformation and reconciles by reading only:
+target is confirmed, source is absent and every divergent or unreadable state is
+unresolved. No retry, merge, identity regeneration or pending registry is used.
+The same internal boundary can read one validated, copy-isolated full native
+aggregate for a future combined Template/Execution workspace. It remains
+UI-neutral and does not change the public V1 Planner, lifecycle navigation,
+Timer ownership, Recovery or the PWA shell.
+
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.
 - `src/js/timer.mjs` owns Quick Timer transitions and authoritative deadlines.

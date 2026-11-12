@@ -19,6 +19,33 @@ adapter. The Planner still owns UI state, asynchronous I/O guards, navigation,
 backup and launch callbacks. Native UI integration remains pending. The new
 module is packaged and precached with the current unreleased PWA asset references.
 
+**Internal Template CRUD reconciliation and workspace read (unreleased):**
+`createNativePlannerService()` now treats ambiguous Template Create, Update and
+Delete acknowledgements consistently with the other native editing services.
+The existing Template integration captures the exact validated operation and
+complete Store source/target snapshots inside the authoritative Writer callback.
+An uncertain readback, mismatched readback or late lock acknowledgement returns
+a caller-held ticket; Create retains its one already allocated Template ID,
+Update retains its expected aggregate and Template revisions, and Delete retains
+the exact selected identity and revisions. Create and Update also return the
+complete isolated editable draft.
+
+`reconcileSave(ticket)` and `reconcileDelete(ticket)` validate the operation,
+draft where applicable, source and intended target against the original pure
+Store transformation before reading. Exact target is `confirmed`, exact source
+is `absent`, and every divergent aggregate or read failure is `unresolved` with
+the ticket retained. Reconciliation never writes, retries, refreshes revisions,
+generates another identity, merges or rebases. Template deletion continues to
+leave independent PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions and their
+historical source reference unchanged.
+
+For the upcoming combined workspace, `loadWorkspace()` returns one validated,
+copy-isolated native Store aggregate from the same locked Writer read. Templates
+and Executions retain their entity kind, stable identities and revisions;
+Executions include their lifecycle and the aggregate retains its active runtime
+binding. There is no V1 access, cache, index, second Store, lifecycle facade or
+public UI. The existing narrower Template-only `loadLibrary()` remains available.
+
 **Native Template draft editing foundation:** `editor-template-draft.mjs` edits
 the existing native Planner Service draft envelope without V1 materialization.
 It provides isolated field edits and phase insertion/removal/final-position

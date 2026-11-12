@@ -91,6 +91,17 @@ tests. This unreleased refactoring preserves public behavior and creates an
 explicit replacement boundary; it does not integrate the native public Editor.
 Production dependency/precache references are aligned for unreleased PWA v71.
 
+Internal native Template Create, Update and Delete now preserve the exact
+validated operation and complete Store source/target snapshots after an
+uncertain readback or late lock acknowledgement. Planner reconciliation validates
+caller-held tickets and reads only: target is confirmed, source is absent and a
+different or unreadable aggregate remains unresolved. It never retries, merges,
+rebases or allocates another Create identity; create/update drafts remain
+available. A minimal `loadWorkspace()` read returns one validated, copy-isolated
+native aggregate containing both Templates and Executions with lifecycle and
+revision metadata. This adds no cache, lifecycle controller, V1 access, public
+Library/Picker/Editor integration or PWA change.
+
 Internal App-side native exits now guard identity, actions and navigation through
 confirmed persistence or read-only Bridge reconciliation, local detachment,
 awaited ownership release and ordinary Quick Recovery initialization. Cleanup
