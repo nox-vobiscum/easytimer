@@ -8,6 +8,7 @@ import {
 } from '../src/js/editor-domain.mjs';
 import {
     captureExecutionRuntimeCheckpoint,
+    recordExecutionPhaseOutcomes,
     suspendStartedExecutionWithCheckpoint,
 } from '../src/js/execution-runtime.mjs';
 import {
@@ -190,7 +191,9 @@ test('retain and discard cover ACTIVE and SUSPENDED READY/STARTED with exact ful
             const execution = before.executions[0].execution;
             const options = executionExitOptions(source);
             const retained = retainExecutionPlanInRecord(source, options);
-            const retainedEntry = { execution: { ...execution, lifecycle: 'planned',
+            const expectedExecution = { ...execution };
+            delete expectedExecution.phaseOutcomes;
+            const retainedEntry = { execution: { ...expectedExecution, lifecycle: 'planned',
                 revision: execution.revision + 1, runtimeRevision: execution.runtimeRevision + 1,
                 attempt: null, workshopNotes: { rundown: '', phases: [] } }, suspendedCheckpoint: null };
             const expectedRuntime = execution.lifecycle === 'active' ? null : before.activeRuntime;
@@ -258,6 +261,177 @@ test('execution exits use the real writer and reject another writer after the ca
         assert.deepEqual(await writer.read(), result);
         assert.equal(storage.state.writes, 1);
     }
+});
+
+const outcome = (phaseId, conducted, activeMs = 0, overtimeMs = 0) => ({ phaseId, conducted, activeMs, overtimeMs });
+const phaseResults = source => source.executions[0].execution.phaseOutcomes;
+const advance = (source, actionType, occurredAt) =>
+    applyStartedSessionActionInRecord(source, sessionActionOptions(source, actionType, occurredAt));
+
+test('actual outcomes distinguish early NEXT histories that previously serialized identically', () => {
+    const base = startedRecord();
+    function course(pausedAt) {
+        const paused = advance(base, 'PAUSE', pausedAt);
+        const resumed = advance(paused, 'RESUME', 10_000);
+        return advance(resumed, 'NEXT', 11_000);
+    }
+    const a = course(9000), b = course(3000);
+    assert.deepEqual(a.activeRuntime, b.activeRuntime);
+    assert.equal(a.revision, b.revision);
+    assert.deepEqual(phaseResults(a), [outcome('phase-1', true, 8000), outcome('phase-2', false)]);
+    assert.deepEqual(phaseResults(b), [outcome('phase-1', true, 2000), outcome('phase-2', false)]);
+    assert.deepEqual(a.executions[0].execution.attempt, base.executions[0].execution.attempt);
+    assert.deepEqual(phaseResults(base), [outcome('phase-1', true), outcome('phase-2', false)]);
+});
+
+test('READY phases skipped with NEXT or COMPLETE are never fabricated as conducted', () => {
+    const execution = planned();
+    execution.currentPlan.phases.push({ ...execution.currentPlan.phases[1], id: 'phase-3' });
+    const ready = activatePlannedExecutionInRecord(record({ executions: [entry(execution)] }), activationOptions());
+    const started = startReadyExecutionInRecord(ready, startOptions());
+    const next = advance(started, 'NEXT', 7000);
+    const skipped = advance(next, 'NEXT', 8000);
+    const ended = advance(skipped, 'COMPLETE', 9000);
+    assert.deepEqual(phaseResults(ended), [outcome('phase-1', true, 5000), outcome('phase-2', false), outcome('phase-3', false)]);
+    assert.equal(ended.executions[0].execution.lifecycle, 'active');
+    assert.equal(ended.activeRuntime.run.stage, 'COMPLETED');
+});
+
+test('manual COMPLETE freezes actual phase duration while workshop overtime remains separate', () => {
+    const started = startedRecord();
+    const next = advance(started, 'NEXT', 12_000);
+    const second = advance(next, 'START', 20_000);
+    const completed = advance(second, 'COMPLETE', 25_000);
+    const pausedPhase = advance(second, 'PAUSE', 25_000);
+    const completedFromPause = advance(pausedPhase, 'COMPLETE', 1_000_000);
+    assert.deepEqual(phaseResults(completedFromPause), phaseResults(completed));
+    const stopped = advance(completed, 'STOP_OVERTIME', 35_000);
+    assert.deepEqual(phaseResults(stopped), [outcome('phase-1', true, 10_000), outcome('phase-2', true, 5000)]);
+    assert.equal(stopped.activeRuntime.clock.overtimeMs, 10_000);
+    assert.equal(stopped.executions[0].execution.lifecycle, 'active');
+    assert.equal(stopped.executions[0].execution.revision, started.executions[0].execution.revision);
+    assert.equal(stopped.executions[0].execution.runtimeRevision, started.executions[0].execution.runtimeRevision);
+    assert.deepEqual(stopped.executions[0].execution.attempt, started.executions[0].execution.attempt);
+});
+
+test('manual phase overtime survives pause and never counts paused wall time', () => {
+    const started = startedRecord();
+    const paused = advance(started, 'PAUSE', 72_000);
+    assert.deepEqual(phaseResults(paused), [outcome('phase-1', true, 70_000, 10_000), outcome('phase-2', false)]);
+    const resumed = advance(paused, 'RESUME', 172_000);
+    const next = advance(resumed, 'NEXT', 177_000);
+    assert.deepEqual(phaseResults(next), [outcome('phase-1', true, 75_000, 15_000), outcome('phase-2', false)]);
+});
+
+test('automatic deadline transitions and multi-phase catch-up record actual engine starts without callback overtime', () => {
+    const started = startedRecord({ currentPlan: { ...planned().currentPlan, transitionMode: 'automatic' } });
+    const exact = advance(started, 'PAUSE', 62_000);
+    assert.equal(exact.activeRuntime.run.currentIndex, 1);
+    assert.deepEqual(phaseResults(exact), [outcome('phase-1', true, 60_000), outcome('phase-2', true)]);
+    const late = advance(started, 'PAUSE', 200_000);
+    assert.deepEqual(phaseResults(late), [outcome('phase-1', true, 60_000), outcome('phase-2', true, 120_000)]);
+    assert.equal(late.activeRuntime.clock.overtimeMs, 18_000);
+    assert.equal(late.executions[0].execution.lifecycle, 'active');
+    const pause = advance(started, 'PAUSE', 12_000);
+    const resumed = advance(pause, 'RESUME', 112_000);
+    const next = advance(resumed, 'PAUSE', 165_000);
+    assert.deepEqual(phaseResults(next), [outcome('phase-1', true, 60_000), outcome('phase-2', true, 3000)]);
+});
+
+test('suspend captures current results and resume excludes the entire suspended interval', () => {
+    const next = advance(startedRecord(), 'NEXT', 12_000);
+    const running = advance(next, 'START', 20_000);
+    const suspended = suspendActiveExecutionInRecord(running, suspendOptions(running, 25_000, {
+        rundown: '', phases: [],
+    }));
+    assert.deepEqual(phaseResults(suspended), [outcome('phase-1', true, 10_000), outcome('phase-2', true, 5000)]);
+    const resumed = resumeSuspendedExecutionInRecord(suspended, resumeOptions(suspended, 1_000_000));
+    assert.deepEqual(phaseResults(resumed), phaseResults(suspended));
+    const continued = advance(resumed, 'RESUME', 1_001_000);
+    const paused = advance(continued, 'PAUSE', 1_006_000);
+    assert.deepEqual(phaseResults(paused), [outcome('phase-1', true, 10_000), outcome('phase-2', true, 10_000)]);
+    assert.deepEqual(paused.executions[0].execution.attempt, running.executions[0].execution.attempt);
+    assert.deepEqual(validateEditorStoreRecord(suspended), suspended);
+});
+
+test('removed baseline phase IDs retain conducted and not-conducted facts without editing the baseline', () => {
+    const source = advance(startedRecord(), 'NEXT', 12_000);
+    const baseline = structuredClone(source.executions[0].execution.attempt.startSnapshot);
+    for (const removed of ['phase-1', 'phase-2']) {
+        const modified = structuredClone(source);
+        modified.executions[0].execution.currentPlan.phases = modified.executions[0].execution.currentPlan.phases.filter(phase => phase.id !== removed);
+        const valid = validateEditorStoreRecord(modified);
+        assert.deepEqual(phaseResults(valid), [outcome('phase-1', true, 10_000), outcome('phase-2', false)]);
+        assert.deepEqual(valid.executions[0].execution.attempt.startSnapshot, baseline);
+    }
+});
+
+test('automatic catch-up at suspend preserves exact outcomes across dormant reactivation', () => {
+    const started = startedRecord({ currentPlan: { ...planned().currentPlan, transitionMode: 'automatic' } });
+    const suspended = suspendActiveExecutionInRecord(started, suspendOptions(started, 67_000, { rundown: '', phases: [] }));
+    assert.deepEqual(phaseResults(suspended), [outcome('phase-1', true, 60_000), outcome('phase-2', true, 5000)]);
+    const active = resumeSuspendedExecutionInRecord(suspended, resumeOptions(suspended, 1_000_000));
+    assert.deepEqual(phaseResults(active), phaseResults(suspended));
+    const resumed = advance(active, 'RESUME', 1_001_000);
+    const paused = advance(resumed, 'PAUSE', 1_004_000);
+    assert.deepEqual(phaseResults(paused), [outcome('phase-1', true, 60_000), outcome('phase-2', true, 8000)]);
+});
+
+test('incomplete native started stores fail closed and are never replaced or repaired', async () => {
+    const incompatible = startedRecord();
+    delete incompatible.executions[0].execution.phaseOutcomes;
+    const raw = JSON.stringify(incompatible);
+    const storage = memory(raw);
+    assert.throws(() => createEditorStore(() => storage).load(), /storageValidation/);
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks: aggregateLockManager() });
+    await assert.rejects(writer.write(() => assert.fail('must not transform a rejected store')), /storageValidation/);
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), raw);
+    assert.equal(storage.state.writes, 0);
+    const suspended = suspendActiveExecutionInRecord(startedRecord(), suspendOptions(startedRecord(), 3000, { rundown: '', phases: [] }));
+    delete suspended.executions[0].execution.phaseOutcomes;
+    assert.throws(() => validateEditorStoreRecord(suspended), /invalidPhaseOutcomes/);
+});
+
+test('runtime validation rejects inconsistent or fabricated outcomes instead of silently normalizing them', () => {
+    const paused = advance(startedRecord(), 'PAUSE', 12_000);
+    for (const change of [
+        value => { value[0].activeMs = 0; },
+        value => { value[1].conducted = true; },
+        value => { value[0].overtimeMs = 1; },
+    ]) {
+        const invalid = structuredClone(paused);
+        change(invalid.executions[0].execution.phaseOutcomes);
+        assert.throws(() => validateEditorStoreRecord(invalid), /invalidPhaseOutcomes/);
+    }
+    const next = advance(startedRecord(), 'NEXT', 12_000);
+    next.executions[0].execution.phaseOutcomes[0].activeMs = 60_001;
+    assert.throws(() => validateEditorStoreRecord(next), /invalidPhaseOutcomes/);
+    const phantom = structuredClone(paused);
+    phantom.executions[0].execution.currentPlan.phases.push({ ...plan().phases[0], id: 'phantom' });
+    phantom.executions[0].execution.phaseOutcomes.push(outcome('phantom', true, 100));
+    assert.throws(() => validateEditorStoreRecord(phantom), /invalidPhaseOutcomes/);
+});
+
+test('retain removes captured outcomes and discard removes only the selected execution history', () => {
+    const source = advance(startedRecord(), 'NEXT', 12_000);
+    source.executions.push(entry(planned('other')));
+    const before = structuredClone(source);
+    const retained = retainExecutionPlanInRecord(source, executionExitOptions(source));
+    assert.equal(Object.hasOwn(retained.executions[0].execution, 'phaseOutcomes'), false);
+    const discarded = discardExecutionInRecord(source, executionExitOptions(source));
+    assert.deepEqual(discarded.executions, [source.executions[1]]);
+    assert.deepEqual(source, before);
+});
+
+test('stale concurrent progress cannot overwrite recorded phase outcomes', async () => {
+    const source = startedRecord();
+    const target = advance(source, 'NEXT', 12_000);
+    const storage = memory(JSON.stringify(target));
+    const writer = createEditorStoreWriter({ getStorage: () => storage, locks: aggregateLockManager() });
+    await assert.rejects(writer.write(current =>
+        applyStartedSessionActionInRecord(current, sessionActionOptions(source, 'PAUSE', 13_000))), /conflict/);
+    assert.deepEqual(await writer.read(), target);
+    assert.equal(storage.state.writes, 0);
 });
 
 test('inserts one native Schema-2 template without changing unrelated aggregate state', () => {
@@ -1630,8 +1804,11 @@ test('accepts active started runtimes in running, paused, READY and overtime sta
         [transitionSession(state.run, state.clock, { type: 'PAUSE' }, 70_000), 70_000],
     ];
     for (const [current, savedAt] of states) {
+        const observed = transitionSession(state.run, state.clock, { type: 'TICK' }, savedAt);
+        const beforeAction = recordExecutionPhaseOutcomes(execution, observed.run, observed.clock);
+        const captured = recordExecutionPhaseOutcomes(beforeAction, current.run, current.clock);
         const valid = validateEditorStoreRecord(record({
-            executions: [entry(execution)],
+            executions: [entry(captured)],
             activeRuntime: activeRuntime(execution, current, savedAt),
         }));
         assert.equal(valid.activeRuntime.run.runId, execution.attempt.runtimeRunId);

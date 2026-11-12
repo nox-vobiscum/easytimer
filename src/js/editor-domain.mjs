@@ -172,13 +172,15 @@ function validateExecution(execution, lifecycle, validateAttempt) {
     exactFields(execution, [
         'schemaVersion', 'kind', 'id', 'revision', 'runtimeRevision', 'source', 'lifecycle',
         'currentPlan', 'workshopNotes', 'attempt',
-    ]);
+    ], ['phaseOutcomes']);
     if (execution.schemaVersion !== EDITOR_SCHEMA_VERSION || execution.kind !== EDITOR_KINDS.EXECUTION) fail('invalidData');
     if (execution.lifecycle !== lifecycle) fail('invalidLifecycle');
     const normalizedRevision = revision(execution.revision, 'invalidRevision');
     const normalizedRuntimeRevision = revision(execution.runtimeRevision, 'invalidRuntimeRevision');
     if (normalizedRevision < 1 || normalizedRuntimeRevision > normalizedRevision) fail('invalidRevision');
     const currentPlan = validateRundownPlan(execution.currentPlan);
+    const attempt = validateAttempt(execution.attempt);
+    if (attempt === null && Object.hasOwn(execution, 'phaseOutcomes')) fail('invalidPhaseOutcomes');
     return {
         schemaVersion: EDITOR_SCHEMA_VERSION,
         kind: EDITOR_KINDS.EXECUTION,
@@ -189,8 +191,34 @@ function validateExecution(execution, lifecycle, validateAttempt) {
         lifecycle,
         currentPlan,
         workshopNotes: validateWorkshopNotes(execution.workshopNotes, currentPlan),
-        attempt: validateAttempt(execution.attempt),
+        attempt,
+        ...(attempt === null ? {} : { phaseOutcomes: validatePhaseOutcomes(
+            execution.phaseOutcomes, attempt.startSnapshot, currentPlan,
+        ) }),
     };
+}
+
+function validatePhaseOutcomes(outcomes, baseline, currentPlan) {
+    if (!Array.isArray(outcomes)) fail('invalidPhaseOutcomes');
+    const allowed = new Set([...baseline.phases, ...currentPlan.phases].map(phase => phase.id));
+    const seen = new Set();
+    const valid = Array.from(outcomes, outcome => {
+        exactFields(outcome, ['phaseId', 'conducted', 'activeMs', 'overtimeMs']);
+        if (!allowed.has(outcome.phaseId) || seen.has(outcome.phaseId)
+            || typeof outcome.conducted !== 'boolean'
+            || !Number.isSafeInteger(outcome.activeMs) || outcome.activeMs < 0
+            || !Number.isSafeInteger(outcome.overtimeMs) || outcome.overtimeMs < 0
+            || outcome.overtimeMs > outcome.activeMs
+            || (!outcome.conducted && (outcome.activeMs !== 0 || outcome.overtimeMs !== 0))) {
+            fail('invalidPhaseOutcomes');
+        }
+        seen.add(outcome.phaseId);
+        return { phaseId: outcome.phaseId, conducted: outcome.conducted,
+            activeMs: outcome.activeMs, overtimeMs: outcome.overtimeMs };
+    });
+    if (baseline.phases.some(phase => !seen.has(phase.id))
+        || !valid.some(outcome => outcome.conducted)) fail('invalidPhaseOutcomes');
+    return valid;
 }
 
 const absentAttempt = attempt => {
@@ -273,6 +301,9 @@ export function startActiveExecution(execution, attemptId, startedAt, runtimeRun
         ...ready,
         revision: nextRevision(ready.revision),
         runtimeRevision: nextRevision(ready.runtimeRevision),
+        phaseOutcomes: ready.currentPlan.phases.map((phase, index) => ({
+            phaseId: phase.id, conducted: index === 0, activeMs: 0, overtimeMs: 0,
+        })),
         attempt: {
             id: attemptId,
             startedAt,
@@ -291,8 +322,10 @@ export function retainCurrentPlan(execution) {
         current = execution.attempt === null
             ? validateSuspendedReadyExecution(execution) : validateSuspendedStartedExecution(execution);
     } else fail('invalidLifecycle');
+    const retained = { ...current };
+    delete retained.phaseOutcomes;
     return validatePlannedExecution({
-        ...current,
+        ...retained,
         revision: nextRevision(current.revision),
         runtimeRevision: nextRevision(current.runtimeRevision),
         lifecycle: EXECUTION_LIFECYCLES.PLANNED,

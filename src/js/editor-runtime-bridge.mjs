@@ -8,6 +8,7 @@ import {
     suspendActiveExecutionInRecord,
 } from './editor-storage.mjs';
 import { transitionSession } from './session.mjs';
+import { recordExecutionPhaseOutcomes } from './execution-runtime.mjs';
 
 const fail = code => { throw new Error(code); };
 
@@ -127,6 +128,10 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
                     observedAt,
                     run: current.run,
                     clock: current.clock,
+                    ...(persisted.attemptId === null ? {} : { phaseOutcomes: recordExecutionPhaseOutcomes(
+                        record.executions.find(entry => entry.execution.id === persisted.executionId).execution,
+                        current.run, current.clock,
+                    ).phaseOutcomes }),
                 }),
             };
         } catch (error) {

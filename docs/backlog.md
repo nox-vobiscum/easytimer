@@ -127,6 +127,17 @@ untouched. A future operation may create a new independent Execution from an
 existing Execution with a fresh identity and independent progress; that cloning
 capability is not implemented and requires a separate approved slice.
 
+Internal actual phase outcomes are now recorded for started native executions,
+using stable phase IDs, conducted status, active milliseconds and phase overtime.
+Existing engine values preserve early manual transitions, skipped READY phases,
+automatic catch-up, pauses and suspended checkpoints; final workshop overtime is
+separate. Store validation, passive portability and read-only adoption preserve
+the contract, with full-record uncertain-write reconciliation. Retain/discard
+removes the selected outcome history. Incomplete started native development
+records are deliberately rejected without migration, inferred history, repair or
+overwrite; unstarted native records and released V1 data are unaffected. This is
+unreleased internal functionality, not COMPLETED/archive or public UI integration.
+
 Internal persistent non-archiving exits now support ACTIVE and SUSPENDED READY
 and STARTED executions. Retain-plan returns the same execution to PLANNED with
 its latest complete planning content and clears Attempt, checkpoint and all

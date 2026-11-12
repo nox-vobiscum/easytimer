@@ -45,6 +45,52 @@ details design. Name/transition and Rundown metadata controls, Notes/Resources
 overlays and insertion/removal/reorder UI remain pending. No public Planner
 import, packaging or Service Worker cutover is included.
 
+**Internal actual phase-outcome contract (unreleased):** A native Execution with
+an Attempt must include `phaseOutcomes`, an array of exact records
+`{ phaseId, conducted, activeMs, overtimeMs }`. Stable phase IDs bind results to
+the immutable first-START plan and current plan, including baseline phases later
+absent from the configured plan. Every baseline phase must have exactly one
+record; unknown/duplicate IDs, non-integer or negative times, invalid booleans,
+overtime exceeding active duration and positive times for a non-conducted phase
+are rejected. A phase started and immediately stopped may legitimately have zero
+active duration. PLANNED and never-started ACTIVE/SUSPENDED Executions have no
+outcome field. The first actual START initializes the known new history: phase
+one is conducted at zero elapsed time, other phases have not yet been conducted.
+
+`recordExecutionPhaseOutcomes()` in `execution-runtime.mjs` observes reconciled
+Session-engine output using existing `timeBudget()` values, never a separate
+clock or elapsed-time accumulator. Store actions capture the current phase before
+NEXT/COMPLETE replaces its clock, and again after the transition. A READY phase
+bypassed without START stays not conducted. Automatic catch-up confirms actual
+engine STARTs and settles crossed phases at their authoritative planned budgets,
+with no callback-delay phase overtime. Current-phase results are a sample at the
+persisted runtime/checkpoint time, not a separately running counter. Once agenda
+completion settles a phase, final workshop overtime never extends its result.
+The Execution lifecycle remains ACTIVE until a separately implemented deliberate
+end operation; clock expiration cannot create COMPLETED history.
+
+Store validation cross-checks results against the runtime's stable phase IDs,
+current clock, settled phase overtime and future unstarted phases. Suspend samples
+the frozen checkpoint before changing lifecycle; Resume preserves those results
+and the same Attempt without charging suspended time. Read-only native adoption
+returns current derived `runtime.phaseOutcomes` while retaining the exact persisted
+`record`; a later write derives progress from that authoritative snapshot, not by
+adding the observed projection again. Semantic timer actions retain their existing
+aggregate-only progress revision behavior. Lifecycle revision increments and
+runtime bindings are unchanged; Attempt identity and start snapshot never change.
+Retain removes outcomes with the Attempt, and discard removes only the selected
+Execution. Full-record Bridge reconciliation also includes outcome data.
+
+**Approved incompatibility:** Required-field validation is the explicit boundary;
+no redundant version flag is added. Previously started native development records
+without complete outcomes fail validation/loading/portability. There is no default
+history, conversion, repair, automatic deletion, or invalid-Store-to-empty fallback.
+Unstarted native PLANNED/READY records remain valid without invented history;
+released V1 persistence, Session engine and Recovery are unchanged. This records
+results for future archival, not COMPLETED persistence, archive UI, live timing
+edits or a chronological event log. Future early finalization must sample its
+current authoritative phase clock before freezing the final result.
+
 **Internal persistent retain/discard contract (unreleased):**
 `retainExecutionPlanInRecord(record, options)` and
 `discardExecutionInRecord(record, options)` operate on ACTIVE and SUSPENDED

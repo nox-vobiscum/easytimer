@@ -16,9 +16,11 @@ import {
 import {
     captureExecutionRuntimeCheckpoint,
     prepareReadyExecutionRuntime,
+    recordExecutionPhaseOutcomes,
     resumeStartedExecutionWithCheckpoint,
     suspendStartedExecutionWithCheckpoint,
     validateExecutionRuntimeCheckpoint,
+    validateExecutionOutcomeRuntime,
 } from './execution-runtime.mjs';
 import { validateRuntime } from './recovery.mjs';
 import { transitionSession } from './session.mjs';
@@ -65,6 +67,7 @@ function validateActiveRuntime(activeRuntime, execution) {
         clock: activeRuntime.clock,
         quickDurationMs: 0,
     });
+    if (started) validateExecutionOutcomeRuntime(execution, runtime.run, runtime.clock);
     if (!started && (runtime.clock.status !== 'READY'
         || runtime.run.stage !== 'PHASE'
         || runtime.run.currentIndex !== 0
@@ -95,6 +98,7 @@ function validateExecutionEntry(entry) {
             validExecution = validateSuspendedStartedExecution(execution);
             if (entry.suspendedCheckpoint === null) fail('missingCheckpoint');
             suspendedCheckpoint = validateExecutionRuntimeCheckpoint(entry.suspendedCheckpoint, validExecution);
+            validateExecutionOutcomeRuntime(validExecution, suspendedCheckpoint.run, suspendedCheckpoint.clock);
         }
     } else if (execution?.lifecycle === EXECUTION_LIFECYCLES.ACTIVE) {
         validExecution = execution.attempt === null
@@ -383,9 +387,13 @@ export function applyStartedSessionActionInRecord(record, options) {
 
     const transitioned = transitionSession(run, clock, { type: actionType }, occurredAt);
     if (JSON.stringify(transitioned) === JSON.stringify(reconciled)) fail('invalidSessionAction');
+    const observed = recordExecutionPhaseOutcomes(execution, run, clock);
+    const updated = recordExecutionPhaseOutcomes(observed, transitioned.run, transitioned.clock);
     return validateEditorStoreRecord({
         ...valid,
         revision: valid.revision + 1,
+        executions: valid.executions.map(entry => entry.execution.id === executionId
+            ? { ...entry, execution: updated } : entry),
         activeRuntime: {
             ...valid.activeRuntime,
             savedAt: occurredAt,

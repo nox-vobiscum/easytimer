@@ -19,6 +19,17 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal actual phase outcomes:** started native executions now
+  require compact per-phase conducted/active-duration/overtime records. Native
+  Store transitions sample the existing authoritative clock before manual phase
+  changes and preserve engine-confirmed automatic catch-up, pauses and suspended
+  checkpoints. Final workshop overtime stays separate from settled phase results.
+  Read-only reload adoption exposes current derived results without writing;
+  retain/discard clears the selected history. Incomplete previously started
+  native development records are intentionally rejected without repair, overwrite
+  or migration. Unstarted native records and released V1 data remain unchanged.
+  No archive/COMPLETED support or public Editor cutover is included.
+
 - **EDITOR-001 internal non-archiving lifecycle exits:** explicit retain-plan and
   discard operations now persist ACTIVE or SUSPENDED executions through the
   existing Store writer and Runtime Bridge. Retain keeps the same execution and

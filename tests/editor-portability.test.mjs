@@ -8,6 +8,7 @@ import {
 } from '../src/js/editor-domain.mjs';
 import {
     captureExecutionRuntimeCheckpoint,
+    recordExecutionPhaseOutcomes,
     suspendStartedExecutionWithCheckpoint,
 } from '../src/js/execution-runtime.mjs';
 import {
@@ -64,7 +65,7 @@ function activeFixture() {
     const execution = startActiveExecution(ready, 'attempt-active', 1000, 'run-active');
     const state = runtimeState(execution, 'run-active', 1000, 1500);
     return {
-        entry: entry(execution),
+        entry: entry(recordExecutionPhaseOutcomes(execution, state.run, state.clock)),
         activeRuntime: {
             executionId: execution.id,
             attemptId: execution.attempt.id,
@@ -99,6 +100,19 @@ function completeRecord() {
         activeRuntime: active.activeRuntime,
     };
 }
+
+test('incomplete native started history is rejected by portability without invented results', () => {
+    const valid = completeRecord();
+    const text = serializeEditorBackup(valid);
+    const document = JSON.parse(text);
+    const started = document.record.executions.find(item => item.execution.attempt !== null);
+    delete started.execution.phaseOutcomes;
+    assert.throws(() => parseEditorPortability(JSON.stringify(document)), /portabilityInvalid/);
+    const roundtrip = parseEditorPortability(text);
+    assert.deepEqual(roundtrip.record, valid);
+    assert.deepEqual(roundtrip.record.executions.map(item => item.execution.phaseOutcomes),
+        valid.executions.map(item => item.execution.phaseOutcomes));
+});
 
 test('complete backup round-trips every currently supported native aggregate field', () => {
     const source = completeRecord();

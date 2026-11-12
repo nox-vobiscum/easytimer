@@ -224,7 +224,9 @@ test('retain and discard persist ACTIVE READY/STARTED without releasing ownershi
             assert.deepEqual(target.templates, source.templates);
             if (method === 'retainExecutionPlan') {
                 const execution = source.executions[0].execution;
-                assert.deepEqual(target.executions, [{ execution: { ...execution, lifecycle: 'planned',
+                const expectedExecution = { ...execution };
+                delete expectedExecution.phaseOutcomes;
+                assert.deepEqual(target.executions, [{ execution: { ...expectedExecution, lifecycle: 'planned',
                     revision: execution.revision + 1, runtimeRevision: execution.runtimeRevision + 1,
                     attempt: null, workshopNotes: { rundown: '', phases: [] } }, suspendedCheckpoint: null }]);
             } else assert.deepEqual(target.executions, []);
@@ -397,6 +399,66 @@ test('exit acknowledgement lost after the writer callback is reconciled without 
         assert.equal(c.activeLock.held, true);
         await c.activeLock.release();
     }
+});
+
+test('native reload adoption exposes current outcomes read-only and later writes do not double count them', async () => {
+    for (const transitionMode of ['manual', 'automatic']) {
+        const c = await persistedActiveSetup({ started: true, transitionMode });
+        const writes = c.storage.state.writes;
+        const before = structuredClone(c.record);
+        const adopted = await c.bridge.adoptPersistedActive({ observedAt: 70_000 });
+        assert.deepEqual(adopted.record, before, 'adoption does not rewrite the persisted observation');
+        assert.deepEqual(adopted.runtime.phaseOutcomes, transitionMode === 'manual' ? [
+            { phaseId: 'phase-1', conducted: true, activeMs: 68_000, overtimeMs: 8000 },
+            { phaseId: 'phase-2', conducted: false, activeMs: 0, overtimeMs: 0 },
+        ] : [
+            { phaseId: 'phase-1', conducted: true, activeMs: 60_000, overtimeMs: 0 },
+            { phaseId: 'phase-2', conducted: true, activeMs: 8000, overtimeMs: 0 },
+        ]);
+        assert.deepEqual(await c.writer.read(), before);
+        assert.equal(c.storage.state.writes, writes);
+        const paused = await c.bridge.applySessionAction(sessionActionOptions(before, 'PAUSE', 72_000));
+        assert.deepEqual(paused.executions[0].execution.phaseOutcomes, transitionMode === 'manual' ? [
+            { phaseId: 'phase-1', conducted: true, activeMs: 70_000, overtimeMs: 10_000 },
+            { phaseId: 'phase-2', conducted: false, activeMs: 0, overtimeMs: 0 },
+        ] : [
+            { phaseId: 'phase-1', conducted: true, activeMs: 60_000, overtimeMs: 0 },
+            { phaseId: 'phase-2', conducted: true, activeMs: 10_000, overtimeMs: 0 },
+        ]);
+        assert.deepEqual(paused.executions[0].execution.attempt, before.executions[0].execution.attempt);
+        assert.equal(c.storage.state.writes, writes + 1);
+        await c.activeLock.release();
+    }
+});
+
+test('uncertain NEXT reconciles the complete captured phase outcome without retry or duplicated duration', async () => {
+    const c = await startedBridgeSetup();
+    c.storage.state.faultAfterWrites = c.storage.state.writes;
+    c.storage.state.failReadAfterWrite = true;
+    await assert.rejects(c.bridge.applySessionAction(sessionActionOptions(c.started, 'NEXT', 12_000)), /storageUnconfirmed/);
+    const target = JSON.parse(c.storage.values.get(EDITOR_STORAGE_KEY));
+    assert.deepEqual(target.executions[0].execution.phaseOutcomes, [
+        { phaseId: 'phase-1', conducted: true, activeMs: 10_000, overtimeMs: 0 },
+        { phaseId: 'phase-2', conducted: false, activeMs: 0, overtimeMs: 0 },
+    ]);
+    const writes = c.storage.state.writes;
+    c.storage.state.failReadAfterWrite = false;
+    assert.deepEqual(await c.bridge.reconcilePendingOperation(), { kind: 'sessionAction', outcome: 'target', record: target });
+    assert.equal(c.storage.state.writes, writes);
+    assert.equal(c.activeLock.held, true);
+    await c.activeLock.release();
+});
+
+test('adoption rejects incomplete native started history without replacing the Store or claiming ownership', async () => {
+    const c = await persistedActiveSetup({ started: true });
+    delete c.record.executions[0].execution.phaseOutcomes;
+    const raw = JSON.stringify(c.record);
+    c.storage.values.set(EDITOR_STORAGE_KEY, raw);
+    const writes = c.storage.state.writes;
+    await assert.rejects(c.bridge.adoptPersistedActive({ observedAt: 10_000 }), /storageValidation/);
+    assert.equal(c.storage.values.get(EDITOR_STORAGE_KEY), raw);
+    assert.equal(c.storage.state.writes, writes);
+    assert.equal(c.activeLock.held, false);
 });
 
 test('activates PLANNED as confirmed ACTIVE READY after acquiring ownership first', async () => {

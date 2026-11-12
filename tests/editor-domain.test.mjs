@@ -259,6 +259,43 @@ test('later timer starts preserve the original attempt, baseline and revisions',
     assert.notEqual(second.attempt.startSnapshot, first.attempt.startSnapshot);
 });
 
+test('started native executions require complete strictly validated outcomes while unstarted records stay unchanged', () => {
+    const planned = createPlannedExecution(template(), 'execution-outcomes');
+    const ready = activatePlannedExecution(planned);
+    const started = startActiveExecution(ready, 'attempt-outcomes', 1000, 'run-outcomes');
+    assert.deepEqual(started.phaseOutcomes, [
+        { phaseId: 'phase-1', conducted: true, activeMs: 0, overtimeMs: 0 },
+        { phaseId: 'phase-2', conducted: false, activeMs: 0, overtimeMs: 0 },
+    ]);
+    const isolated = validateStartedExecution(started);
+    isolated.phaseOutcomes[0].activeMs = 7;
+    assert.equal(started.phaseOutcomes[0].activeMs, 0);
+    assert.equal(Object.hasOwn(planned, 'phaseOutcomes'), false);
+    assert.equal(Object.hasOwn(ready, 'phaseOutcomes'), false);
+    assert.deepEqual(validatePlannedExecution(planned), planned);
+    assert.deepEqual(validateReadyExecution(ready), ready);
+    const incomplete = structuredClone(started); delete incomplete.phaseOutcomes;
+    assert.throws(() => validateStartedExecution(incomplete), /invalidPhaseOutcomes/);
+    for (const outcomes of [null, [], [...started.phaseOutcomes, ,], [started.phaseOutcomes[0]],
+        started.phaseOutcomes.map(outcome => ({ ...outcome, conducted: false })),
+        [started.phaseOutcomes[0], started.phaseOutcomes[0]],
+        [{ ...started.phaseOutcomes[0], phaseId: 'unknown' }, started.phaseOutcomes[1]],
+        [{ ...started.phaseOutcomes[0], activeMs: -1 }, started.phaseOutcomes[1]],
+        [{ ...started.phaseOutcomes[0], activeMs: 0.5 }, started.phaseOutcomes[1]],
+        [{ ...started.phaseOutcomes[0], activeMs: Number.MAX_SAFE_INTEGER + 1 }, started.phaseOutcomes[1]],
+        [{ ...started.phaseOutcomes[0], overtimeMs: 1 }, started.phaseOutcomes[1]],
+        [started.phaseOutcomes[0], { ...started.phaseOutcomes[1], activeMs: 1 }],
+        [{ ...started.phaseOutcomes[0], conducted: 'yes' }, started.phaseOutcomes[1]],
+        [{ ...started.phaseOutcomes[0], extra: true }, started.phaseOutcomes[1]],
+    ]) assert.throws(() => validateStartedExecution({ ...started, phaseOutcomes: outcomes }));
+    assert.throws(() => validateReadyExecution({ ...ready, phaseOutcomes: [] }), /invalidPhaseOutcomes/);
+    const retained = retainCurrentPlan(started);
+    assert.equal(Object.hasOwn(retained, 'phaseOutcomes'), false);
+    const second = startActiveExecution(activatePlannedExecution(retained), 'second-attempt', 2000, 'second-run');
+    assert.deepEqual(second.phaseOutcomes, started.phaseOutcomes);
+    assert.notEqual(second.phaseOutcomes, started.phaseOutcomes);
+});
+
 test('attempt validation requires a non-empty immutable runtime run binding', () => {
     const started = startActiveExecution(
         activatePlannedExecution(createPlannedExecution(template(), 'execution-1')),
@@ -381,7 +418,9 @@ test('retaining suspended READY and STARTED plans clears only run-specific conte
         suspended.workshopNotes = { rundown: 'Discard', phases: [{ phaseId: 'phase-1', text: 'Discard too' }] };
         const before = structuredClone(suspended);
         const retained = retainCurrentPlan(suspended);
-        assert.deepEqual(retained, { ...before, lifecycle: 'planned', revision: before.revision + 1,
+        const expected = { ...before };
+        delete expected.phaseOutcomes;
+        assert.deepEqual(retained, { ...expected, lifecycle: 'planned', revision: before.revision + 1,
             runtimeRevision: before.runtimeRevision + 1, attempt: null, workshopNotes: { rundown: '', phases: [] } });
         assert.deepEqual(suspended, before);
         retained.currentPlan.phases[0].resources[0].label = 'Output only';

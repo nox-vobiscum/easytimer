@@ -198,6 +198,14 @@ Keep the released V1 timer, editor and recovery functionality working until a
 separately approved replacement is integrated; regression protection does not
 create a historical-data migration requirement.
 
+**Approved native development-data boundary:** A native Execution with an Attempt
+must carry the strictly validated `phaseOutcomes` contract described in
+`SESSION_EDITOR_EVOLUTION.md`. Incomplete previously started native development
+records may be rejected; do not infer history, supply default outcomes, migrate,
+repair, delete or overwrite them automatically. A rejected Store never becomes an
+empty replacement. Unstarted PLANNED/READY records remain valid without outcomes.
+This deliberately incompatible internal contract does not affect released V1 data.
+
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.
 - `src/js/timer.mjs` owns Quick Timer transitions and authoritative deadlines.
