@@ -19,6 +19,16 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal non-archiving lifecycle exits:** explicit retain-plan and
+  discard operations now persist ACTIVE or SUSPENDED executions through the
+  existing Store writer and Runtime Bridge. Retain keeps the same execution and
+  latest configured plan as PLANNED while clearing attempt, checkpoint and
+  Workshop-Notizen; discard removes only the selected execution. Matching ACTIVE
+  runtime is removed atomically, while unrelated active runtime is preserved.
+  Revisions and identity bindings are checked; uncertain writes are reconciled
+  read-only without retry. No operation releases ownership, detaches the local
+  timer or navigates. Public UI, archival and actual phase results remain pending.
+
 - **EDITOR-001 internal native Template import:** a UI-neutral service strictly
   parses a single Schema-2 Template document into an isolated review candidate
   with a fresh Template ID and revision 1, retaining phase identities and all

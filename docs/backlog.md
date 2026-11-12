@@ -127,6 +127,18 @@ untouched. A future operation may create a new independent Execution from an
 existing Execution with a fresh identity and independent progress; that cloning
 capability is not implemented and requires a separate approved slice.
 
+Internal persistent non-archiving exits now support ACTIVE and SUSPENDED READY
+and STARTED executions. Retain-plan returns the same execution to PLANNED with
+its latest complete planning content and clears Attempt, checkpoint and all
+Workshop-Notizen. Discard removes only the selected execution. Both use existing
+Store/Bridge revision and binding checks; matching ACTIVE runtime is removed in
+the same record write, while unrelated active runtime remains unchanged.
+Uncertain outcomes retain read-only source/target reconciliation without retries.
+Neither exit releases ownership or detaches the local timer. Public confirmation,
+detachment, ownership release and navigation remain unimplemented; actual phase
+results and COMPLETED/archive are separate pending work. These internal exits
+do not implement PLANNED library deletion or change the NO-MIGRATION decision.
+
 An unreleased internal native Template import service now separates strict JSON
 preview from explicit persistence. A single Template document becomes an
 independent Template with a fresh ID and revision 1, retaining phase IDs and all

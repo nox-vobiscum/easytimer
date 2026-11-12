@@ -1,6 +1,8 @@
 import {
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
+    discardExecutionInRecord,
+    retainExecutionPlanInRecord,
     resumeSuspendedExecutionInRecord,
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
@@ -13,26 +15,28 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
     let pendingOperation = null;
     let busy = false;
 
-    async function writeOperation(kind, options, transform, claimOwnership) {
+    async function writeOperation(kind, options, transform, claimOwnership, requireOwnership = true) {
         if (pendingOperation !== null) fail(kind === 'activation' ? 'pendingActivation' : 'pendingOperation');
         if (busy) fail('bridgeBusy');
-        if (!claimOwnership && !activeLock.held) fail('activeLockRequired');
+        if (requireOwnership && !claimOwnership && !activeLock.held) fail('activeLockRequired');
         busy = true;
         let source = null;
         let target = null;
         try {
             if (claimOwnership) await activeLock.claim();
             return await writer.write(record => {
-                if (!activeLock.held) fail('activeLockRequired');
+                if (requireOwnership && !activeLock.held) fail('activeLockRequired');
                 source = structuredClone(record);
                 target = structuredClone(transform(record, options));
                 return target;
             });
         } catch (error) {
-            if ((error?.message === 'storageUnconfirmed' || error?.message === 'storageReadback')
+            if ((error?.message === 'storageUnconfirmed' || error?.message === 'storageReadback'
+                || (['retainPlan', 'discard'].includes(kind) && error?.message === 'lockRequest'))
                 && source !== null && target !== null) {
                 pendingOperation = {
                     kind,
+                    requireOwnership,
                     source: structuredClone(source),
                     target: structuredClone(target),
                 };
@@ -62,13 +66,13 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
                 fail('pendingActivationMismatch');
             }
         }
-        if (!activeLock.held) fail('activeLockRequired');
+        if (pendingOperation.requireOwnership && !activeLock.held) fail('activeLockRequired');
         if (busy) fail('bridgeBusy');
         busy = true;
         const pending = pendingOperation;
         try {
             const record = await writer.read();
-            if (!activeLock.held) fail('activeLockRequired');
+            if (pending.requireOwnership && !activeLock.held) fail('activeLockRequired');
             const raw = JSON.stringify(record);
             let outcome = 'conflict';
             if (raw === JSON.stringify(pending.target)) outcome = 'target';
@@ -148,6 +152,16 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         },
         resumeSuspended(options) {
             return writeOperation('resume', options, resumeSuspendedExecutionInRecord, true);
+        },
+        retainExecutionPlan(options) {
+            const snapshot = { ...options };
+            return writeOperation('retainPlan', snapshot, retainExecutionPlanInRecord, false,
+                snapshot.expectedLifecycle !== 'suspended');
+        },
+        discardExecution(options) {
+            const snapshot = { ...options };
+            return writeOperation('discard', snapshot, discardExecutionInRecord, false,
+                snapshot.expectedLifecycle !== 'suspended');
         },
         adoptPersistedActive,
         reconcilePendingActivation(expectedIdentity = null) {

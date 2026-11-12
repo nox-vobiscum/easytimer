@@ -45,6 +45,48 @@ details design. Name/transition and Rundown metadata controls, Notes/Resources
 overlays and insertion/removal/reorder UI remain pending. No public Planner
 import, packaging or Service Worker cutover is included.
 
+**Internal persistent retain/discard contract (unreleased):**
+`retainExecutionPlanInRecord(record, options)` and
+`discardExecutionInRecord(record, options)` operate on ACTIVE and SUSPENDED
+executions, both READY and already started. Options identify `executionId`,
+`expectedLifecycle`, `expectedAggregateRevision`, `expectedExecutionRevision`,
+`expectedRuntimeRevision`, `expectedAttemptId` and `expectedRunId`. READY ACTIVE
+uses its existing runtime Run ID; READY SUSPENDED uses null Attempt/Run references.
+Started states require the existing Attempt and Run IDs. A stale revision,
+changed lifecycle, missing execution or mismatching binding rejects the operation.
+PLANNED library deletion and COMPLETED/archive are outside these exit operations.
+
+Retain reuses the extended `retainCurrentPlan()` domain operation: the same
+execution and source reference return to PLANNED with an independent copy of the
+complete latest configured plan. Workshop-Notizen, Attempt/start baseline and
+suspended checkpoint are discarded. Aggregate, Execution and runtime revisions
+each increase once. Discard removes the complete selected execution and increases
+only the aggregate revision; there is no remaining Execution to revise. Both
+operations validate the complete target and remove only the selected ACTIVE
+runtime. A SUSPENDED exit leaves a different ACTIVE execution/runtime untouched.
+Templates and all unrelated execution entries remain unchanged.
+
+Runtime Bridge methods `retainExecutionPlan(options)` and
+`discardExecution(options)` capture the supplied options and reuse the exclusive
+Store writer. ACTIVE exits require ownership before and at write-callback entry;
+SUSPENDED exits neither require nor acquire Active-Timer ownership. Successful
+calls return the full confirmed Store record, following existing Bridge API
+conventions; errors reject with the established codes. `reconcilePendingOperation()`
+returns `kind: 'retainPlan'` or `'discard'`, `outcome: 'source' | 'target' |
+'conflict'`, and the observed record. Unconfirmed/mismatching readback or a late
+Store-lock request failure after target construction retains full source/target
+snapshots, blocks new Bridge mutations and never retries. Reconciliation remains
+read-only, requires retained ownership for ACTIVE-origin operations, and needs
+only the Store lock for SUSPENDED-origin operations. A source result does not
+confirm the requested exit; conflicts and failed reads retain pending state.
+
+These operations never release ownership, detach a local timer, close a Panel
+or navigate. Future UI must confirm intent, persist/reconcile, detach the local
+runtime, release ownership and then navigate; editable drafts stay available on
+failure. Bridge pending state is still in-memory only. Actual phase-result
+recording, archival/COMPLETED, public ending/reset UI and historical migration
+are not introduced.
+
 **Internal native Template import contract (unreleased):**
 `createNativeTemplateImportService({ writer, createId })` in
 `editor-template-import.mjs` separates `prepareImport(text,

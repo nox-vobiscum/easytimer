@@ -364,12 +364,33 @@ test('a retained plan can be activated and started later with a fresh attempt an
     assert.equal(retained.attempt, null);
 });
 
-test('retaining the current plan rejects non-active lifecycle states', () => {
+test('retaining the current plan rejects planned and completed lifecycle states', () => {
     const planned = createPlannedExecution(template(), 'execution-1');
     assert.throws(() => retainCurrentPlan(planned), /invalidLifecycle/);
-    for (const lifecycle of ['suspended', 'completed']) {
-        assert.throws(() => retainCurrentPlan({ ...planned, lifecycle }), /invalidLifecycle/);
+    assert.throws(() => retainCurrentPlan({ ...planned, lifecycle: 'completed' }), /invalidLifecycle/);
+});
+
+test('retaining suspended READY and STARTED plans clears only run-specific content with isolated copies', () => {
+    const source = template();
+    const beforeTemplate = structuredClone(source);
+    const ready = activatePlannedExecution(createPlannedExecution(source, 'execution-retained'));
+    const started = startActiveExecution(ready, 'attempt-retained', 1000, 'run-retained');
+    for (const suspended of [suspendReadyExecution(ready), suspendStartedExecution(started)]) {
+        suspended.currentPlan.preparedInformation = '**Latest prepared information**';
+        suspended.currentPlan.phases[0].resources.push({ label: 'Latest link', url: 'https://example.test/latest' });
+        suspended.workshopNotes = { rundown: 'Discard', phases: [{ phaseId: 'phase-1', text: 'Discard too' }] };
+        const before = structuredClone(suspended);
+        const retained = retainCurrentPlan(suspended);
+        assert.deepEqual(retained, { ...before, lifecycle: 'planned', revision: before.revision + 1,
+            runtimeRevision: before.runtimeRevision + 1, attempt: null, workshopNotes: { rundown: '', phases: [] } });
+        assert.deepEqual(suspended, before);
+        retained.currentPlan.phases[0].resources[0].label = 'Output only';
+        assert.deepEqual(suspended, before);
+        const restarted = startActiveExecution(activatePlannedExecution(retainCurrentPlan(suspended)),
+            'new-attempt', 5000, 'new-run');
+        assert.deepEqual(restarted.attempt.startSnapshot, before.currentPlan);
     }
+    assert.deepEqual(source, beforeTemplate);
 });
 
 test('suspending READY preserves its plan, identity, source and all saved workshop notes', () => {

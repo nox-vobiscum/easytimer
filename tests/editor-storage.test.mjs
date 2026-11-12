@@ -16,9 +16,11 @@ import {
     applyStartedSessionActionInRecord,
     activatePlannedExecutionInRecord,
     createEditorStore,
+    discardExecutionInRecord,
     deleteTemplateInRecord,
     insertTemplateInRecord,
     planExecutionFromTemplateInRecord,
+    retainExecutionPlanInRecord,
     resumeSuspendedExecutionInRecord,
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
@@ -153,6 +155,109 @@ const startOptions = (changes = {}) => ({
     attemptId: 'attempt-1',
     startedAt: 2000,
     ...changes,
+});
+
+function executionExitOptions(source, executionId = 'execution-1', changes = {}) {
+    const execution = source.executions.find(item => item.execution.id === executionId).execution;
+    return {
+        executionId, expectedLifecycle: execution.lifecycle, expectedAggregateRevision: source.revision,
+        expectedExecutionRevision: execution.revision, expectedRuntimeRevision: execution.runtimeRevision,
+        expectedAttemptId: execution.attempt?.id ?? null,
+        expectedRunId: execution.lifecycle === 'active' ? source.activeRuntime.run.runId : execution.attempt?.runtimeRunId ?? null,
+        ...changes,
+    };
+}
+
+test('retain and discard cover ACTIVE and SUSPENDED READY/STARTED with exact full-record preservation', () => {
+    for (const hasStarted of [false, true]) {
+        const ready = activatePlannedExecutionInRecord(record({ templates: [template()],
+            executions: [entry(planned()), entry(planned('unrelated'))] }), activationOptions());
+        const active = hasStarted ? startReadyExecutionInRecord(ready, startOptions()) : ready;
+        const suspended = suspendActiveExecutionInRecord(active, suspendOptions(active, 3000, {
+            rundown: 'Saved note', phases: [{ phaseId: 'phase-1', text: 'Phase observation' }],
+        }));
+        // Editing a dormant execution must not remove a different live timer.
+        const withOtherActive = activatePlannedExecutionInRecord(suspended, {
+            ...activationOptions(), executionId: 'unrelated', expectedAggregateRevision: suspended.revision,
+            runtimeRunId: 'unrelated-run', savedAt: 4000,
+        });
+        for (const source of [active, withOtherActive]) {
+            source.executions[0].execution.currentPlan.preparedInformation = '**Latest**';
+            source.executions[0].execution.currentPlan.phases[0].notes = 'Prepared note';
+            source.executions[0].execution.currentPlan.phases[0].resources = [{ label: 'Board', url: 'https://example.test' }];
+            source.executions[0].execution.workshopNotes = { rundown: 'Drop', phases: [{ phaseId: 'phase-2', text: 'Drop' }] };
+            const before = structuredClone(source);
+            const execution = before.executions[0].execution;
+            const options = executionExitOptions(source);
+            const retained = retainExecutionPlanInRecord(source, options);
+            const retainedEntry = { execution: { ...execution, lifecycle: 'planned',
+                revision: execution.revision + 1, runtimeRevision: execution.runtimeRevision + 1,
+                attempt: null, workshopNotes: { rundown: '', phases: [] } }, suspendedCheckpoint: null };
+            const expectedRuntime = execution.lifecycle === 'active' ? null : before.activeRuntime;
+            assert.deepEqual(retained, { ...before, revision: before.revision + 1,
+                executions: [retainedEntry, before.executions[1]], activeRuntime: expectedRuntime });
+            const discarded = discardExecutionInRecord(source, options);
+            assert.deepEqual(discarded, { ...before, revision: before.revision + 1,
+                executions: [before.executions[1]], activeRuntime: expectedRuntime });
+            assert.deepEqual(source, before);
+            assert.deepEqual(options, executionExitOptions(source));
+            assert.deepEqual(validateEditorStoreRecord(retained), retained);
+            assert.deepEqual(validateEditorStoreRecord(discarded), discarded);
+            retained.executions[0].execution.currentPlan.phases[0].resources[0].label = 'Output only';
+            discarded.executions[0].execution.currentPlan.name = 'Output only';
+            assert.deepEqual(source, before);
+        }
+    }
+});
+
+test('execution exits reject stale revisions, wrong identities, invalid lifecycles and overflow without mutation', () => {
+    const source = startedRecord();
+    const before = structuredClone(source);
+    const cases = [
+        [{ executionId: '' }, 'invalidData'], [{ executionId: 'missing' }, 'executionNotFound'],
+        [{ expectedLifecycle: 'planned' }, 'invalidLifecycle'], [{ expectedLifecycle: 'suspended' }, 'invalidLifecycle'],
+        [{ expectedAggregateRevision: source.revision - 1 }, 'conflict'],
+        [{ expectedExecutionRevision: 0 }, 'conflict'], [{ expectedRuntimeRevision: 0 }, 'conflict'],
+        [{ expectedExecutionRevision: -1 }, 'invalidRevision'], [{ expectedRuntimeRevision: null }, 'invalidRuntimeRevision'],
+        [{ expectedAggregateRevision: NaN }, 'invalidStoreRevision'],
+        [{ expectedAttemptId: 'foreign' }, 'invalidAttemptBinding'], [{ expectedRunId: 'foreign' }, 'invalidActiveRuntimeBinding'],
+        [{ expectedRunId: undefined }, 'invalidActiveRuntimeBinding'],
+    ];
+    for (const operation of [retainExecutionPlanInRecord, discardExecutionInRecord]) {
+        for (const [changes, error] of cases) {
+            assert.throws(() => operation(source, executionExitOptions(source, 'execution-1', changes)), new RegExp(error));
+        }
+        const overflow = { ...source, revision: Number.MAX_SAFE_INTEGER };
+        assert.throws(() => operation(overflow, executionExitOptions(overflow)), /invalidStoreRevision/);
+        for (const lifecycle of ['planned', 'completed']) {
+            const invalid = structuredClone(source); invalid.executions[0].execution.lifecycle = lifecycle;
+            assert.throws(() => operation(invalid, executionExitOptions(source)));
+        }
+        const foreign = structuredClone(source); foreign.activeRuntime.run.runId = 'foreign';
+        assert.throws(() => operation(foreign, executionExitOptions(source)), /invalidActiveRuntimeBinding/);
+    }
+    const overflow = structuredClone(source);
+    overflow.executions[0].execution.revision = Number.MAX_SAFE_INTEGER;
+    assert.throws(() => retainExecutionPlanInRecord(overflow, executionExitOptions(overflow)), /invalidRevision/);
+    assert.deepEqual(source, before);
+});
+
+test('execution exits use the real writer and reject another writer after the caller observed its revision', async () => {
+    for (const operation of [retainExecutionPlanInRecord, discardExecutionInRecord]) {
+        const source = startedRecord();
+        const storage = memory(JSON.stringify(source));
+        const writer = createEditorStoreWriter({ getStorage: () => storage, locks: aggregateLockManager() });
+        const options = executionExitOptions(source);
+        const concurrent = applyStartedSessionActionInRecord(source, sessionActionOptions(source, 'PAUSE', 3000));
+        storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(concurrent));
+        await assert.rejects(writer.write(current => operation(current, options)), /conflict/);
+        assert.equal(storage.state.writes, 0);
+        assert.deepEqual(await writer.read(), concurrent);
+        const result = await writer.write(current => operation(current, executionExitOptions(concurrent)));
+        assert.deepEqual(result, operation(concurrent, executionExitOptions(concurrent)));
+        assert.deepEqual(await writer.read(), result);
+        assert.equal(storage.state.writes, 1);
+    }
 });
 
 test('inserts one native Schema-2 template without changing unrelated aggregate state', () => {

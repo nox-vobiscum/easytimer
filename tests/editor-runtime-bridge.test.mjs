@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createPlannedExecution } from '../src/js/editor-domain.mjs';
 import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { createEditorRuntimeBridge } from '../src/js/editor-runtime-bridge.mjs';
-import { EDITOR_STORAGE_KEY } from '../src/js/editor-storage.mjs';
+import { EDITOR_STORAGE_KEY, activatePlannedExecutionInRecord } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
 import { transitionSession } from '../src/js/session.mjs';
 
@@ -197,6 +197,207 @@ function setup({ locks = lockManager(), storage = null } = {}) {
     const bridge = createEditorRuntimeBridge({ writer, activeLock });
     return { locks, storage: actualStorage, activeLock, writer, bridge };
 }
+
+function executionExitOptions(source, changes = {}) {
+    const execution = source.executions[0].execution;
+    return {
+        executionId: execution.id, expectedLifecycle: execution.lifecycle,
+        expectedAggregateRevision: source.revision, expectedExecutionRevision: execution.revision,
+        expectedRuntimeRevision: execution.runtimeRevision, expectedAttemptId: execution.attempt?.id ?? null,
+        expectedRunId: execution.lifecycle === 'active' ? source.activeRuntime.run.runId : execution.attempt?.runtimeRunId ?? null,
+        ...changes,
+    };
+}
+
+test('retain and discard persist ACTIVE READY/STARTED without releasing ownership or mutating the source', async () => {
+    for (const method of ['retainExecutionPlan', 'discardExecution']) {
+        for (const hasStarted of [false, true]) {
+            const c = setup();
+            let source = await c.bridge.activatePlanned(activationOptions());
+            if (hasStarted) source = await c.bridge.startReady(startOptions());
+            const before = structuredClone(source);
+            const options = executionExitOptions(source);
+            const writes = c.storage.state.writes;
+            const target = await c.bridge[method](options);
+            assert.equal(target.activeRuntime, null);
+            assert.equal(target.revision, source.revision + 1);
+            assert.deepEqual(target.templates, source.templates);
+            if (method === 'retainExecutionPlan') {
+                const execution = source.executions[0].execution;
+                assert.deepEqual(target.executions, [{ execution: { ...execution, lifecycle: 'planned',
+                    revision: execution.revision + 1, runtimeRevision: execution.runtimeRevision + 1,
+                    attempt: null, workshopNotes: { rundown: '', phases: [] } }, suspendedCheckpoint: null }]);
+            } else assert.deepEqual(target.executions, []);
+            assert.deepEqual(await c.writer.read(), target);
+            assert.deepEqual(source, before);
+            assert.deepEqual(options, executionExitOptions(before));
+            assert.equal(c.storage.state.writes, writes + 1);
+            assert.equal(c.activeLock.held, true);
+            await c.activeLock.release();
+        }
+    }
+});
+
+test('suspended exits need only the Store lock and preserve a different controller and ACTIVE runtime', async () => {
+    for (const method of ['retainExecutionPlan', 'discardExecution']) {
+        for (const prepare of [suspendedReadyBridgeSetup, suspendedStartedBridgeSetup]) {
+            const events = [];
+            const c = await prepare(events);
+            const source = activatePlannedExecutionInRecord({ ...c.suspended, executions: [
+                ...c.suspended.executions,
+                { execution: createPlannedExecution(template(), 'other-execution'), suspendedCheckpoint: null },
+            ] }, { ...activationOptions(), executionId: 'other-execution',
+                expectedAggregateRevision: c.suspended.revision, runtimeRunId: 'other-run', savedAt: 20_000 });
+            c.storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(source));
+            const otherOwner = createEditorActiveTimerLock({ locks: c.locks });
+            await otherOwner.claim();
+            const requestCount = events.filter(event => event[0] === 'request' && event[1] === 'easyTimerEditor.v1.active-runtime').length;
+            const writes = c.storage.state.writes;
+            const result = await c.bridge[method](executionExitOptions(source));
+            assert.deepEqual(result.activeRuntime, source.activeRuntime);
+            assert.deepEqual(result.executions.at(-1), source.executions[1]);
+            assert.deepEqual(result.templates, source.templates);
+            assert.equal(result.revision, source.revision + 1);
+            assert.deepEqual(await c.writer.read(), result);
+            assert.equal(c.storage.state.writes, writes + 1);
+            assert.equal(otherOwner.held, true);
+            assert.equal(c.activeLock.held, false);
+            assert.equal(events.filter(event => event[0] === 'request' && event[1] === 'easyTimerEditor.v1.active-runtime').length, requestCount);
+            await otherOwner.release();
+        }
+    }
+});
+
+test('execution exits reject absent/lost ownership, stale callers, busy locks and storage errors without release', async () => {
+    for (const method of ['retainExecutionPlan', 'discardExecution']) {
+        const c = await startedBridgeSetup();
+        const options = executionExitOptions(c.started);
+        const initialWrites = c.storage.state.writes;
+        const unavailable = createEditorRuntimeBridge({ activeLock: c.activeLock,
+            writer: createEditorStoreWriter({ getStorage: () => c.storage, locks: null }) });
+        await assert.rejects(unavailable[method](options), /lockUnavailable/);
+        await assert.rejects(c.bridge[method]({ ...options, expectedAggregateRevision: 0 }), /conflict/);
+        await assert.rejects(c.bridge[method]({ ...options, expectedLifecycle: 'suspended' }), /invalidLifecycle/);
+        assert.equal(c.storage.state.writes, initialWrites);
+        for (const [key, value, code] of [
+            ['failRead', true, 'storageRead'], ['failWrite', 'QuotaExceededError', 'storageQuota'],
+            ['failWrite', 'Error', 'storageWrite'],
+        ]) {
+            c.storage.state[key] = value;
+            await assert.rejects(c.bridge[method](options), new RegExp(code));
+            c.storage.state[key] = key === 'failRead' ? false : null;
+            assert.equal(c.storage.state.writes, initialWrites);
+            assert.equal(c.activeLock.held, true);
+            assert.deepEqual(await c.writer.read(), c.started);
+        }
+        c.locks.held.add('easyTimerEditor.v1.write');
+        await assert.rejects(c.bridge[method](options), /lockBusy/);
+        c.locks.held.delete('easyTimerEditor.v1.write');
+        assert.equal(c.activeLock.held, true);
+        const gate = deferred(); c.locks.storeGate = gate;
+        const waiting = c.bridge[method](options);
+        const rejected = assert.rejects(waiting, /activeLockRequired/);
+        await assert.rejects(c.bridge[method](options), /bridgeBusy/);
+        await c.activeLock.release(); gate.resolve(); await rejected;
+        assert.equal(c.storage.state.writes, initialWrites);
+        const events = c.storage.state.writes;
+        await assert.rejects(c.bridge[method](options), /activeLockRequired/);
+        assert.equal(c.storage.state.writes, events);
+    }
+});
+
+test('uncertain ACTIVE and SUSPENDED exits reconcile source/target/conflict read-only without duplicate deletion', async () => {
+    for (const method of ['retainExecutionPlan', 'discardExecution']) {
+        for (const suspended of [false, true]) {
+            for (const outcome of ['source', 'target', 'conflict']) {
+                const c = suspended ? await suspendedStartedBridgeSetup() : await startedBridgeSetup();
+                const source = suspended ? c.suspended : c.started;
+                const options = executionExitOptions(source);
+                c.storage.state.faultAfterWrites = c.storage.state.writes;
+                c.storage.state.failReadAfterWrite = true;
+                await assert.rejects(c.bridge[method](options), /storageUnconfirmed/);
+                const target = JSON.parse(c.storage.values.get(EDITOR_STORAGE_KEY));
+                const writes = c.storage.state.writes;
+                await assert.rejects(c.bridge[method](options), /pendingOperation/);
+                await assert.rejects(c.bridge.reconcilePendingOperation(), /storageRead/);
+                c.storage.state.failReadAfterWrite = false;
+                let observed = target;
+                if (outcome === 'source') observed = source;
+                if (outcome === 'conflict') {
+                    observed = structuredClone(target); observed.revision += 1;
+                    observed.templates[0].plan.name = 'Concurrent change';
+                }
+                c.storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(observed));
+                const result = await c.bridge.reconcilePendingOperation();
+                assert.deepEqual(result, { kind: method === 'retainExecutionPlan' ? 'retainPlan' : 'discard', outcome, record: observed });
+                assert.equal(c.storage.state.writes, writes);
+                assert.equal(c.activeLock.held, !suspended);
+                assert.deepEqual(await c.writer.read(), observed);
+                if (outcome === 'conflict') await assert.rejects(c.bridge[method](options), /pendingOperation/);
+                else await assert.rejects(c.bridge.reconcilePendingOperation(), /noPendingOperation/);
+                if (c.activeLock.held) await c.activeLock.release();
+            }
+        }
+    }
+});
+
+test('readback mismatch retains a pending exit and requires ownership for ACTIVE reconciliation', async () => {
+    for (const method of ['retainExecutionPlan', 'discardExecution']) {
+        const c = await startedBridgeSetup();
+        c.storage.state.faultAfterWrites = c.storage.state.writes;
+        c.storage.state.readback = 'invalid readback';
+        const options = executionExitOptions(c.started);
+        await assert.rejects(c.bridge[method](options), /storageReadback/);
+        c.storage.state.readback = undefined;
+        const writes = c.storage.state.writes;
+        await c.activeLock.release();
+        await assert.rejects(c.bridge.reconcilePendingOperation(), /activeLockRequired/);
+        await c.activeLock.claim();
+        assert.equal((await c.bridge.reconcilePendingOperation()).outcome, 'target');
+        assert.equal(c.storage.state.writes, writes);
+        await c.activeLock.release();
+    }
+});
+
+test('exit options are captured before waiting, so mutation cannot bypass ACTIVE ownership', async () => {
+    for (const method of ['retainExecutionPlan', 'discardExecution']) {
+        const c = await suspendedStartedBridgeSetup();
+        const active = await c.bridge.resumeSuspended(resumeOptions(c.suspended, 20_000));
+        await c.activeLock.release();
+        const options = executionExitOptions(c.suspended);
+        const gate = deferred(); c.locks.storeGate = gate;
+        const writes = c.storage.state.writes;
+        const pending = c.bridge[method](options);
+        const rejected = assert.rejects(pending, /conflict|invalidLifecycle/);
+        Object.assign(options, executionExitOptions(active));
+        gate.resolve(); await rejected;
+        assert.deepEqual(await c.writer.read(), active);
+        assert.equal(c.storage.state.writes, writes);
+        assert.equal(c.activeLock.held, false);
+    }
+});
+
+test('exit acknowledgement lost after the writer callback is reconciled without a retry', async () => {
+    for (const method of ['retainExecutionPlan', 'discardExecution']) {
+        const c = await startedBridgeSetup();
+        const normalRequest = c.locks.request;
+        c.locks.request = async function(name, options, callback) {
+            const result = await normalRequest.call(this, name, options, callback);
+            if (name === 'easyTimerEditor.v1.write') throw new Error('Late request failure');
+            return result;
+        };
+        const before = c.storage.state.writes;
+        await assert.rejects(c.bridge[method](executionExitOptions(c.started)), /lockRequest/);
+        c.locks.request = normalRequest;
+        const target = JSON.parse(c.storage.values.get(EDITOR_STORAGE_KEY));
+        const result = await c.bridge.reconcilePendingOperation();
+        assert.equal(result.outcome, 'target');
+        assert.deepEqual(result.record, target);
+        assert.equal(c.storage.state.writes, before + 1);
+        assert.equal(c.activeLock.held, true);
+        await c.activeLock.release();
+    }
+});
 
 test('activates PLANNED as confirmed ACTIVE READY after acquiring ownership first', async () => {
     const events = [];

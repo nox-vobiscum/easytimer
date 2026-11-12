@@ -283,14 +283,18 @@ export function startActiveExecution(execution, attemptId, startedAt, runtimeRun
 }
 
 export function retainCurrentPlan(execution) {
-    if (execution?.lifecycle !== EXECUTION_LIFECYCLES.ACTIVE) fail('invalidLifecycle');
-    const active = execution.attempt === null
-        ? validateReadyExecution(execution)
-        : validateStartedExecution(execution);
+    let current;
+    if (execution?.lifecycle === EXECUTION_LIFECYCLES.ACTIVE) {
+        current = execution.attempt === null
+            ? validateReadyExecution(execution) : validateStartedExecution(execution);
+    } else if (execution?.lifecycle === EXECUTION_LIFECYCLES.SUSPENDED) {
+        current = execution.attempt === null
+            ? validateSuspendedReadyExecution(execution) : validateSuspendedStartedExecution(execution);
+    } else fail('invalidLifecycle');
     return validatePlannedExecution({
-        ...active,
-        revision: nextRevision(active.revision),
-        runtimeRevision: nextRevision(active.runtimeRevision),
+        ...current,
+        revision: nextRevision(current.revision),
+        runtimeRevision: nextRevision(current.runtimeRevision),
         lifecycle: EXECUTION_LIFECYCLES.PLANNED,
         workshopNotes: { rundown: '', phases: [] },
         attempt: null,

@@ -2,6 +2,7 @@ import {
     EXECUTION_LIFECYCLES,
     activatePlannedExecution,
     createPlannedExecution,
+    retainCurrentPlan,
     resumeReadyExecution,
     startActiveExecution,
     suspendReadyExecution,
@@ -533,6 +534,56 @@ export function resumeSuspendedExecutionInRecord(record, options) {
         revision: valid.revision + 1,
         executions,
         activeRuntime,
+    });
+}
+
+// Both deliberate non-archiving exits share the same stale-caller and identity
+// checks. No time reconciliation is needed when intentionally dropping progress.
+function executionExitSource(record, options) {
+    const valid = validateEditorStoreRecord(record);
+    if (!isObject(options)) fail('invalidData');
+    const { executionId, expectedLifecycle, expectedAggregateRevision,
+        expectedExecutionRevision, expectedRuntimeRevision, expectedAttemptId, expectedRunId } = options;
+    if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+    if (![EXECUTION_LIFECYCLES.ACTIVE, EXECUTION_LIFECYCLES.SUSPENDED].includes(expectedLifecycle)) {
+        fail('invalidLifecycle');
+    }
+    safeRevision(expectedAggregateRevision);
+    if (!Number.isSafeInteger(expectedExecutionRevision) || expectedExecutionRevision < 0) fail('invalidRevision');
+    if (!Number.isSafeInteger(expectedRuntimeRevision) || expectedRuntimeRevision < 0) fail('invalidRuntimeRevision');
+    if (valid.revision !== expectedAggregateRevision) fail('conflict');
+    if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
+    const index = valid.executions.findIndex(entry => entry.execution.id === executionId);
+    if (index < 0) fail('executionNotFound');
+    const execution = valid.executions[index].execution;
+    if (execution.lifecycle !== expectedLifecycle) fail('invalidLifecycle');
+    if (execution.revision !== expectedExecutionRevision
+        || execution.runtimeRevision !== expectedRuntimeRevision) fail('conflict');
+    if (expectedAttemptId !== (execution.attempt?.id ?? null)) fail('invalidAttemptBinding');
+    const runId = execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE
+        ? valid.activeRuntime.run.runId : execution.attempt?.runtimeRunId ?? null;
+    if (expectedRunId !== runId) fail('invalidActiveRuntimeBinding');
+    return { valid, index, execution };
+}
+
+export function retainExecutionPlanInRecord(record, options) {
+    const { valid, index, execution } = executionExitSource(record, options);
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions: valid.executions.map((entry, entryIndex) => entryIndex === index
+            ? { execution: retainCurrentPlan(execution), suspendedCheckpoint: null } : entry),
+        activeRuntime: execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE ? null : valid.activeRuntime,
+    });
+}
+
+export function discardExecutionInRecord(record, options) {
+    const { valid, index, execution } = executionExitSource(record, options);
+    return validateEditorStoreRecord({
+        ...valid,
+        revision: valid.revision + 1,
+        executions: valid.executions.filter((entry, entryIndex) => entryIndex !== index),
+        activeRuntime: execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE ? null : valid.activeRuntime,
     });
 }
 
