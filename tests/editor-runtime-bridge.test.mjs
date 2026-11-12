@@ -381,7 +381,7 @@ test('exit options are captured before waiting, so mutation cannot bypass ACTIVE
 });
 
 test('exit acknowledgement lost after the writer callback is reconciled without a retry', async () => {
-    for (const method of ['retainExecutionPlan', 'discardExecution']) {
+    for (const method of ['retainExecutionPlan', 'discardExecution', 'suspendActive']) {
         const c = await startedBridgeSetup();
         const normalRequest = c.locks.request;
         c.locks.request = async function(name, options, callback) {
@@ -390,7 +390,8 @@ test('exit acknowledgement lost after the writer callback is reconciled without 
             return result;
         };
         const before = c.storage.state.writes;
-        await assert.rejects(c.bridge[method](executionExitOptions(c.started)), /lockRequest/);
+        await assert.rejects(c.bridge[method](method === 'suspendActive'
+            ? suspendOptions(c.started, 12_000) : executionExitOptions(c.started)), /lockRequest/);
         c.locks.request = normalRequest;
         const target = JSON.parse(c.storage.values.get(EDITOR_STORAGE_KEY));
         const result = await c.bridge.reconcilePendingOperation();

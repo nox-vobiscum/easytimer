@@ -89,7 +89,16 @@ The public V1 Planner's draft mapping and Save/Delete/import aggregate
 preparation are isolated in a pure V1-specific module, with focused Store-backed
 tests. This unreleased refactoring preserves public behavior and creates an
 explicit replacement boundary; it does not integrate the native public Editor.
-Production dependency/precache references are aligned for unreleased PWA v70.
+Production dependency/precache references are aligned for unreleased PWA v71.
+
+Internal App-side native exits now guard identity, actions and navigation through
+confirmed persistence or read-only Bridge reconciliation, local detachment,
+awaited ownership release and ordinary Quick Recovery initialization. Cleanup
+failure after persistence is distinct and never retries the lifecycle write.
+Unrelated recovery records remain intact. Direct App browser tests cover the
+handoff; public lifecycle controls, unified Library/Picker, Editor and Facilitator
+Panel integration remain pending. Native Session re-entry does not fall back to
+the V1 Library. Existing public V1 workflows remain unchanged.
 
 Native Template draft editing is prepared internally through pure copy-isolated
 operations on existing Planner Service drafts. Name, transition mode, categories,

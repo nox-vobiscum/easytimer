@@ -93,6 +93,7 @@ let language = readPreference('easyTimerLanguage', navigator.language?.startsWit
 const INFORMATION_ORIGIN_KEY = 'easyTimerInformationOrigin.v1';
 // Native navigation retains the Editor's existing beforeunload draft warning.
 document.querySelectorAll('[data-information]').forEach(link => link.addEventListener('click', event => {
+    if (nativeExit) { event.preventDefault(); return; }
     link.href = `${link.dataset.information}.html?lang=${language}`;
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     // Only navigation metadata: runtime identity and ownership remain in recovery.
@@ -114,8 +115,13 @@ const editorActiveLock = createEditorActiveTimerLock({ locks: navigator.locks })
 const editorBridge = createEditorRuntimeBridge({ writer: editorWriter, activeLock: editorActiveLock });
 let nativeRuntime = null;
 let nativeStartupFeedback = '';
+// App handoff progress only; uncertain source/target snapshots remain in the Bridge.
+let nativeExit = null;
+let nativeSessionContext = false;
 try {
     const adopted = await editorBridge.adoptPersistedActive({ observedAt: Date.now() });
+    // The aggregate revision also survives discarding its last Execution.
+    nativeSessionContext = adopted.record.revision > 0;
     if (adopted.outcome === 'adopted') {
         nativeRuntime = { record: adopted.record, pending: false, blocked: false };
         mode = 'session'; run = adopted.runtime.run; timer = adopted.runtime.clock; pickerOpen = false;
@@ -130,12 +136,17 @@ const inactiveRecovery = {
     async recover() { throw new Error('RECOVERY_UNAVAILABLE'); },
     dismiss() {}, close() {},
 };
-const recovery = nativeRuntime ? inactiveRecovery : await createRecovery({
-    storage: { getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value),
-        removeItem: key => localStorage.removeItem(key), key: index => localStorage.key(index), get length() { return localStorage.length; } },
-    tabs: { getItem: key => sessionStorage.getItem(key), setItem: (key, value) => sessionStorage.setItem(key, value), removeItem: key => sessionStorage.removeItem(key) },
-    locks: navigator.locks,
-});
+function createAppRecovery(freshContext = false) {
+    return createRecovery({
+        storage: { getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value),
+            removeItem: key => localStorage.removeItem(key), key: index => localStorage.key(index), get length() { return localStorage.length; } },
+        // A native exit must not overwrite an unrelated previous legacy context.
+        // Existing records remain available through the ordinary recovery chooser.
+        tabs: { getItem: key => freshContext ? null : sessionStorage.getItem(key), setItem: (key, value) => sessionStorage.setItem(key, value), removeItem: key => sessionStorage.removeItem(key) },
+        locks: navigator.locks,
+    });
+}
+let recovery = nativeRuntime ? inactiveRecovery : await createAppRecovery();
 function adoptRecovered(restored) {
     if (restored.run) {
         const current = transitionSession(restored.run, restored.clock, { type: 'TICK' }, Date.now());
@@ -176,6 +187,8 @@ const recoveryCopy = {
         timer: 'Timer', start: 'Start', total: 'Timebox', notStarted: 'Not started', unknownStart: 'Start time not recorded', saved: 'Saved', elsewhere: 'In use in another tab',
         error: 'Timer recovery is unavailable or saved data could not be trusted. You can keep using the timer; do not rely on recovery.',
         nativeError: 'This session can no longer be changed safely. Reload to retry; stored data was not overwritten.',
+        handoffError: 'The execution exit is saved, but the timer handoff could not finish. Do not repeat the exit; reload or retry the handoff.',
+        exitUncertain: 'The execution exit could not be confirmed. Keep this timer open until the saved state has been checked; do not repeat the exit.',
         active: 'This timer is already in use in another tab. Switch to that tab or start a new timer here.',
         READY: 'Ready', RUNNING: 'Running', PAUSED: 'Paused', FINISHED: 'Overtime' },
     de: { heading: 'Timer wiederherstellen', choose: 'Ein gespeicherter Timer ist verfügbar. Wähle, welchen Timer du wiederherstellen möchtest.',
@@ -185,6 +198,8 @@ const recoveryCopy = {
         timer: 'Timer', start: 'Start', total: 'Timebox', notStarted: 'Noch nicht gestartet', unknownStart: 'Startzeit nicht erfasst', saved: 'Gespeichert', elsewhere: 'In anderem Tab aktiv',
         error: 'Die Timer-Wiederherstellung ist nicht verfügbar oder gespeicherte Daten sind nicht verlässlich. Du kannst den Timer weiter nutzen; verlasse dich nicht auf die Wiederherstellung.',
         nativeError: 'Diese Session kann nicht mehr sicher geändert werden. Lade die Seite zum Wiederholen neu; gespeicherte Daten wurden nicht überschrieben.',
+        handoffError: 'Das Beenden oder Unterbrechen ist gespeichert, aber die Timer-Übergabe ist nicht abgeschlossen. Nicht erneut beenden; neu laden oder die Übergabe wiederholen.',
+        exitUncertain: 'Das Beenden oder Unterbrechen konnte nicht bestätigt werden. Diesen Timer bis zur Prüfung des gespeicherten Zustands geöffnet lassen; nicht erneut beenden.',
         active: 'Dieser Timer wird bereits in einem anderen Tab verwendet. Wechsle dorthin oder starte hier einen neuen Timer.',
         READY: 'Bereit', RUNNING: 'Läuft', PAUSED: 'Pausiert', FINISHED: 'Überzeit' },
 };
@@ -213,7 +228,9 @@ function renderRecovery() {
     $('runtime-recovery').hidden = !recovery.error && !recoveryFeedback && (mode !== 'quick' || (!recovery.pending && !candidates.length));
     $('recovery-heading').textContent = t.heading;
     const feedback = recoveryFeedback === 'CONTEXT_ACTIVE' ? t.active
-        : recoveryFeedback === 'NATIVE_RUNTIME_ERROR' ? t.nativeError
+        : recoveryFeedback === 'NATIVE_HANDOFF_ERROR' ? t.handoffError
+            : recoveryFeedback === 'NATIVE_EXIT_UNCERTAIN' ? t.exitUncertain
+            : recoveryFeedback === 'NATIVE_RUNTIME_ERROR' ? t.nativeError
             : recoveryFeedback || recovery.error ? t.error
                 : !candidates.length && recovery.pending ? t.noCandidates : candidates.length > 1 ? t.chooseMany : t.choose;
     if ($('recovery-feedback').textContent !== feedback) $('recovery-feedback').textContent = feedback;
@@ -235,9 +252,11 @@ $('recovery-select').addEventListener('change', async () => {
     await recovery.refreshAvailability(); renderRecovery();
 });
 $('recovery-dismiss').addEventListener('click', () => {
+    if (nativeExit) return;
     recovery.dismiss(); recoveryFeedback = ''; render(); $('primary').focus({ preventScroll: true });
 });
 $('recovery-restore').addEventListener('click', async () => {
+    if (nativeExit) return;
     if (mode !== 'quick') return;
     dispatch({ type: 'TICK' });
     if (timer.status !== 'READY' && !window.confirm(copy[language].switchConfirm)) return;
@@ -354,12 +373,141 @@ function blockNativeRuntime() {
     if (nativeRuntime) nativeRuntime.blocked = true;
     recoveryFeedback = 'NATIVE_RUNTIME_ERROR';
 }
-function installNativeRecord(record) {
+export function installNativeRecord(record) {
+    if (nativeExit) throw new Error('nativeExitPending');
     if (!nativeRuntime || !record.activeRuntime) throw new Error('invalidActiveRuntimeBinding');
     nativeRuntime.record = record;
     run = structuredClone(record.activeRuntime.run);
     timer = structuredClone(record.activeRuntime.clock);
     mode = 'session'; pickerOpen = false;
+}
+
+function matchesNativeExit(exit) {
+    const runtime = nativeRuntime?.record.activeRuntime;
+    return nativeRuntime === exit.owner && runtime?.executionId === exit.executionId
+        && runtime.attemptId === exit.attemptId && runtime.run.runId === exit.runtimeRunId
+        && runtime.runtimeRevision === exit.runtimeRevision && run?.runId === exit.runtimeRunId;
+}
+
+async function finishNativeExit(exit) {
+    try {
+        if (!exit.detached) {
+            if (!matchesNativeExit(exit) || !editorActiveLock.held) throw new Error('nativeExitIdentity');
+            // Re-read under the existing Store lock before giving up local authority.
+            const current = await editorWriter.read();
+            if (!matchesNativeExit(exit) || !editorActiveLock.held) throw new Error('nativeExitIdentity');
+            const selected = record => record.executions.find(entry => entry.execution.id === exit.executionId) ?? null;
+            if (current.activeRuntime !== null
+                || JSON.stringify(selected(current)) !== JSON.stringify(selected(exit.confirmed))) {
+                throw new Error('nativeExitConflict');
+            }
+            nativeRuntime = null;
+            run = null;
+            timer = createTimer(quickDurationMs);
+            pickerOpen = false;
+            exit.detached = true;
+        }
+        if (!exit.released) {
+            if (editorActiveLock.held) await editorActiveLock.release();
+            if (editorActiveLock.held) throw new Error('activeLockRequired');
+            exit.released = true;
+        }
+        recovery.close();
+        recovery = await createAppRecovery(true);
+        if (recovery.error) throw new Error('RECOVERY_UNAVAILABLE');
+        mode = 'quick';
+        limitExceeded = false;
+        navigationRevision += 1;
+        nativeStartupFeedback = '';
+        recoveryFeedback = '';
+        nativeExit = null;
+        render();
+        return { status: 'exited', persisted: true };
+    } catch (error) {
+        // Persistence is final. A cleanup retry may never repeat the lifecycle write.
+        recoveryFeedback = 'NATIVE_HANDOFF_ERROR';
+        render();
+        return { status: 'handoffFailed', persisted: true, code: error.message };
+    }
+}
+
+// Internal application entry points; no public lifecycle controls are exposed yet.
+export async function exitNativeExecution(options) {
+    if (nativeExit || nativeRuntime?.pending || nativeRuntime?.blocked) return { status: 'error', code: 'nativeExitPending' };
+    const execution = activeNativeExecution();
+    const runtime = nativeRuntime?.record.activeRuntime;
+    const methods = { suspend: 'suspendActive', retainPlan: 'retainExecutionPlan', discard: 'discardExecution', complete: 'completeExecution' };
+    if (!execution || !runtime || !options || !Object.hasOwn(methods, options.intent)
+        || options.executionId !== execution.id || options.attemptId !== runtime.attemptId
+        || options.runtimeRunId !== runtime.run.runId || run?.runId !== runtime.run.runId
+        || !editorActiveLock.held || plannerOpen) return { status: 'error', code: 'nativeExitIdentity' };
+    let notes;
+    try { notes = structuredClone(options.workshopNotes); }
+    catch { return { status: 'error', code: 'invalidNotes' }; }
+    const exit = nativeExit = {
+        owner: nativeRuntime, executionId: execution.id, attemptId: runtime.attemptId,
+        runtimeRunId: runtime.run.runId, runtimeRevision: runtime.runtimeRevision,
+        confirmed: null, detached: false, released: false, busy: true,
+    };
+    render();
+    try {
+        const common = { executionId: execution.id, expectedAggregateRevision: nativeRuntime.record.revision,
+            expectedExecutionRevision: execution.revision, expectedRuntimeRevision: execution.runtimeRevision,
+            expectedAttemptId: runtime.attemptId, expectedRunId: runtime.run.runId };
+        const args = options.intent === 'suspend'
+            ? { ...common, suspendedAt: Date.now(), workshopNotes: notes }
+            : { ...common, expectedLifecycle: 'active', ...(options.intent === 'complete'
+                ? { completedAt: Date.now(), workshopNotes: notes } : {}) };
+        exit.confirmed = await editorBridge[methods[options.intent]](args);
+        return await finishNativeExit(exit);
+    } catch (error) {
+        if (error.message === 'lockRequest') {
+            recoveryFeedback = 'NATIVE_EXIT_UNCERTAIN'; render();
+            // The request can fail before its callback or after persistence.
+            // Let the Bridge distinguish those cases without retrying a write.
+            try {
+                const result = await editorBridge.reconcilePendingOperation();
+                if (result.outcome === 'target') {
+                    exit.confirmed = result.record;
+                    return await finishNativeExit(exit);
+                }
+                if (result.outcome !== 'source') return { status: 'uncertain', persisted: null, code: 'conflict' };
+            } catch (cause) {
+                if (cause.message !== 'noPendingOperation') return { status: 'uncertain', persisted: null, code: cause.message };
+            }
+            nativeExit = null; recoveryFeedback = ''; render();
+            return { status: 'error', persisted: false, code: 'lockRequest' };
+        }
+        if (['storageUnconfirmed', 'storageReadback'].includes(error.message)) {
+            recoveryFeedback = 'NATIVE_EXIT_UNCERTAIN';
+            render();
+            return { status: 'uncertain', persisted: null, code: error.message };
+        }
+        nativeExit = null;
+        render();
+        return { status: 'error', persisted: false, code: error.message };
+    } finally { exit.busy = false; }
+}
+
+export async function continueNativeExecutionExit() {
+    const exit = nativeExit;
+    if (!exit || exit.busy) return { status: 'error', code: 'nativeExitPending' };
+    exit.busy = true;
+    try {
+        if (!exit.confirmed) {
+            if (!matchesNativeExit(exit)) return { status: 'uncertain', code: 'nativeExitIdentity' };
+            const result = await editorBridge.reconcilePendingOperation();
+            if (result.outcome === 'source') {
+                nativeExit = null; recoveryFeedback = ''; render();
+                return { status: 'source', persisted: false };
+            }
+            if (result.outcome !== 'target') return { status: 'uncertain', persisted: null, code: 'conflict' };
+            exit.confirmed = result.record;
+        }
+        return await finishNativeExit(exit);
+    } catch (error) {
+        return { status: 'uncertain', persisted: null, code: error.message };
+    } finally { exit.busy = false; }
 }
 async function persistNativeAction(action, occurredAt) {
     if (!nativeRuntime || nativeRuntime.pending || nativeRuntime.blocked) return;
@@ -411,6 +559,7 @@ async function persistNativeAction(action, occurredAt) {
 }
 function dispatchNative(action) {
     if (!nativeRuntime) return;
+    if (nativeExit && (action.type !== 'TICK' || nativeExit.confirmed)) return;
     if (!editorActiveLock.held) {
         blockNativeRuntime();
         render();
@@ -430,6 +579,7 @@ function dispatchNative(action) {
     return persistNativeAction(action, Date.now());
 }
 function dispatch(action) {
+    if (nativeExit && !nativeRuntime) return;
     if (nativeRuntime) return dispatchNative(action);
     if (mode === 'session' && run) {
         const next = transitionSession(run, timer, action, Date.now());
@@ -472,6 +622,16 @@ function exitPresentationForWorkspace() {
     return document.fullscreenElement ? document.exitFullscreen().catch(() => {}) : null;
 }
 async function switchMode(nextMode) {
+    if (nativeExit) return;
+    if (nativeSessionContext && !nativeRuntime && mode !== 'session' && nextMode === 'session') {
+        try {
+            const record = await editorWriter.read();
+            // Native Library/activation UI is a later slice. Never fall back to
+            // V1 definitions or install a runtime without the adoption contract.
+            if (record.activeRuntime) { recoveryFeedback = 'NATIVE_RUNTIME_ERROR'; render(); }
+        } catch { recoveryFeedback = 'NATIVE_RUNTIME_ERROR'; render(); }
+        return;
+    }
     if ((nativeRuntime && nextMode !== 'session') || (nativeStartupFeedback && nextMode === 'session')) {
         recoveryFeedback = 'NATIVE_RUNTIME_ERROR'; render();
         $('recovery-feedback').focus({ preventScroll: true });
@@ -503,7 +663,7 @@ async function switchMode(nextMode) {
 }
 function render() {
     rememberView();
-    if (!nativeRuntime) recovery.save(timer, null, mode === 'session' ? run : null, quickDurationMs);
+    if (!nativeRuntime && !nativeExit) recovery.save(timer, null, mode === 'session' ? run : null, quickDurationMs);
     renderRecovery();
     const t = copy[language];
     const session = mode === 'session' && run;
@@ -516,8 +676,9 @@ function render() {
     $('session-picker').hidden = !pickerOpen || plannerOpen;
     $('open-quick').setAttribute('aria-pressed', String(mode === 'quick'));
     $('open-session').setAttribute('aria-pressed', String(mode === 'session'));
-    $('open-quick').disabled = Boolean(nativeRuntime);
-    $('open-session').disabled = Boolean(nativeStartupFeedback && !nativeRuntime);
+    $('open-quick').disabled = Boolean(nativeRuntime || nativeExit);
+    $('open-session').disabled = Boolean(nativeExit || (nativeStartupFeedback && !nativeRuntime));
+    $('open-planner').disabled = Boolean(nativeExit);
     $('export-rundown').hidden = !session || Boolean(nativeRuntime);
     if (!session) { $('export-feedback').hidden = true; $('export-feedback').textContent = ''; }
     else if (!$('export-feedback').hidden) $('export-feedback').textContent = t.exportFailed;
@@ -535,7 +696,7 @@ function render() {
     const { totalMs, plannedMs, adjustmentMs } = timer ? timeBudget(timer) : { totalMs: 1, plannedMs: 0, adjustmentMs: 0 };
     $('time').dataset.visualState = timer ? timeVisualState(timer, totalMs) : 'NORMAL';
     const remaining = timer ? totalMs > 0 ? Math.max(0, Math.min(1, timer.remainingMs / totalMs)) : 0 : 1;
-    const nativeUnavailable = Boolean(nativeRuntime && (nativeRuntime.pending || nativeRuntime.blocked));
+    const nativeUnavailable = Boolean(nativeExit || (nativeRuntime && (nativeRuntime.pending || nativeRuntime.blocked)));
     $('primary').disabled = nativeUnavailable || (mode === 'quick' && timer?.status === 'READY' && timer.durationMs === 0);
     $('progress').style.setProperty('--remaining', `${remaining * 100}%`);
     document.documentElement.lang = language;
@@ -678,6 +839,7 @@ stopWorkshopDialog.addEventListener('close', () => {
     stopWorkshopReturnFocus = null;
 });
 $('stop').addEventListener('click', () => {
+    if (nativeExit) return;
     if (mode === 'session') {
         if (nativeRuntime) { recoveryFeedback = 'NATIVE_RUNTIME_ERROR'; render(); return; }
         dispatch({ type: 'TICK' });
@@ -724,7 +886,7 @@ $('session-template').addEventListener('change', () => {
     $('prepare-session').disabled = !pickerTemplates.some(item => item.id === $('session-template').value);
 });
 async function loadSavedSession(id, fromEditor = false) {
-    if (nativeRuntime || nativeStartupFeedback) {
+    if (nativeExit || nativeSessionContext || nativeRuntime || nativeStartupFeedback) {
         recoveryFeedback = 'NATIVE_RUNTIME_ERROR'; render();
         $('recovery-feedback').focus({ preventScroll: true });
         return;
@@ -777,6 +939,7 @@ $('export-rundown').addEventListener('click', () => {
     }
 });
 async function openEditor(newDraft = false) {
+    if (nativeExit) return;
     navigationRevision += 1;
     setMenuOpen(false);
     // Navigation invalidates fullscreen requests; returning never restores them implicitly.
@@ -862,7 +1025,7 @@ const unresolvedRecovery = Boolean(nativeStartupFeedback)
     || (mode === 'quick' && recovery.pending) || (!recovery.restored && recovery.error);
 if (!unresolvedRecovery && savedView === 'editor') {
     await openEditor();
-} else if (!unresolvedRecovery && savedView === 'session' && mode !== 'session' && !recovery.restored) {
+} else if (!unresolvedRecovery && !nativeSessionContext && savedView === 'session' && mode !== 'session' && !recovery.restored) {
     // No accessible Run: restore the existing picker, never an empty Session screen.
     mode = 'session'; pickerOpen = true; timer = null;
     await loadTemplates();

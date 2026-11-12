@@ -19,6 +19,15 @@ commit, staging and production deployment are distinct events.
 
 ### Added
 
+- **EDITOR-001 internal App handoff:** confirmed native suspend, retain-plan,
+  discard and completion now have an application-side exit boundary. It guards
+  local identities and navigation, detaches before releasing ownership, and
+  restores ordinary Quick Timer recovery in a fresh context without deleting
+  unrelated recoverable timers. Uncertain writes reconcile read-only; confirmed
+  persistence with failed cleanup is distinct and never repeats the write.
+  The boundary is browser-tested directly; no public lifecycle controls or native
+  Editor/Library cutover are included. Unreleased shell references advance to v71.
+
 - **EDITOR-001 internal completion and archive:** explicit archival completion
   captures final authoritative phase results, caller-supplied Workshop-Notizen
   and separate workshop overtime, retains the original baseline and final plan,

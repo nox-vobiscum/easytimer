@@ -211,8 +211,18 @@ Native COMPLETED executions now retain one immutable start baseline, their final
 The locked Store write path rejects history replacement, reactivation or archive
 removal; only reflection updates with the required revisions are permitted.
 Reflection uses the existing basic String contract, storage quota and native JSON
-size boundary, without a separate character limit. Completion/reflection remain
-internal operations; public UI, local detachment and ownership release are pending.
+size boundary, without a separate character limit. Completion/reflection and the
+App handoff remain internal; public lifecycle UI is pending.
+
+The App now provides internal `exitNativeExecution()` and
+`continueNativeExecutionExit()` entry points for confirmed native exits. They
+gate actions/navigation, retain Bridge reconciliation as the only pending-write
+authority, recheck local and persisted identity, detach the local Session, await
+Active-Lock release and initialize the existing Quick Recovery in a fresh context.
+Confirmed persistence followed by failed cleanup is reported separately and may
+retry cleanup only. Existing recovery records are not deleted. Public lifecycle
+controls and the Editor/Library cutover remain pending; the App handoff is tested
+directly through the existing browser runner.
 
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.

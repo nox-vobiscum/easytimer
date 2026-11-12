@@ -35,7 +35,7 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
             });
         } catch (error) {
             if ((error?.message === 'storageUnconfirmed' || error?.message === 'storageReadback'
-                || (['retainPlan', 'discard', 'complete', 'reflection'].includes(kind) && error?.message === 'lockRequest'))
+                || (['suspend', 'retainPlan', 'discard', 'complete', 'reflection'].includes(kind) && error?.message === 'lockRequest'))
                 && source !== null && target !== null) {
                 pendingOperation = {
                     kind,

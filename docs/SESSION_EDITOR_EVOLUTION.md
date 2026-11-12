@@ -46,6 +46,36 @@ overlays and insertion/removal/reorder UI remain pending. No public Planner
 import, packaging or Service Worker cutover is included.
 
 **Internal COMPLETED/archive contract (unreleased):**
+The App-side internal exit boundary now coordinates these existing persistent
+operations; public lifecycle controls remain absent. `exitNativeExecution()`
+accepts explicit `intent` (`suspend`, `retainPlan`, `discard`, `complete`),
+`executionId`, `attemptId` (null before START), `runtimeRunId` and the complete
+`workshopNotes` snapshot for suspend/archive. It captures revisions from the
+current native App binding and delegates all lifecycle writes to the Bridge.
+`installNativeRecord()` rejects installation while an exit is outstanding.
+Concurrent semantic actions, Editor/mode navigation and information links are
+blocked; display-only ticks may continue while persistence is unresolved.
+
+Successful persistence is followed by a locked Store read and a local identity
+recheck. Only the confirmed, still-matching exit may detach the local Run/Clock,
+await Active-Lock release and enable Quick Timer with real recovery. A fresh
+ordinary Recovery context preserves unrelated old records and offers them through
+the existing chooser. Native Session data never enters legacy Recovery. Native
+Session re-entry reads the native Store; without public Library/activation UI it
+does not fall back to the V1 Picker or silently activate a saved execution.
+The existing aggregate revision preserves this native context after the last
+Execution is discarded and the page reloads; no additional persistent key is used.
+
+Uncertain readback keeps the App gated and the sole source/target pending state
+in the Bridge. `continueNativeExecutionExit()` reconciles read-only: source keeps
+the active Session, target continues cleanup once, conflict/read failure stays
+blocked. Late Store-lock request failures also retain suspend reconciliation;
+the App checks this path read-only, distinguishing pre-callback rejection from a
+persisted target. Confirmed persistence with cleanup/release/recovery failure is
+`handoffFailed` with `persisted: true`; continuation retries cleanup, never the
+lifecycle write. No public confirmation UI, Panel, Library or Picker cutover is
+included. Unreleased PWA references are v71.
+
 `completeExecutionInRecord(record, options)` and Runtime Bridge
 `completeExecution(options)` explicitly archive a STARTED ACTIVE or SUSPENDED
 execution. They use the existing exit identity/revision preconditions, plus an
@@ -85,7 +115,7 @@ operation retains full source/target pending snapshots after unconfirmed readbac
 or a late lock-request failure, blocks overlapping mutations and reconciles
 read-only without retry. Confirmed calls return the full Store record; pending
 reconciliation identifies `kind: 'complete' | 'reflection'` and source/target/conflict.
-No method detaches local runtime, releases ownership, closes the Panel or navigates.
+No Bridge method detaches local runtime, releases ownership, closes the Panel or navigates.
 The later UI must collect every open note draft, confirm persistence/reconciliation,
 detach the local runtime, release ownership and only then leave. Failed operations
 must retain editable input. COMPLETED records now round-trip in passive backups

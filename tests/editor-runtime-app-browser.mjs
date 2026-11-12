@@ -88,6 +88,7 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         await wait(`performance.timeOrigin!==${origin}&&document.body?.dataset.mode===${JSON.stringify(expectedMode)}&&Boolean(document.querySelector('#primary')?.title)`);
     };
     const install = record => evaluate(`(()=>{
+        if(window.exitProbe){exitProbe.armed=false;exitProbe.mode=null;}
         for(const key of Object.keys(localStorage)) if(key.startsWith('easyTimerRuntime.v1.')) localStorage.removeItem(key);
         sessionStorage.removeItem('easyTimerRuntimeContext.v1');
         sessionStorage.removeItem('easyTimerView.v1');
@@ -182,6 +183,201 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         assert.equal(await raw(), JSON.stringify(ready), 'Foreign ownership prevents native adoption without a write');
         assert.equal(await evaluate(`!document.querySelector('#runtime-recovery').hidden`), true);
         await evaluate(`Boolean(window.open('','native-runtime-owner').close())`);
+
+        // Exercise the real module instance loaded by index.html, not a second App.
+        const call = (method, options) => evaluate(`(async()=>{
+            const app=await import(new URL(document.querySelector('script[type="module"]').src).href);
+            return app[${JSON.stringify(method)}](${JSON.stringify(options)});
+        })()`);
+        const exitOptions = intent => ({ intent, executionId: 'browser-execution', attemptId: 'browser-attempt',
+            runtimeRunId: 'browser-run', workshopNotes: { rundown: 'All open rundown notes',
+                phases: [{ phaseId: 'native-first', text: 'First draft' }, { phaseId: 'native-second', text: 'Future draft' }] } });
+        const held = () => evaluate(`navigator.locks.query().then(value=>value.held.some(lock=>lock.name==='easyTimerEditor.v1.active-runtime'))`);
+        const faultScript = (await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+            window.exitProbe={events:[],writes:0,mode:null,afterWrite:0};
+            const probe=window.exitProbe, get=Storage.prototype.getItem, set=Storage.prototype.setItem;
+            Storage.prototype.getItem=function(key){
+                if(key==='easyTimerEditor.v1'&&probe.writes){
+                    probe.afterWrite++;
+                    if(probe.mode==='unconfirmed'&&probe.afterWrite===1) throw new Error('Readback unavailable');
+                    if(probe.mode==='cleanup'&&probe.afterWrite===2) throw new Error('Cleanup read unavailable');
+                }
+                return get.call(this,key);
+            };
+            Storage.prototype.setItem=function(key,value){
+                if(key==='easyTimerEditor.v1'&&probe.armed){
+                    if(probe.mode==='quota') throw new DOMException('Full','QuotaExceededError');
+                    probe.writes++; probe.afterWrite=0;
+                    probe.events.push('persist');
+                    if(probe.mode==='source') return;
+                    if(probe.mode==='conflict'){const record=JSON.parse(value);record.revision++;value=JSON.stringify(record);}
+                }
+                if(key.startsWith('easyTimerRuntime.v1.')) {
+                    if(JSON.parse(value).run) probe.events.push('legacy-session-write');
+                    else probe.events.push('quick-write');
+                }
+                return set.call(this,key,value);
+            };
+            const request=navigator.locks.request.bind(navigator.locks);
+            navigator.locks.request=function(name,options,callback){
+                if(name==='easyTimerEditor.v1.write'&&probe.requestFailure) throw new Error('Request rejected before callback');
+                return request(name,options,lock=>{
+                    const invoke=()=>{
+                        const result=callback(lock);
+                        if(name==='easyTimerEditor.v1.active-runtime'&&lock) return Promise.resolve(result).then(()=>{
+                            probe.events.push('release');
+                            if(probe.releaseFailure){probe.releaseFailure=false;throw new Error('Release acknowledgement lost');}
+                        });
+                        if(name==='easyTimerEditor.v1.write'&&probe.lateFailure&&probe.writes){
+                            probe.lateFailure=false;throw new Error('Late store acknowledgement lost');
+                        }
+                        return result;
+                    };
+                    if(name==='easyTimerEditor.v1.write'&&probe.gate){
+                        probe.gate=false;probe.waiting=true;
+                        return new Promise(resolve=>{probe.proceed=resolve;}).then(invoke);
+                    }
+                    return invoke();
+                });
+            };
+        ` })).identifier;
+        try {
+            for (const intent of ['suspend', 'retainPlan', 'discard', 'complete']) {
+                await install(startedRecord()); await reload('session', 12_000);
+                await evaluate(`exitProbe.armed=true`);
+                assert.deepEqual(await call('exitNativeExecution', exitOptions(intent)), { status: 'exited', persisted: true });
+                assert.equal(await held(), false);
+                assert.equal(await evaluate(`document.body.dataset.mode`), 'quick');
+                const archived = JSON.parse(await raw());
+                assert.equal(archived.activeRuntime, null);
+                assert.equal(archived.executions[0]?.execution.lifecycle ?? null,
+                    { suspend: 'suspended', retainPlan: 'planned', discard: null, complete: 'completed' }[intent]);
+                if (['suspend', 'complete'].includes(intent)) {
+                    assert.deepEqual(archived.executions[0].execution.workshopNotes, exitOptions(intent).workshopNotes);
+                }
+                assert.deepEqual(await evaluate(`exitProbe.events`), ['persist', 'release', 'quick-write']);
+                await evaluate(`document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('pageshow'))`);
+                assert.equal(await raw(), JSON.stringify(archived), 'Old callbacks cannot recreate the exited runtime');
+                assert.equal(await evaluate(`exitProbe.events.includes('legacy-session-write')`), false);
+                await click('#open-session');
+                assert.equal(await evaluate(`document.body.dataset.mode`), 'quick', 'Native re-entry cannot select a V1 definition');
+                await click('[data-preset="60000"]'); await click('#primary');
+                await reload('quick', 13_000);
+                assert.equal(await text('#status'), 'Running');
+                assert.equal(await text('#time'), '00:59', 'Quick recovery works after native handoff');
+                assert.equal(await raw(), JSON.stringify(archived));
+                await click('#open-session');
+                assert.equal(await evaluate(`document.body.dataset.mode`), 'quick',
+                    'Reload after discarding the last native execution cannot re-enable the V1 Picker');
+            }
+            for (const mode of ['unconfirmed', 'source', 'conflict']) {
+                await install(startedRecord()); await reload('session', 12_000);
+                await evaluate(`exitProbe.armed=true;exitProbe.mode=${JSON.stringify(mode)}`);
+                const result = await call('exitNativeExecution', exitOptions('suspend'));
+                assert.equal(result.status, 'uncertain');
+                assert.match(await text('#recovery-feedback'), /could not be confirmed/);
+                assert.equal(await held(), true);
+                assert.equal(await evaluate(`document.body.dataset.mode`), 'session');
+                await click('#primary'); await click('#open-quick');
+                assert.equal(await evaluate(`exitProbe.writes`), 1, 'No semantic write or navigation while uncertain');
+                assert.equal((await call('exitNativeExecution', exitOptions('suspend'))).code, 'nativeExitPending');
+                await evaluate(`exitProbe.mode=null`);
+                const reconciliation = await call('continueNativeExecutionExit');
+                assert.equal(reconciliation.status, { unconfirmed: 'exited', source: 'source', conflict: 'uncertain' }[mode]);
+                assert.equal(await held(), mode !== 'unconfirmed');
+                assert.equal(await evaluate(`exitProbe.writes`), 1, 'Reconciliation never repeats persistence');
+                assert.equal(await evaluate(`exitProbe.events.includes('legacy-session-write')`), false);
+            }
+            for (const mode of ['quota', 'cleanup', 'release', 'late']) {
+                await install(startedRecord()); await reload('session', 12_000);
+                await evaluate(`exitProbe.armed=true;exitProbe.mode=${JSON.stringify(mode)};
+                    exitProbe.releaseFailure=${mode === 'release'};exitProbe.lateFailure=${mode === 'late'}`);
+                const result = await call('exitNativeExecution', exitOptions('complete'));
+                assert.equal(result.status, mode === 'quota' ? 'error' : mode === 'late' ? 'exited' : 'handoffFailed');
+                assert.equal(await evaluate(`document.body.dataset.mode`), mode === 'late' ? 'quick' : 'session');
+                if (mode === 'quota') {
+                    assert.equal(await held(), true); assert.equal(await raw(), JSON.stringify(startedRecord()));
+                } else if (mode !== 'late') {
+                    assert.equal(result.persisted, true);
+                    assert.match(await text('#recovery-feedback'), /exit is saved/);
+                    assert.equal(JSON.parse(await raw()).executions[0].execution.lifecycle, 'completed');
+                    await click('#open-quick');
+                    assert.equal(await evaluate(`document.body.dataset.mode`), 'session');
+                    await evaluate(`exitProbe.mode=null`);
+                    assert.equal((await call('continueNativeExecutionExit')).status, 'exited');
+                    assert.equal(await evaluate(`exitProbe.writes`), 1);
+                    assert.equal(await evaluate(`exitProbe.events.filter(value=>value==='release').length`), 1);
+                }
+            }
+            await install(startedRecord()); await reload('session', 12_000);
+            for (const invalid of [{ executionId: 'foreign' }, { attemptId: null }, { runtimeRunId: 'foreign' }]) {
+                assert.equal((await call('exitNativeExecution', { ...exitOptions('suspend'), ...invalid })).code, 'nativeExitIdentity');
+            }
+            await evaluate(`exitProbe.armed=true;exitProbe.gate=true;
+                window.exitResult=import(new URL(document.querySelector('script[type="module"]').src).href)
+                    .then(app=>app.exitNativeExecution(${JSON.stringify(exitOptions('suspend'))}));void 0;`);
+            await wait('exitProbe.waiting');
+            assert.equal((await call('exitNativeExecution', exitOptions('discard'))).code, 'nativeExitPending');
+            assert.equal(await evaluate(`(async()=>{const app=await import(new URL(document.querySelector('script[type="module"]').src).href);
+                try{app.installNativeRecord(${JSON.stringify(readyRecord())});return false;}catch(error){return error.message==='nativeExitPending';}})()`), true,
+            'A different runtime cannot be installed during handoff');
+            await click('#primary'); await click('#open-quick'); await click('#open-planner');
+            assert.equal(await evaluate(`document.body.dataset.mode==='session'&&!document.body.classList.contains('planner-open')`), true);
+            assert.equal(await evaluate(`exitProbe.writes`), 0);
+            await evaluate(`exitProbe.proceed()`);
+            assert.equal((await evaluate('exitResult')).status, 'exited');
+            assert.equal(await evaluate(`exitProbe.writes`), 1);
+            // A pre-confirmation reload recovers the authoritative ACTIVE source;
+            // a post-confirmation reload above recovers only the Quick Timer.
+            await install(startedRecord()); await reload('session', 12_000);
+            await reload('session', 13_000);
+            assert.equal(await raw(), JSON.stringify(startedRecord()));
+            assert.equal(await noLegacyRuntime(), true);
+            await evaluate(`exitProbe.armed=true;exitProbe.mode='cleanup'`);
+            assert.equal((await call('exitNativeExecution', exitOptions('complete'))).status, 'handoffFailed');
+            const persistedExit = await raw();
+            await reload('quick', 14_000);
+            assert.equal(await raw(), persistedExit, 'Reload after confirmation cannot restore the old native run');
+            assert.equal(await evaluate(`document.querySelector('#session-picker').hidden`), true,
+                'Stale Session view metadata cannot reopen the V1 Picker after a native exit');
+            assert.equal(await evaluate(`Object.keys(localStorage).filter(key=>key.startsWith('easyTimerRuntime.v1.'))
+                .every(key=>!JSON.parse(localStorage.getItem(key)).run)`), true);
+            for (const intent of ['suspend', 'retainPlan', 'discard', 'complete']) {
+                await install(readyRecord()); await reload('session', 12_000);
+                const result = await call('exitNativeExecution', { ...exitOptions(intent), attemptId: null });
+                assert.equal(result.status, intent === 'complete' ? 'error' : 'exited');
+                assert.equal(await held(), intent === 'complete');
+                assert.equal(await evaluate(`document.body.dataset.mode`), intent === 'complete' ? 'session' : 'quick');
+            }
+            await install(startedRecord()); await reload('session', 12_000);
+            await evaluate(`exitProbe.armed=true;exitProbe.requestFailure=true`);
+            assert.deepEqual(await call('exitNativeExecution', exitOptions('suspend')),
+                { status: 'error', persisted: false, code: 'lockRequest' });
+            assert.equal(await held(), true);
+            assert.equal(await evaluate(`exitProbe.writes`), 0);
+            await evaluate(`exitProbe.requestFailure=false`);
+            const stale = startedRecord(); stale.revision++;
+            await evaluate(`localStorage.setItem(${JSON.stringify(EDITOR_STORAGE_KEY)},${JSON.stringify(JSON.stringify(stale))});exitProbe.writes=0`);
+            assert.equal((await call('exitNativeExecution', exitOptions('suspend'))).code, 'conflict');
+            assert.equal(await held(), true);
+            assert.equal(await evaluate(`exitProbe.writes`), 0);
+            await install(startedRecord()); await reload('session', 12_000);
+            const invalidNotes = { rundown: '', phases: [{ phaseId: 'missing', text: 'Unsaved' }] };
+            assert.equal((await call('exitNativeExecution', { ...exitOptions('suspend'), workshopNotes: invalidNotes })).code, 'invalidNotes');
+            assert.deepEqual(invalidNotes, { rundown: '', phases: [{ phaseId: 'missing', text: 'Unsaved' }] });
+            assert.equal(await raw(), JSON.stringify(startedRecord()));
+            // The native-adopted document still has an older tab association.
+            // Handoff must create a fresh Quick context, not overwrite that run.
+            const oldQuick = { schemaVersion: 1, contextId: 'unrelated-quick', savedAt: 10_000, mode: 'quick',
+                clock: { status: 'PAUSED', durationMs: 60_000, adjustmentMs: 0, remainingMs: 50_000, deadlineMs: null, overtimeMs: 0 } };
+            await evaluate(`localStorage.setItem('easyTimerRuntime.v1.unrelated-quick',${JSON.stringify(JSON.stringify(oldQuick))});
+                sessionStorage.setItem('easyTimerRuntimeContext.v1','unrelated-quick');`);
+            assert.equal((await call('exitNativeExecution', exitOptions('retainPlan'))).status, 'exited');
+            assert.equal(await evaluate(`localStorage.getItem('easyTimerRuntime.v1.unrelated-quick')`), JSON.stringify(oldQuick));
+            console.log('PASS: native App exits, ordering, reconciliation, cleanup failures, navigation gates and Quick recovery');
+        } finally {
+            await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: faultScript });
+        }
     } finally {
         await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
         await cdp('Emulation.clearDeviceMetricsOverride');
