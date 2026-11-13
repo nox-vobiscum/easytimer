@@ -22,6 +22,7 @@ const copy = {
         about: 'About', faq: 'FAQ', imprint: 'Imprint', privacy: 'Privacy', information: 'Information',
         planner: 'Session Editor', mode: 'Mode', editorSubtitle: 'Create & manage rundowns', exportRundown: 'Export Rundown', exportFailed: 'The download could not be prepared. Please try again.',
         clockOnly: 'Show clock-only view', clockControls: 'Show timer controls',
+        home: 'Home', homeHeading: 'Welcome to easyTimer', homeIntroduction: 'Choose what you would like to do.', homeSecondary: 'Start a timer directly or prepare a session for later.', homeActions: 'Timer and planning options', stopwatch: 'Stopwatch', notAvailable: 'Not yet available',
         quick: 'Quick Timer', session: 'Session Timer', chooseWorkshop: 'Load Rundown', backQuick: 'Back to Quick Timer',
         workshopTemplate: 'Rundown', createRundown: 'Open Session Editor', pickerContext: 'Choose a saved rundown for the Session Timer.', pickerEditorSubtitle: 'Create & edit rundowns',
         templateEntity: 'Template', plannedEntity: 'Planned execution', activeEntity: 'Active execution', suspendedEntity: 'Suspended execution', completedEntity: 'Completed archive',
@@ -62,6 +63,7 @@ const copy = {
         about: 'Über easyTimer', faq: 'FAQ', imprint: 'Impressum', privacy: 'Datenschutz', information: 'Informationen',
         planner: 'Session-Editor', mode: 'Modus', editorSubtitle: 'Rundowns erstellen & verwalten', exportRundown: 'Rundown exportieren', exportFailed: 'Der Download konnte nicht vorbereitet werden. Bitte erneut versuchen.',
         clockOnly: 'Nur die Uhr anzeigen', clockControls: 'Timer-Bedienung anzeigen',
+        home: 'Startseite', homeHeading: 'Willkommen bei easyTimer', homeIntroduction: 'Wähle aus, was du tun möchtest.', homeSecondary: 'Starte direkt einen Timer oder plane eine Session für später.', homeActions: 'Timer- und Planungsoptionen', stopwatch: 'Stoppuhr', notAvailable: 'Noch nicht verfügbar',
         quick: 'Quick-Timer', session: 'Session-Timer', chooseWorkshop: 'Rundown laden', backQuick: 'Zurück zum Quick-Timer',
         workshopTemplate: 'Rundown', createRundown: 'Session-Editor öffnen', pickerContext: 'Wähle einen gespeicherten Rundown für den Session-Timer.', pickerEditorSubtitle: 'Rundowns erstellen & bearbeiten',
         templateEntity: 'Vorlage', plannedEntity: 'Geplante Durchführung', activeEntity: 'Aktive Durchführung', suspendedEntity: 'Unterbrochene Durchführung', completedEntity: 'Abgeschlossenes Archiv',
@@ -115,13 +117,14 @@ document.querySelectorAll('[data-information]').forEach(link => link.addEventLis
     link.href = `${link.dataset.information}.html?lang=${language}`;
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     // Only navigation metadata: runtime identity and ownership remain in recovery.
-    try { sessionStorage.setItem(INFORMATION_ORIGIN_KEY, JSON.stringify({ view: plannerOpen ? 'editor' : mode })); }
+    try { sessionStorage.setItem(INFORMATION_ORIGIN_KEY, JSON.stringify({ view: plannerOpen ? 'editor' : homeOpen ? 'home' : mode })); }
     catch { /* Returning can still use ordinary view/runtime recovery. */ }
 }));
 let theme = readPreference('easyTimerTheme', 'system', ['light', 'dark', 'system']);
 const DEFAULT_QUICK_DURATION = 0;
 let timer = createTimer(DEFAULT_QUICK_DURATION);
 let mode = 'quick';
+let homeOpen = false;
 let run = null;
 let quickDurationMs = timer.durationMs;
 let pickerOpen = false;
@@ -178,6 +181,7 @@ function createAppRecovery(freshContext = false) {
 }
 let recovery = nativeRuntime ? inactiveRecovery : await createAppRecovery();
 function adoptRecovered(restored) {
+    homeOpen = false;
     if (restored.run) {
         const current = transitionSession(restored.run, restored.clock, { type: 'TICK' }, Date.now());
         mode = 'session'; run = current.run; timer = current.clock;
@@ -203,7 +207,7 @@ let restoringView = true;
 let lastView;
 function rememberView() {
     if (restoringView) return;
-    const view = plannerOpen ? 'editor' : mode;
+    const view = plannerOpen ? 'editor' : homeOpen ? 'home' : mode;
     if (view === lastView) return;
     lastView = view;
     try { sessionStorage.setItem(VIEW_KEY, view); }
@@ -355,7 +359,7 @@ $('legacy-recovery-discard').addEventListener('click', async () => {
 });
 $('native-recheck').addEventListener('click', async () => {
     const result = await continueNativeExecutionExit();
-    if (result.status === 'exited') $('primary').focus({ preventScroll: true });
+    if (result.status === 'exited') $('home-heading').focus({ preventScroll: true });
     else { render(); $('recovery-feedback').focus({ preventScroll: true }); }
 });
 const planner = createNativeEditorWorkspace({
@@ -370,8 +374,9 @@ const planner = createNativeEditorWorkspace({
         plannerOpen = false;
         document.body.classList.remove('planner-open');
         $('planner').hidden = true;
+        if (focus === 'home') installHomeState();
         updatePresentation();
-        $(focus === 'timer' ? 'primary' : 'menu-toggle').focus({ preventScroll: true });
+        $(focus === 'home' ? 'home-heading' : focus === 'timer' ? 'primary' : 'menu-toggle').focus({ preventScroll: true });
     },
     onRequest: requestNativeWorkspaceAction,
     onRecheck: recheckNativeWorkspaceAction,
@@ -394,6 +399,34 @@ function closePublicWorkspace() {
     $('menu-toggle').focus({ preventScroll: true });
     return true;
 }
+function installHomeState() {
+    if (nativeRuntime || nativeExit || legacyCurrentRecovery) throw new Error('nativeRuntimeBusy');
+    if (mode === 'quick' && timer) quickDurationMs = timer.durationMs;
+    recovery.save(null);
+    mode = 'quick'; run = null; timer = createTimer(quickDurationMs); pickerOpen = false;
+    homeOpen = true; limitExceeded = false;
+    setMenuOpen(false);
+}
+function hasCurrentTimerProgress() {
+    return Boolean(timer && (mode === 'session' ? hasSessionProgress(run, timer) : timer.status !== 'READY'));
+}
+async function openHome() {
+    if (nativeExit || nativeRuntime || legacyCurrentRecovery || pickerBusy || pickerPending
+        || recovery.pending || recovery.error) {
+        render();
+        (pickerPending ? $('picker-recheck') : $('recovery-feedback')).focus({ preventScroll: true });
+        return;
+    }
+    dispatch({ type: 'TICK' });
+    if (hasCurrentTimerProgress() && !window.confirm(copy[language].switchConfirm)) return;
+    if (plannerOpen && !closePublicWorkspace()) return;
+    navigationRevision += 1;
+    installHomeState();
+    const exiting = exitPresentationForWorkspace();
+    if (exiting) await exiting;
+    updatePresentation();
+    $('home-heading').focus({ preventScroll: true });
+}
 const landscape = matchMedia('(orientation: landscape)');
 const coarsePointer = matchMedia('(any-pointer: coarse)');
 function isSmartphone() {
@@ -403,7 +436,7 @@ function isSmartphone() {
 }
 
 function updateClockView() {
-    const available = isSmartphone() && landscape.matches && !plannerOpen && !pickerOpen;
+    const available = isSmartphone() && landscape.matches && !homeOpen && !plannerOpen && !pickerOpen;
     if (!available) clockOnly = false;
     document.body.classList.toggle('clock-only', clockOnly);
     const button = $('clock-view-toggle');
@@ -436,9 +469,9 @@ function updatePresentation() {
     }
     const roomPresentation = !phone && (Boolean(document.fullscreenElement) || expanded);
     document.body.dataset.device = phone ? 'smartphone' : 'desktop-tablet';
-    $('fullscreen').hidden = phone || plannerOpen || pickerOpen;
+    $('fullscreen').hidden = phone || homeOpen || plannerOpen || pickerOpen;
     if (phone && document.activeElement === $('fullscreen')) $('menu-toggle').focus({ preventScroll: true });
-    document.body.classList.toggle('presentation', !plannerOpen && !pickerOpen && (roomPresentation || (phone && landscape.matches)));
+    document.body.classList.toggle('presentation', !homeOpen && !plannerOpen && !pickerOpen && (roomPresentation || (phone && landscape.matches)));
     document.body.classList.toggle('room-presentation', roomPresentation);
     render();
 }
@@ -547,7 +580,7 @@ export async function enterNativeRecord(record) {
     nativeSessionContext = true;
     run = structuredClone(next.runtime.run);
     timer = structuredClone(next.runtime.clock);
-    mode = 'session'; pickerOpen = false; limitExceeded = false;
+    mode = 'session'; pickerOpen = false; homeOpen = false; limitExceeded = false;
     navigationRevision += 1;
     nativeStartupFeedback = '';
     recoveryFeedback = recoveryCleared ? '' : 'NATIVE_HANDOFF_ERROR';
@@ -595,6 +628,7 @@ async function finishNativeExit(exit) {
         nativeStartupFeedback = '';
         recoveryFeedback = '';
         nativeExit = null;
+        homeOpen = true;
         render();
         return { status: 'exited', persisted: true };
     } catch (error) {
@@ -914,6 +948,8 @@ async function requestNativeWorkspaceAction({ kind, record, entity }) {
             return { status: 'entered' };
         }
         if (['retainPlan', 'discardExecution', 'completeExecution'].includes(kind)) {
+            if (mode === 'quick' && hasCurrentTimerProgress()
+                && !window.confirm(copy[language].switchConfirm)) return { status: 'cancelled' };
             const execution = entity.execution;
             const common = {
                 executionId: execution.id, expectedLifecycle: 'suspended',
@@ -930,7 +966,7 @@ async function requestNativeWorkspaceAction({ kind, record, entity }) {
                 : common;
             try {
                 const confirmed = await editorBridge[method](options);
-                return { status: 'success', record: confirmed };
+                return { status: nativeRuntime ? 'success' : 'home', record: confirmed };
             } catch (error) {
                 if (['storageUnconfirmed', 'storageReadback', 'lockRequest'].includes(error.message)) {
                     return { status: 'uncertain', ticket: { kind: 'lifecycle', action: kind, executionId: execution.id } };
@@ -980,7 +1016,7 @@ async function recheckNativeWorkspaceAction(ticket) {
             if (ticket.kind === 'resume') {
                 await enterNativeRecord(result.record); return { status: 'entered' };
             }
-            return { status: 'confirmed', record: result.record };
+            return { status: nativeRuntime ? 'confirmed' : 'home', record: result.record };
         }
         return nativeActionError('invalidPendingOperation');
     } catch (error) {
@@ -1005,6 +1041,7 @@ async function switchMode(nextMode) {
     dispatch({ type: 'TICK' });
     if (nextMode === mode) {
         if (plannerOpen && !closePublicWorkspace()) { dispatch({ type: 'TICK' }); return; }
+        homeOpen = false;
         setMenuOpen(false); updatePresentation();
         (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll: true });
         return;
@@ -1015,7 +1052,7 @@ async function switchMode(nextMode) {
     if (plannerOpen && !closePublicWorkspace()) { dispatch({ type: 'TICK' }); return; }
     navigationRevision += 1;
     if (mode === 'quick') quickDurationMs = timer.durationMs;
-    mode = nextMode; run = null; limitExceeded = false;
+    mode = nextMode; run = null; homeOpen = false; limitExceeded = false;
     recovery.save(null);
     pickerOpen = nextMode === 'session';
     timer = pickerOpen ? null : createTimer(quickDurationMs);
@@ -1028,7 +1065,7 @@ async function switchMode(nextMode) {
 }
 function render() {
     rememberView();
-    if (!nativeRuntime && !nativeExit && !legacyCurrentRecovery) recovery.save(timer, null, mode === 'session' ? run : null, quickDurationMs);
+    if (!homeOpen && !nativeRuntime && !nativeExit && !legacyCurrentRecovery) recovery.save(timer, null, mode === 'session' ? run : null, quickDurationMs);
     renderRecovery();
     const t = copy[language];
     const session = mode === 'session' && run;
@@ -1036,11 +1073,17 @@ function render() {
         canChange: () => planner.canChangeAccount(), closeMenu: () => setMenuOpen(false),
         openSetup: async () => { await openEditor(); const details = document.getElementById('data-backup'); if (details) { details.open = true; document.getElementById('backup-summary').focus(); } },
     });
-    document.body.dataset.mode = mode;
+    document.body.dataset.mode = homeOpen ? 'home' : mode;
+    document.body.classList.toggle('home-open', homeOpen);
     document.body.classList.toggle('picker-open', pickerOpen);
+    $('home-view').hidden = !homeOpen || plannerOpen;
+    $('timer-view').hidden = homeOpen;
     $('session-picker').hidden = !pickerOpen || plannerOpen;
-    $('open-quick').setAttribute('aria-pressed', String(mode === 'quick'));
-    $('open-session').setAttribute('aria-pressed', String(mode === 'session'));
+    if (homeOpen) $('open-home').setAttribute('aria-current', 'page');
+    else $('open-home').removeAttribute('aria-current');
+    $('open-quick').setAttribute('aria-pressed', String(!homeOpen && mode === 'quick'));
+    $('open-session').setAttribute('aria-pressed', String(!homeOpen && mode === 'session'));
+    $('open-home').disabled = Boolean(nativeRuntime || nativeExit || legacyCurrentRecovery || pickerBusy || pickerPending || recovery.pending || recovery.error);
     $('open-quick').disabled = Boolean(nativeRuntime || nativeExit || legacyCurrentRecovery || pickerBusy || pickerPending);
     $('open-session').disabled = Boolean(nativeExit || legacyCurrentRecovery || (nativeStartupFeedback && !nativeRuntime));
     $('open-planner').disabled = Boolean(nativeExit || legacyCurrentRecovery || pickerBusy || pickerPending);
@@ -1093,6 +1136,12 @@ function render() {
         button.disabled = mode !== 'quick' || timer?.status !== 'READY';
     });
     if (pickerOpen) renderPicker();
+    if (homeOpen) {
+        updateClockView();
+        if (document.title !== 'easyTimer') document.title = 'easyTimer';
+        document.querySelector('main').removeAttribute('aria-busy');
+        return;
+    }
     if (!timer) {
         updateClockView();
         if (document.title !== 'easyTimer') document.title = 'easyTimer';
@@ -1232,7 +1281,7 @@ async function performNativeExit(intent) {
         intent, executionId: execution.id, attemptId: runtime.attemptId,
         runtimeRunId: runtime.run.runId, workshopNotes: structuredClone(execution.workshopNotes),
     });
-    if (result.status === 'exited') $('primary').focus({ preventScroll: true });
+    if (result.status === 'exited') $('home-heading').focus({ preventScroll: true });
     else { render(); $('recovery-feedback').focus({ preventScroll: true }); }
 }
 $('native-suspend').addEventListener('click', () => performNativeExit('suspend'));
@@ -1279,8 +1328,12 @@ applicationHeader.bindPreferences(next => {
 }, next => {
     theme = next; savePreference('easyTimerTheme', theme); render();
 });
+$('open-home').addEventListener('click', () => openHome());
 $('open-session').addEventListener('click', () => switchMode('session'));
 $('open-quick').addEventListener('click', () => switchMode('quick'));
+$('home-quick').addEventListener('click', () => switchMode('quick'));
+$('home-session').addEventListener('click', () => switchMode('session'));
+$('home-editor').addEventListener('click', () => openEditor());
 $('picker-back').addEventListener('click', () => switchMode('quick'));
 $('reload-templates').addEventListener('click', async () => {
     if (pickerBusy || pickerPending) return;
@@ -1408,12 +1461,12 @@ const returnURL = new URL(location.href);
 let informationIntent = null;
 if (returnURL.searchParams.get('from') === 'information') {
     const intent = returnURL.searchParams.get('open');
-    if (['quick', 'session', 'editor'].includes(intent)) informationIntent = intent;
+    if (['home', 'quick', 'session', 'editor'].includes(intent)) informationIntent = intent;
     // Consume before any asynchronous view restoration or confirmation can run.
     returnURL.searchParams.delete('open');
     try {
         const origin = JSON.parse(sessionStorage.getItem(INFORMATION_ORIGIN_KEY));
-        if (['quick', 'session', 'editor'].includes(origin?.view)) savedView = origin.view;
+        if (['home', 'quick', 'session', 'editor'].includes(origin?.view)) savedView = origin.view;
     } catch { /* Invalid/missing navigation metadata does not affect recovery. */ }
     returnURL.searchParams.delete('from');
     history.replaceState(null, '', returnURL);
@@ -1421,18 +1474,23 @@ if (returnURL.searchParams.get('from') === 'information') {
 try { sessionStorage.removeItem(INFORMATION_ORIGIN_KEY); } catch { /* Optional navigation metadata. */ }
 const unresolvedRecovery = legacyCurrentRecovery || Boolean(nativeStartupFeedback)
     || (mode === 'quick' && recovery.pending) || (!recovery.restored && recovery.error);
-if (!unresolvedRecovery && savedView === 'editor') {
+if (!unresolvedRecovery && !nativeRuntime && savedView === 'home' && !recovery.restored) {
+    homeOpen = true;
+} else if (!unresolvedRecovery && !nativeRuntime && savedView === 'editor') {
     await openEditor();
-} else if (!unresolvedRecovery && savedView === 'session' && mode !== 'session' && !recovery.restored) {
+} else if (!unresolvedRecovery && !nativeRuntime && savedView === 'session' && mode !== 'session' && !recovery.restored) {
     // No accessible Run: restore the existing picker, never an empty Session screen.
     mode = 'session'; pickerOpen = true; timer = null;
     await loadNativeWorkspace();
+} else if (!unresolvedRecovery && !nativeRuntime && !recovery.restored && !savedView) {
+    homeOpen = true;
 }
 restoringView = false;
 updatePresentation();
 if (legacyCurrentRecovery) openLegacyRecoveryDialog();
 if (!unresolvedRecovery && informationIntent) {
-    if (informationIntent === 'editor') await openEditor();
+    if (informationIntent === 'home') await openHome();
+    else if (informationIntent === 'editor') await openEditor();
     else await switchMode(informationIntent);
 }
 // Unresolved recovery deliberately discards, rather than defers, the intent.

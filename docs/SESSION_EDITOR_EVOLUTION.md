@@ -486,6 +486,15 @@ A rundown is the **result of planning with the information available at planning
 
 This is a focused evolution of easyTimer, **not** an attempt to recreate SessionLab or build a general workshop-management platform.
 
+**Public entry scaffold:** The current unreleased integration adds a neutral
+Home presentation before ordinary fresh use. It links to the existing Quick
+Timer, native Session Picker and native Session Editor and shows Stopwatch only
+as an unavailable placeholder. This adds no routing, persistence or Timer
+authority. Runtime/Recovery restoration remains prior, and lifecycle actions
+return Home only after confirmed persistence and safe handoff. A progressed
+independent Quick Timer behind the Workspace is never reset implicitly: its
+existing departure confirmation precedes any terminal SUSPENDED write.
+
 ## 1. Session Editor — preparation workspace
 
 Give the Session Editor more space and a clearer identity as a first-class feature rather than a compact settings panel. Keep the default workflow approachable; richer details should be available on demand.

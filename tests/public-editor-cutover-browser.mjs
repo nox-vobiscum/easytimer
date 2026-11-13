@@ -116,7 +116,8 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
             localStorage.setItem('easyTimerLanguage','en');
             localStorage.setItem(${JSON.stringify(EDITOR_STORAGE_KEY)},${JSON.stringify(JSON.stringify(libraryRecord()))});
         })()`);
-        await reload('quick');
+        await reload('home');
+        await click('#home-quick');
 
         await evaluate(`(()=>{
             const locks = navigator.locks, original = locks.request.bind(locks);
@@ -191,9 +192,10 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         assert.match(await text('#native-suspend-help'), /Preserves progress/);
         assert.match(await text('#native-retain-help'), /discards actual progress/);
         await click('#native-suspend');
-        await wait(`document.body.dataset.mode==='quick'&&JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime===null`);
+        await wait(`document.body.dataset.mode==='home'&&JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime===null`);
         stored = await record();
         assert.equal(stored.executions.find(entry => entry.execution.id === executionId).execution.lifecycle, 'suspended');
+        const suspendedSnapshot = structuredClone(stored);
 
         await openPicker();
         await choose(`suspended:${executionId}`);
@@ -216,7 +218,7 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
 
         await click('#stop');
         await click('#native-retain');
-        await wait(`document.body.dataset.mode==='quick'`);
+        await wait(`document.body.dataset.mode==='home'`);
         stored = await record();
         const retained = stored.executions.find(entry => entry.execution.id === executionId).execution;
         assert.equal(retained.lifecycle, 'planned');
@@ -239,7 +241,7 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime?.attemptId!==null`);
         await click('#stop');
         await click('#native-complete');
-        await wait(`document.body.dataset.mode==='quick'`);
+        await wait(`document.body.dataset.mode==='home'`);
         stored = await record();
         assert.equal(stored.executions.find(entry => entry.execution.id === executionId).execution.lifecycle, 'completed');
 
@@ -253,6 +255,57 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         assert.equal(await evaluate(`document.body.classList.contains('planner-open')`), true, 'Archive Back returns to the single native library');
         await click('#planner .planner-back');
 
+        await evaluate(`window.quickLifecycleConfirm=window.confirm`);
+        for (const [label, lifecycle] of [
+            ['Keep plan and reset progress', 'planned'], ['Discard run', null], ['Complete and archive', 'completed'],
+        ]) {
+            await evaluate(`localStorage.setItem(${JSON.stringify(EDITOR_STORAGE_KEY)},${JSON.stringify(JSON.stringify(suspendedSnapshot))});
+                localStorage.setItem('easyTimerRuntime.v1.lifecycle-unrelated',${JSON.stringify(JSON.stringify(unrelatedQuick))})`);
+            if (await evaluate(`document.body.dataset.mode!=='home'`)) await menuAction('#open-home');
+            await click('#home-quick');
+            if (await evaluate(`document.querySelector('#primary').disabled`)) await click('[data-preset="60000"]');
+            await click('#primary'); await wait(`document.querySelector('#status').textContent==='Running'`);
+            const quickBefore = await evaluate(`(()=>{const key=sessionStorage.getItem('easyTimerRuntimeContext.v1');return {key,record:JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+key))}})()`);
+            const source = JSON.stringify(await record());
+            await menuAction('#open-planner'); await wait(`document.body.classList.contains('planner-open')`);
+            const writesBefore = await evaluate(`pickerReadProbe.requests`);
+            await evaluate(`window.confirm=()=>false;Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent===${JSON.stringify(label)}).click()`);
+            await click('#planner [data-native-lifecycle-dialog] .confirm-stop'); await delay(50);
+            assert.equal(JSON.stringify(await record()), source, `${label}: rejected Quick departure performs no lifecycle mutation`);
+            assert.equal(await evaluate(`pickerReadProbe.requests`), writesBefore, `${label}: rejected confirmation performs no Store write`);
+            assert.deepEqual(await evaluate(`(()=>{const value=JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+${JSON.stringify(quickBefore.key)}));return [document.body.classList.contains('planner-open'),document.body.dataset.mode,value.contextId,value.clock.status,value.clock.deadlineMs]})()`),
+                [true, 'quick', quickBefore.record.contextId, quickBefore.record.clock.status, quickBefore.record.clock.deadlineMs],
+                `${label}: rejected confirmation preserves Quick identity, status and deadline`);
+
+            await evaluate(`window.confirm=()=>true;Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent===${JSON.stringify(label)}).click()`);
+            await click('#planner [data-native-lifecycle-dialog] .confirm-stop');
+            await wait(`document.body.dataset.mode==='home'&&!document.body.classList.contains('planner-open')`);
+            const target = await record();
+            assert.equal(target.executions.find(entry => entry.execution.id === executionId)?.execution.lifecycle ?? null, lifecycle,
+                `${label}: accepted confirmation writes the terminal lifecycle exactly once`);
+            assert.equal(target.revision, suspendedSnapshot.revision + 1);
+            assert.equal(await evaluate(`localStorage.getItem('easyTimerRuntime.v1.lifecycle-unrelated')`), JSON.stringify(unrelatedQuick),
+                `${label}: unrelated recovery remains untouched`);
+        }
+
+        await evaluate(`localStorage.setItem(${JSON.stringify(EDITOR_STORAGE_KEY)},${JSON.stringify(JSON.stringify(suspendedSnapshot))})`);
+        await click('#home-quick');
+        if (await evaluate(`document.querySelector('#primary').disabled`)) await click('[data-preset="60000"]');
+        await click('#primary'); await wait(`document.querySelector('#status').textContent==='Running'`);
+        const uncertainQuick = await evaluate(`(()=>{const key=sessionStorage.getItem('easyTimerRuntimeContext.v1');return {key,record:JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+key))}})()`);
+        await menuAction('#open-planner'); await wait(`document.body.classList.contains('planner-open')`);
+        await evaluate(`window.confirm=()=>true;pickerReadProbe.lateFailureNext=true;Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Keep plan and reset progress').click()`);
+        await click('#planner [data-native-lifecycle-dialog] .confirm-stop');
+        await wait(`Boolean(document.querySelector('#planner [data-native-recheck]'))`);
+        assert.deepEqual(await evaluate(`(()=>{const value=JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+${JSON.stringify(uncertainQuick.key)}));return [document.body.classList.contains('planner-open'),document.body.dataset.mode,value.contextId,value.clock.status,value.clock.deadlineMs]})()`),
+            [true, 'quick', uncertainQuick.record.contextId, uncertainQuick.record.clock.status, uncertainQuick.record.clock.deadlineMs],
+            'uncertain lifecycle write retains the Workspace, ticket and unrelated Quick Timer');
+        const uncertainRevision = (await record()).revision;
+        await click('#planner [data-native-recheck]');
+        await wait(`document.body.dataset.mode==='home'&&!document.body.classList.contains('planner-open')`);
+        assert.equal((await record()).revision, uncertainRevision, 'read-only target Recheck closes to Home without a duplicate write');
+        await evaluate(`window.confirm=window.quickLifecycleConfirm`);
+
         await menuAction('#open-planner');
         await wait(`document.body.classList.contains('planner-open')`);
         await evaluate(`window.cutoverConfirm=window.confirm;window.cutoverAnswers=[false,true];window.confirm=()=>window.cutoverAnswers.shift()`);
@@ -260,8 +313,9 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         await evaluate(`(()=>{const input=document.querySelector('#planner [data-field="name"]');input.value='Retained unsaved draft';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
         await click('#planner .planner-back');
         assert.equal(await evaluate(`document.querySelector('#planner [data-field="name"]').value`), 'Retained unsaved draft', 'Rejected close preserves the complete draft');
-        await menuAction('#open-quick');
-        assert.equal(await evaluate(`document.body.classList.contains('planner-open')`), false, 'Confirmed close may discard the local draft');
+        await menuAction('#open-home');
+        assert.equal(await evaluate(`!document.body.classList.contains('planner-open')&&document.body.dataset.mode==='home'`), true,
+            'confirmed Home navigation may discard the local draft only after the Workspace guard approves');
         await evaluate(`window.confirm=window.cutoverConfirm`);
 
         await evaluate(`(()=>{
@@ -289,6 +343,8 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         await evaluate(`(()=>{
             if(window.pickerReadProbe) navigator.locks.request=window.pickerReadProbe.original;
             delete window.pickerReadProbe;
+            if(window.quickLifecycleConfirm) window.confirm=window.quickLifecycleConfirm;
+            delete window.quickLifecycleConfirm;
             if(window.cutoverConfirm) window.confirm=window.cutoverConfirm;
             const baseline=${JSON.stringify(baseline)};
             for(const key of Object.keys(localStorage)) if(key.startsWith('easyTimerRuntime.v1.')) localStorage.removeItem(key);
@@ -297,6 +353,7 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
             }
             sessionStorage.removeItem('easyTimerRuntimeContext.v1');sessionStorage.removeItem('easyTimerView.v1');
         })()`);
-        await reload('quick');
+        await reload('home');
+        await click('#home-quick');
     }
 }

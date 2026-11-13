@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/branding/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="assets/branding/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="css/styles.css?v=73">
+  <link rel="stylesheet" href="css/styles.css?v=74">
 </head>
 <body data-duration-entry="presets-adjustments">
   <template id="application-header"></template>
@@ -34,6 +34,35 @@
     </div>
   </section>
   <main aria-busy="true">
+    <section id="home-view" class="home-view" aria-labelledby="home-heading" hidden>
+      <div class="home-introduction">
+        <h1 id="home-heading" tabindex="-1" data-copy="homeHeading">Welcome to easyTimer</h1>
+        <p data-copy="homeIntroduction">Choose what you would like to do.</p>
+      </div>
+      <div class="home-actions" aria-label="Timer and planning options" data-label="homeActions">
+        <button id="home-quick" class="home-action" type="button">
+          <svg class="navigation-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="14" r="8"/><path d="M12 6V3m-3-1h6m3 5 2-2m-8 5v4"/></svg>
+          <span data-copy="quick">Quick Timer</span>
+        </button>
+        <button id="home-session" class="home-action" type="button">
+          <svg class="navigation-icon session-stopwatch" viewBox="0 0 32 26" aria-hidden="true" focusable="false">
+            <g class="stopwatch-echo stopwatch-echo-far"><circle cx="24" cy="16" r="6.5"/><path d="M24 9.5V7m-2-1h4m3 5 1.5-1.5"/></g>
+            <g class="stopwatch-echo stopwatch-echo-near"><circle cx="17" cy="16" r="7.25"/><path d="M17 8.75V6m-2-1h4m3 5 1.5-1.5"/></g>
+            <circle class="stopwatch-face" cx="9" cy="16" r="8"/><path d="M9 8V4m-2-1h4m4 6 1.5-1.5M9 12v4"/>
+          </svg>
+          <span data-copy="session">Session Timer</span>
+        </button>
+        <button id="home-editor" class="home-action" type="button">
+          <svg class="navigation-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 4h10M4 8h5M4 12v8h16v-5m-12 1 1-4L19 2l3 3-10 10-4 1Zm9-12 3 3"/></svg>
+          <span data-copy="planner">Session Editor</span>
+        </button>
+        <button id="home-stopwatch" class="home-action" type="button" disabled aria-describedby="home-stopwatch-note">
+          <svg class="navigation-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="14" r="8"/><path d="M12 6V3m-3-1h6m3 5 2-2m-8 5v4"/></svg>
+          <span><span data-copy="stopwatch">Stopwatch</span><small id="home-stopwatch-note" data-copy="notAvailable">Not yet available</small></span>
+        </button>
+      </div>
+      <p class="home-secondary" data-copy="homeSecondary">Start a timer directly or prepare a session for later.</p>
+    </section>
     <section class="timer" aria-labelledby="heading" style="visibility:hidden" id="timer-view">
       <h1 id="heading" data-copy="countdown">Countdown</h1>
       <button id="fullscreen" class="fullscreen-button" type="button" aria-pressed="false" aria-label="Fullscreen" title="Fullscreen">
@@ -163,6 +192,6 @@
   </div>
   <footer>Crafted with <span class="footer-heart" role="img" aria-label="love">&#x2665;&#xFE0E;</span> by <a href="https://rolandseper.at" target="_blank" rel="noopener noreferrer">Roland B. Seper</a> | <a href="https://rbsnet.at" target="_blank" rel="noopener noreferrer">rbsnet.at</a> © 2026</footer>
   <noscript>This timer requires JavaScript. / Dieser Timer benötigt JavaScript.</noscript>
-  <script type="module" src="js/app.js?v=73"></script>
+  <script type="module" src="js/app.js?v=74"></script>
 </body>
 </html>

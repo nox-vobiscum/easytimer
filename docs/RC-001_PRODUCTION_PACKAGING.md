@@ -6,7 +6,8 @@
 > stage and is preserved as historical evidence.
 
 > **Unreleased EDITOR-001 update (2026-11-12):** The coordinated Schema-2
-> cutover expands the deterministic package to 36 files for PWA v73. The native
+> cutover expands the deterministic package to 36 files. Its v73 checkpoint is
+> superseded by the unreleased PWA v74 Landing Page shell. The native
 > Workspace, Planner/launch/import/portability services and their dependencies
 > replace public `planner.js`, `planner-v1.mjs` and `portability.mjs`; those V1
 > modules are excluded from the allowlist and precache. The package verifier still

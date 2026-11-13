@@ -6,6 +6,20 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 Landing Page scaffold (implemented, not deployed):** a fresh
+  ordinary visit now opens a small DE/EN Home view with Quick Timer, Session
+  Timer and Session Editor entry points plus a clearly disabled Stopwatch
+  placeholder. Existing menu artwork and central styles are reused. Active
+  Runtime and Recovery restoration continue to take precedence. Confirmed
+  ACTIVE exits and confirmed terminal actions on SUSPENDED executions return to
+  Home only after persistence and safe handoff; failed or uncertain writes keep
+  their existing draft/ticket and reconciliation path. Quick Stop remains a
+  Timebox reset. When the Editor was opened over a progressed independent Quick
+  Timer, terminal SUSPENDED actions now require the existing departure
+  confirmation before their irreversible write; rejection changes neither
+  timer nor Execution. Information-page origin continuity includes Home, and the
+  application shell advances consistently to unreleased PWA v74.
+
 - **EDITOR-001 first-START hotfix:** installing a confirmed native
   ACTIVE/READY-to-STARTED write now accepts its one valid `null`-to-first-Attempt
   identity transition. The App proves the complete target by replaying the
@@ -30,7 +44,8 @@ commit, staging and production deployment are distinct events.
   preserves the current Quick Recovery. Single-Template import/export remains;
   a complete local-data export is explicitly labelled as not restorable. Public
   V1 Planner, V1 Template Store and V1 JSON modules leave the production graph.
-  Packaging and cache references advance together to unreleased PWA v73. The
+  Packaging and cache references advanced together to unreleased PWA v73; the
+  Landing Page shell now supersedes that checkpoint with v74. The
   Facilitator Panel, full restore, migration, merge and deployment remain out of
   scope; real-browser acceptance remains a mandatory open gate until Chromium
   can initialize successfully in the test environment.

@@ -87,11 +87,22 @@ retain late Activation/Resume lock failures for read-only reconciliation, and
 enforce monotonic active Runtime installation without clock rewind. Mandatory
 real-browser acceptance remains open.
 
+The minimal public Home scaffold is implemented locally on top of this cutover.
+It provides DE/EN entry points for Quick Timer, Session Timer and Session Editor,
+with an explicitly unavailable Stopwatch placeholder. Recovery and ACTIVE
+Runtime adoption remain prior states; only confirmed lifecycle completion
+returns Home. Visual/text refinement and Stopwatch implementation remain
+separate future work. Terminal SUSPENDED actions confirm departure before their
+write when a progressed independent Quick Timer is behind the Workspace, so a
+rejected Home transition preserves both states. The unreleased public shell is
+now PWA v74.
+
 V1 Planner, Template Store and JSON sources remain only as repository history and
 focused legacy evidence; they are no longer reachable from public startup,
 precache or the deterministic production package. There is no V1 migration,
 compatibility import, dual library or second public Editor. Production
-dependency/precache references are aligned for unreleased PWA v73.
+dependency/precache references were aligned at the v73 cutover checkpoint and
+are now aligned for the unreleased PWA v74 Landing Page shell.
 
 The native Editor Workspace is implemented and covered
 by a direct browser harness. One native snapshot presents Templates and all

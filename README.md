@@ -22,6 +22,8 @@ multi-phase workshop Rundowns. The production application is available at
 - Native Session Editor and unified Template/Execution library with direct
   launch, explicit lifecycle actions, single-Template JSON portability and a
   clearly labelled complete local-data export.
+- A simple Home entry links to Quick Timer, Session Timer and Session Editor;
+  the visible Stopwatch option is an unavailable placeholder.
 - Responsive DE/EN interface with Light, Dark and System themes.
 - Installable, offline-capable PWA with no mandatory account or backend.
 

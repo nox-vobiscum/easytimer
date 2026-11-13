@@ -432,7 +432,7 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
                 await evaluate(`exitProbe.armed=true`);
                 assert.deepEqual(await call('exitNativeExecution', exitOptions(intent)), { status: 'exited', persisted: true });
                 assert.equal(await held(), false);
-                assert.equal(await evaluate(`document.body.dataset.mode`), 'quick');
+                assert.equal(await evaluate(`document.body.dataset.mode`), 'home');
                 const archived = JSON.parse(await raw());
                 assert.equal(archived.activeRuntime, null);
                 assert.equal(archived.executions[0]?.execution.lifecycle ?? null,
@@ -440,7 +440,7 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
                 if (['suspend', 'complete'].includes(intent)) {
                     assert.deepEqual(archived.executions[0].execution.workshopNotes, exitOptions(intent).workshopNotes);
                 }
-                assert.deepEqual(await evaluate(`exitProbe.events`), ['persist', 'release', 'quick-write']);
+                assert.deepEqual(await evaluate(`exitProbe.events`), ['persist', 'release']);
                 await evaluate(`document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('pageshow'))`);
                 assert.equal(await raw(), JSON.stringify(archived), 'Old callbacks cannot recreate the exited runtime');
                 assert.equal(await evaluate(`exitProbe.events.includes('legacy-session-write')`), false);
@@ -535,7 +535,7 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
                 const result = await call('exitNativeExecution', { ...exitOptions(intent), attemptId: null });
                 assert.equal(result.status, intent === 'complete' ? 'error' : 'exited');
                 assert.equal(await held(), intent === 'complete');
-                assert.equal(await evaluate(`document.body.dataset.mode`), intent === 'complete' ? 'session' : 'quick');
+                assert.equal(await evaluate(`document.body.dataset.mode`), intent === 'complete' ? 'session' : 'home');
             }
             await install(startedRecord()); await reload('session', 12_000);
             await evaluate(`exitProbe.armed=true;exitProbe.requestFailure=true`);
@@ -584,6 +584,7 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         if (clockScript) await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: clockScript });
         const origin = await evaluate('performance.timeOrigin');
         await cdp('Page.reload');
-        await wait(`performance.timeOrigin!==${origin}&&document.body?.dataset.mode==='quick'`);
+        await wait(`performance.timeOrigin!==${origin}&&document.body?.dataset.mode==='home'`);
+        await click('#home-quick');
     }
 }

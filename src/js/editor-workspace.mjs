@@ -134,7 +134,7 @@ export function createNativeEditorWorkspace({
     let baseline = null; let feedbackCode = null; let feedbackError = false;
     let pending = null; let mutationBusy = false;
     let importCandidate = null; let deleteTarget = null; let deleteTrigger = null;
-    let lifecycleRequest = null; let archiveId = null; let closeAfterMutation = false;
+    let lifecycleRequest = null; let archiveId = null; let closeAfterMutation = null;
     let fileReadId = 0;
     const t = () => copy[language];
     const library = () => ({ revision: workspace.revision, templates: workspace.templates });
@@ -178,9 +178,9 @@ export function createNativeEditorWorkspace({
         finally {
             mutationBusy = false;
             if (closeAfterMutation) {
-                closeAfterMutation = false;
+                const focus = closeAfterMutation; closeAfterMutation = null;
                 deactivate();
-                onClose({ focus: 'timer' });
+                onClose({ focus });
             } else render();
         }
         return true;
@@ -289,7 +289,10 @@ export function createNativeEditorWorkspace({
             if (pending.kind === 'host') {
                 result = await onRecheck(structuredClone(pending.ticket));
                 if (result.status === 'entered') {
-                    pending = null; closeAfterMutation = true; return;
+                    pending = null; closeAfterMutation = 'timer'; return;
+                }
+                if (result.status === 'home') {
+                    pending = null; closeAfterMutation = 'home'; return;
                 }
                 if (['success', 'confirmed', 'partial', 'source'].includes(result.status)) {
                     pending = null; await finishWrite(result.status === 'partial' ? 'creationObserved' : 'saved'); return;
@@ -433,7 +436,8 @@ export function createNativeEditorWorkspace({
         return runMutation(async () => {
             const result = await onRequest({ kind, record: structuredClone(workspace), entity: structuredClone(entity) });
             if (result.status === 'cancelled') return;
-            if (result.status === 'entered') { closeAfterMutation = true; return; }
+            if (result.status === 'entered') { closeAfterMutation = 'timer'; return; }
+            if (result.status === 'home') { closeAfterMutation = 'home'; return; }
             if (result.status === 'uncertain') {
                 pending = { kind: 'host', ticket: structuredClone(result.ticket) }; setFeedback('uncertain'); render(); return;
             }

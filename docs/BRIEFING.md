@@ -226,6 +226,18 @@ Session recovery is never resumed or converted and requires explicit DE/EN
 confirmation before discard; candidate discard preserves the current Quick
 Recovery and ownership. The App handoff is tested through the browser runner.
 
+The public App also has a presentation-only Home state. It is the default for a
+fresh ordinary visit, but never overrides an adopted ACTIVE Runtime, Quick
+Recovery, unresolved recovery choice or explicit restored view. Home creates no
+Store, Timer state or recovery format. Confirmed ACTIVE exits and confirmed
+terminal operations on SUSPENDED executions may return there only after their
+authoritative write and required cleanup; uncertain operations retain their
+original reconciliation ticket. If a progressed independent Quick Timer is
+behind the Workspace, its existing departure confirmation must be accepted
+before a terminal SUSPENDED write begins. Rejection is write-free; reconciliation
+never repeats the confirmation or mutation. Quick Stop remains a reset within
+Quick Timer.
+
 Native Template Create, Update and Delete now retain their stable operation plus
 complete Store source/target snapshots when readback or a late Store-lock
 acknowledgement is uncertain. The Planner service validates caller-held tickets
@@ -271,7 +283,7 @@ not rewind the in-memory clock, and conflicting or unreadable reads fail closed.
 - `src/service-worker.js` precaches the explicit application shell for offline
   cold starts. Asset query versions and the shell version must remain aligned.
 
-Quick Timer, Session Timer, Session Editor, local persistence, recovery,
+Home, Quick Timer, Session Timer, Session Editor, local persistence, recovery,
 DATA-001, information pages and offline PWA behavior are production features.
 The Google Drive work under `tools/app-sync/` and `tools/sync-*` is isolated,
 development-only experimental evidence. Production packaging must not expose or

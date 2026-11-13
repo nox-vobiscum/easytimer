@@ -123,10 +123,13 @@ try {
         await evaluate(`document.querySelector('#menu-toggle').focus()`);
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-quick')`),true,'Tab reaches Quick Timer mode choice first');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-home')`),true,'Tab reaches Home first');
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-session')`),true,'Tab reaches Session Timer mode choice next');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-quick')`),true,'Tab reaches Quick Timer mode choice next');
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-session')`),true,'Tab reaches Session Timer mode choice after Quick Timer');
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-planner')&&getComputedStyle(document.activeElement).outlineStyle!=='none'`),true,'Planner follows modes with visible keyboard focus');
@@ -148,6 +151,32 @@ try {
         if (await evaluate(`document.querySelector('#primary')?.title?.length > 0`)) break;
         await delay(50);
     }
+    assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.querySelector('#home-view').hidden&&document.querySelector('#timer-view').hidden`),true,'Fresh ordinary visit opens Home');
+    assert.equal(await evaluate(`document.querySelector('#home-stopwatch').disabled&&document.querySelector('#home-stopwatch').getAttribute('aria-describedby')==='home-stopwatch-note'`),true,'Stopwatch is visible and accessibly unavailable');
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('.home-action .navigation-icon')).length===4`),true,'Landing actions reuse the established menu icon artwork');
+    await click('[data-language="de"]');
+    assert.equal(await text('#home-heading'),'Willkommen bei easyTimer');
+    await click('[data-language="en"]');
+    assert.equal(await text('#home-heading'),'Welcome to easyTimer');
+    for (const [width,height] of [[1280,720],[320,568]]) {
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
+        assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('.home-action')).every(button=>button.getBoundingClientRect().height>=44)`),true,'Home stays responsive with accessible action targets');
+    }
+    await cdp('Emulation.clearDeviceMetricsOverride');
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:720,deviceScaleFactor:1,mobile:false});
+    await click('#home-session');
+    assert.equal(await evaluate(`document.body.dataset.mode==='session'&&!document.querySelector('#session-picker').hidden`),true,'Home opens the native Session Picker');
+    await click('#open-home');
+    assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.querySelector('#home-view').hidden`),true,'Menu returns safely to Home');
+    await click('#home-editor');
+    assert.equal(await evaluate(`document.body.classList.contains('planner-open')&&!document.querySelector('#planner').hidden`),true,'Home opens the native Editor Workspace');
+    await click('.planner-back');
+    assert.equal(await evaluate(`document.body.dataset.mode==='home'`),true,'Editor Back returns to its Home origin');
+    await evaluate(`document.querySelector('#home-quick').focus()`);
+    assert.notEqual(await evaluate(`getComputedStyle(document.activeElement).outlineStyle`),'none','Home action has visible keyboard focus');
+    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    assert.equal(await evaluate(`document.body.dataset.mode==='quick'&&!document.querySelector('#timer-view').hidden`),true,'Home opens Quick Timer');
     if(timeTravelOptions.names.length) {
         await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
         assert.equal(errors.length,0,JSON.stringify(errors));
@@ -176,8 +205,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=73'&&js==='js/app.js?v=73'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'73','app.js':'73','info.js':'59','header.mjs':'59','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=74'&&js==='js/app.js?v=74'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'74','app.js':'74','info.js':'59','header.mjs':'59','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');

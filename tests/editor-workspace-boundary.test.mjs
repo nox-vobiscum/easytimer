@@ -68,11 +68,35 @@ test('central styles and app shell advance together for the public native Worksp
         read('src/css/styles.css'), read('src/index.html'), read('src/service-worker.js'),
     ]);
     assert.match(css, /\.native-editor-workspace/);
-    assert.match(html, /css\/styles\.css\?v=73/);
-    assert.match(html, /js\/app\.js\?v=73/);
-    assert.match(worker, /easytimer-shell-v73/);
-    assert.match(worker, /css\/styles\.css\?v=73/);
-    assert.match(worker, /js\/app\.js\?v=73/);
+    assert.match(html, /css\/styles\.css\?v=74/);
+    assert.match(html, /js\/app\.js\?v=74/);
+    assert.match(worker, /easytimer-shell-v74/);
+    assert.match(worker, /css\/styles\.css\?v=74/);
+    assert.match(worker, /js\/app\.js\?v=74/);
     assert.match(worker, /js\/editor-workspace\.mjs/);
     assert.doesNotMatch(worker, /planner-v1|planner\.js|portability\.mjs\?v=37/);
+});
+
+test('Home is a presentation-only entry with guarded native lifecycle returns', async () => {
+    const [app, html, workspace, info] = await Promise.all([
+        read('src/js/app.js'), read('src/index.html'), read('src/js/editor-workspace.mjs'), read('src/js/info.js'),
+    ]);
+    assert.match(app, /let homeOpen = false/);
+    assert.match(app, /!nativeRuntime && !recovery\.restored && !savedView/);
+    assert.match(app, /if \(!homeOpen && !nativeRuntime && !nativeExit/);
+    assert.match(app, /homeOpen = true;[\s\S]{0,120}nativeExit = null|nativeExit = null;[\s\S]{0,120}homeOpen = true/);
+    assert.match(app, /status: nativeRuntime \? 'success' : 'home'/);
+    assert.match(app, /status: nativeRuntime \? 'confirmed' : 'home'/);
+    const lifecycle = app.slice(app.indexOf("if (['retainPlan', 'discardExecution', 'completeExecution'].includes(kind))"));
+    assert.ok(lifecycle.indexOf("window.confirm(copy[language].switchConfirm)") < lifecycle.indexOf('editorBridge[method](options)'),
+        'Quick progress confirmation precedes every SUSPENDED lifecycle write');
+    assert.match(lifecycle, /return \{ status: 'cancelled' \}/);
+    assert.match(app, /if \(plannerOpen && !closePublicWorkspace\(\)\) return/);
+    assert.match(app, /recovery\.pending \|\| recovery\.error/);
+    assert.match(html, /id="home-view"/);
+    assert.match(html, /id="home-stopwatch"[\s\S]*?disabled/);
+    assert.equal((html.match(/class="home-action"/g) ?? []).length, 4);
+    assert.match(workspace, /result\.status === 'home'/);
+    assert.match(workspace, /onClose\(\{ focus \}\)/);
+    assert.match(info, /\['home', 'quick', 'session', 'editor'\]/);
 });
