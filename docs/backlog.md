@@ -27,7 +27,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | --- | --- | --- | --- |
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
-| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — technical foundation implemented locally; UI/workflow pending | Unreleased Schema-2 persistence and ACTIVE-runtime adoption; Editor UI, remaining lifecycle and Facilitator Panel work remain open |
+| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — public Schema-2 cutover implemented locally; independent review and real-browser acceptance open | One native public Editor/library, lifecycle and archive implemented; Facilitator Panel remains open |
 | NANO-001 | Nano-View – Always-on-Top Timer View | Next feature after EDITOR-001 is complete, accepted and production-released; before SW-001 | Secondary Document Picture-in-Picture view of the authoritative active timer; separate approval required |
 | EDITOR-002 | Restore unsaved Workshop-Notizen after reload/crash | Someday / Spike — „für lange Winternächte“ | Explicitly deferred; at most a tiny feasibility spike if a safe, simple approach appears |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
@@ -72,36 +72,46 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 
 ### EDITOR-001 — Session Editor Evolution & Facilitator Panel
 
-**Priority:** High / Near-term — strategic product direction. **Status:** Native
-Schema-2 domain, persistence and runtime-transition foundation implemented and
-verified locally, including read-only ownership-protected adoption of a persisted
-ACTIVE runtime after reload, conflict-safe native template updates and a
-UI-neutral lock-protected Template Library read/create/update/delete boundary and
-a stateless Planner-facing draft and structured-outcome service, plus a versioned
-passive Schema-2 JSON portability contract and a UI-neutral native Session-launch
-orchestration boundary, but unreleased. Public
-Editor UI and unified-library integration, remaining
-lifecycle and archive workflows, Facilitator Panel work and their focused
-reviews remain open; every subsequent slice requires explicit Product Owner
-approval.
+**Priority:** High / Near-term — strategic product direction. **Status:** The
+coordinated public Schema-2 cutover is implemented locally and remains unreleased
+pending independent review and mandatory real-browser acceptance. One native
+Workspace is the public Editor; one native aggregate supplies Templates and
+PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions to the Workspace and Picker.
+Direct launch, activation, ownership-safe entry, checkpoint-preserving resume,
+Suspend, Retain Plan/reset, discard, completion and a minimal read-only archive
+reuse the existing Store Writer, Runtime Bridge, Active Lock and Timer/Session
+engine. The Facilitator Panel remains open and requires separate approval.
+Targeted integration review corrections now scope delayed Picker reads to their
+originating navigation, make unchanged-language Workspace updates non-rendering,
+retain late Activation/Resume lock failures for read-only reconciliation, and
+enforce monotonic active Runtime installation without clock rewind. Mandatory
+real-browser acceptance remains open.
 
-The public V1 Planner's draft mapping and Save/Delete/import aggregate
-preparation are isolated in a pure V1-specific module, with focused Store-backed
-tests. This unreleased refactoring preserves public behavior and creates an
-explicit replacement boundary; it does not integrate the native public Editor.
-Production dependency/precache references are aligned for unreleased PWA v72.
+V1 Planner, Template Store and JSON sources remain only as repository history and
+focused legacy evidence; they are no longer reachable from public startup,
+precache or the deterministic production package. There is no V1 migration,
+compatibility import, dual library or second public Editor. Production
+dependency/precache references are aligned for unreleased PWA v73.
 
-The internally mountable native Editor Workspace is now implemented and covered
+The native Editor Workspace is implemented and covered
 by a direct browser harness. One native snapshot presents Templates and all
 Execution lifecycle groups. Template CRUD, complete rundown/phase editing,
 independent PLANNED creation/editing and single-Template JSON portability reuse
 the authoritative native services. Explicit Save is the only persistence path;
 Cancel is write-free, conflicts retain drafts, and uncertain acknowledgements
-offer read-only reconciliation without retry or merge. ACTIVE, SUSPENDED and
-COMPLETED entries expose information only. The module is deliberately absent
-from public startup/navigation: the released V1 Editor/Picker and all Timer,
-Runtime, Recovery and lifecycle behavior remain unchanged pending the coordinated
-0AV-T cutover. The Facilitator Panel remains open work.
+offer read-only reconciliation without retry or merge. ACTIVE entries open the
+owned Timer, SUSPENDED entries expose explicit resume and lifecycle choices, and
+COMPLETED entries open a minimal read-only archive. The public App supplies only
+host orchestration and installs confirmed complete Store records; the Workspace
+does not create another Timer or lifecycle architecture. The Facilitator Panel
+remains open work.
+
+**Historical increment record:** The paragraphs below preserve the narrower
+boundaries of the reviewed native foundation slices in the order they were
+implemented. Statements there that a public cutover or lifecycle control was
+still pending describe that earlier checkpoint and are superseded by the current
+0AV-T status above. Their data, revision and uncertainty guarantees remain
+binding.
 
 Internal native Template Create, Update and Delete now preserve the exact
 validated operation and complete Store source/target snapshots after an

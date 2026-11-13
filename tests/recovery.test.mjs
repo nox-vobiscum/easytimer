@@ -211,6 +211,35 @@ test('restart without association offers all candidates; explicit selection rech
     assert.equal(storage.getItem(prefix + 'new'), null, 'Explicitly replaced timer cannot reappear');
     runtime.close();
 });
+
+test('explicit candidate discard removes only the validated legacy Session and preserves current Quick recovery', async () => {
+    const storage = memory(), locks = lockManager();
+    const legacyTabs = memory();
+    const legacy = await createRecovery({ storage, locks, tabs: legacyTabs, now: () => 10000, uuid: () => 'legacy-session' });
+    const session = prepareSession(sessionTemplate(), 'legacy-run');
+    legacy.save(session.clock, null, session.run, 180000);
+    legacy.close(); await Promise.resolve();
+
+    const quickTabs = memory();
+    const current = await createRecovery({ storage, locks, tabs: quickTabs, now: () => 10000, uuid: () => 'current-quick' });
+    const quick = act(createTimer(120000), 'START', 10000);
+    current.save(quick, 'START');
+    const currentRaw = storage.getItem(prefix + 'current-quick');
+    assert.equal(current.candidates.length, 1);
+    assert.equal(current.candidates[0].mode, 'session');
+
+    assert.equal(await current.discard('legacy-session', saved => saved.mode === 'session'), true);
+    assert.equal(storage.getItem(prefix + 'legacy-session'), null);
+    assert.equal(storage.getItem(prefix + 'current-quick'), currentRaw);
+    assert.equal(quickTabs.getItem(contextKey), 'current-quick');
+    assert.equal(current.pending, false);
+    assert.equal(current.candidates.length, 0);
+
+    const duplicateTabs = memory(); duplicateTabs.setItem(contextKey, 'current-quick');
+    const duplicate = await createRecovery({ storage, locks, tabs: duplicateTabs, now: () => 10000, uuid: () => 'duplicate-quick' });
+    assert.equal(duplicate.restored, null, 'Current Quick ownership remains held after candidate discard');
+    duplicate.close(); current.close();
+});
 test('Stop, Restart and mode replacement persist immediately without old run resurrection', async () => {
     const storage = memory(), tabs = memory(), locks = lockManager();
     const options = { storage, tabs, locks, now: () => 10000, uuid: () => 'stop' };

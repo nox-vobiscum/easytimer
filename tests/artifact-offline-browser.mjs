@@ -82,15 +82,15 @@ async function checkOffline(negativeControl) {
             await click('#menu-toggle');
             assert.equal(await evaluate('document.querySelectorAll(".menu-information a").length'), 4);
             await click('#open-planner');
-            assert.equal(await evaluate('document.querySelector(".backup-subtitle").textContent'), 'Local JSON import and export');
-            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create Rundown").click()');
-            await evaluate('const name=document.querySelector("#template-name");name.value="Unsaved information test";name.dispatchEvent(new Event("input",{bubbles:true}))');
+            assert.match(await evaluate('document.querySelector("#data-backup").textContent'), /Full backup restore is not yet supported/);
+            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create template").click()');
+            await evaluate('const name=document.querySelector("#planner [data-field=name]");name.value="Unsaved information test";name.dispatchEvent(new Event("input",{bubbles:true}))');
             // A real pointer gesture activates native beforeunload protection.
             await click('#menu-toggle');
             const point = await evaluate('(()=>{const r=document.querySelector("[data-information=about]").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()');
             await cdp('Input.dispatchMouseEvent', { type:'mousePressed', button:'left', clickCount:1, ...point });
             await cdp('Input.dispatchMouseEvent', { type:'mouseReleased', button:'left', clickCount:1, ...point });
-            await wait('document.querySelector("#template-name")?.value === "Unsaved information test"');
+            await wait('document.querySelector("#planner [data-field=name]")?.value === "Unsaved information test"');
             await delay(200);
             assert(dialogs.includes('beforeunload'), 'Native draft warning is preserved for information links');
             assert.equal(await evaluate('location.pathname'), '/');
@@ -117,27 +117,31 @@ async function checkOffline(negativeControl) {
         } else {
             await wait('Boolean(document.getElementById("primary")?.title)');
             await click('[data-language="en"]');
+            await click('[data-preset="60000"]');
             await click('#primary'); await wait('document.getElementById("status").textContent==="Running"');
             await click('#primary'); assert.equal(await evaluate('document.getElementById("status").textContent'), 'Paused');
             await click('#stop'); await click('#menu-toggle'); await click('#open-planner');
-            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create Rundown").click()');
-            for (const [selector, value] of [['#template-name','Offline artifact'],['.phase-title input','Opening']]) {
+            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create template").click()');
+            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Add phase").click()');
+            for (const [selector, value] of [['#planner [data-field=name]','Offline artifact'],['#planner [data-field=title]','Opening'],['#planner [data-field=duration]','1']]) {
                 await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}))})()`);
             }
             await evaluate('document.querySelector("#planner form").requestSubmit()');
-            const library = await evaluate('JSON.parse(localStorage.getItem("easyTimerTemplates"))');
-            assert.equal(library.templates[0].name, 'Offline artifact');
+            await wait('document.querySelector("#planner").textContent.includes("Saved.")');
+            const library = await evaluate('JSON.parse(localStorage.getItem("easyTimerEditor.v1"))');
+            assert.equal(library.templates[0].plan.name, 'Offline artifact');
             await evaluate('document.querySelector(".rundown-launch").click()');
+            await wait('document.body.dataset.mode === "session"');
             assert.equal(await evaluate('document.body.dataset.mode'), 'session');
             assert.equal(await evaluate('document.getElementById("status").textContent'), 'Ready');
             await click('#primary'); await click('#primary');
-            const run = await evaluate('JSON.parse(localStorage.getItem("easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1")))');
-            assert.equal(run.clock.status, 'PAUSED');
+            const run = await evaluate('JSON.parse(localStorage.getItem("easyTimerEditor.v1"))');
+            assert.equal(run.activeRuntime.clock.status, 'PAUSED');
             const pausedOrigin = await evaluate('performance.timeOrigin');
             await cdp('Page.reload'); await wait(`performance.timeOrigin!==${pausedOrigin} && document.body?.dataset.mode==="session" && document.getElementById("status")?.textContent==="Paused"`);
             assert.equal(await evaluate('document.body.dataset.mode'), 'session');
-            assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerTemplates")).templates[0].id'), library.templates[0].id);
-            assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1"))).run.runId'), run.run.runId);
+            assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerEditor.v1")).templates[0].id'), library.templates[0].id);
+            assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerEditor.v1")).activeRuntime.run.runId'), run.activeRuntime.run.runId);
             await checkInformation({ cdp, evaluate, wait, origin, screenshots:profile, offline:true });
             assert.deepEqual(exceptions, []);
             console.log('PASS: packaged production cold-starts with server stopped and HTTP cache disabled; Quick, Editor save, Session READY/pause and reload recovery work offline.');

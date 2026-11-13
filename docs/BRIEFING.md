@@ -188,15 +188,15 @@ technical or maintenance need; introducing a JavaScript component alone does not
 justify a new CSS file. Avoid inline styles. This is a project convention, not an
 absolute prohibition against new files.
 
-**Binding EDITOR-001 data decision:** The repository still contains the released
-V1 Rundown implementation, but there is no historical user Rundown data that
-requires migration. EDITOR-001 creates new templates and independent executions
-directly in the native Schema-2 Editor data model and aggregate. Do not add or
-propose V1-to-V2 conversion, compatibility import, dual-library migration or a
-migration wizard unless the Product Owner explicitly changes this decision.
-Keep the released V1 timer, editor and recovery functionality working until a
-separately approved replacement is integrated; regression protection does not
-create a historical-data migration requirement.
+**Binding EDITOR-001 data decision:** The coordinated public cutover is now
+implemented locally for review: the native Schema-2 aggregate is the one public
+Template/Execution library and the native Workspace is the one public Editor.
+The repository may retain V1 source and historical tests, but V1 Planner,
+Template Store and JSON modules are no longer reachable from the production
+startup graph or package. There is no historical user Rundown data that requires
+migration. Do not add V1-to-V2 conversion, compatibility import, a second public
+library/Editor or a migration wizard unless the Product Owner explicitly changes
+this decision. This implementation is not a deployment authorization.
 
 **Approved native development-data boundary:** A native Execution with an Attempt
 must carry the strictly validated `phaseOutcomes` contract described in
@@ -211,18 +211,20 @@ Native COMPLETED executions now retain one immutable start baseline, their final
 The locked Store write path rejects history replacement, reactivation or archive
 removal; only reflection updates with the required revisions are permitted.
 Reflection uses the existing basic String contract, storage quota and native JSON
-size boundary, without a separate character limit. Completion/reflection and the
-App handoff remain internal; public lifecycle UI is pending.
+size boundary, without a separate character limit. Completion and archive reading
+are public through the native lifecycle/Workspace; reflection editing and the
+Facilitator Panel remain outside the current public slice.
 
-The App now provides internal `exitNativeExecution()` and
+The App provides `exitNativeExecution()` and
 `continueNativeExecutionExit()` entry points for confirmed native exits. They
 gate actions/navigation, retain Bridge reconciliation as the only pending-write
 authority, recheck local and persisted identity, detach the local Session, await
 Active-Lock release and initialize the existing Quick Recovery in a fresh context.
 Confirmed persistence followed by failed cleanup is reported separately and may
-retry cleanup only. Existing recovery records are not deleted. Public lifecycle
-controls and the Editor/Library cutover remain pending; the App handoff is tested
-directly through the existing browser runner.
+retry cleanup only. Public lifecycle controls call this same boundary. Legacy V1
+Session recovery is never resumed or converted and requires explicit DE/EN
+confirmation before discard; candidate discard preserves the current Quick
+Recovery and ownership. The App handoff is tested through the browser runner.
 
 Native Template Create, Update and Delete now retain their stable operation plus
 complete Store source/target snapshots when readback or a late Store-lock
@@ -230,34 +232,40 @@ acknowledgement is uncertain. The Planner service validates caller-held tickets
 against the exact original transformation and reconciles by reading only:
 target is confirmed, source is absent and every divergent or unreadable state is
 unresolved. No retry, merge, identity regeneration or pending registry is used.
-The same internal boundary supplies one validated, copy-isolated full native
-aggregate to `editor-workspace.mjs`. That directly mountable internal UI groups
+The same boundary supplies one validated, copy-isolated full native aggregate to
+`editor-workspace.mjs`. The public native UI groups
 Templates and Executions by lifecycle and reuses the existing native Template,
 PLANNED Execution, launch, import/export and draft contracts. Unsaved edits stay
 in caller-owned drafts; ambiguous writes expose only the established read-only
-reconciliation paths. The module is absent from `app.js`, public HTML and the V1
-Planner import graph. Its browser harness mounts it into a temporary root, so
-public navigation, lifecycle orchestration, Timer ownership and Recovery remain
-unchanged until the coordinated cutover.
+reconciliation paths. The App mounts exactly one instance in the existing
+`#planner` root and delegates lifecycle requests to the existing native services;
+there is no second public route or Store.
+
+Public integration must keep asynchronous Picker results bound to the navigation
+revision that requested them and must not rerender the Workspace when its
+language value is unchanged. Activation and Resume retain a Bridge ticket when
+a Store-lock request rejects after the writer callback produced the exact source
+and target; Recheck is read-only and never retries the mutation. While an ACTIVE
+Runtime is owned locally, Workspace records may be installed only with exact
+Execution/Attempt/Run identity and monotonic aggregate, Execution and runtime
+revisions. Equal Store revisions must be identical, aggregate-only advances must
+not rewind the in-memory clock, and conflicting or unreadable reads fail closed.
 
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.
 - `src/js/timer.mjs` owns Quick Timer transitions and authoritative deadlines.
 - `src/js/session.mjs` creates immutable Session Runs from saved Rundowns and
   handles manual/automatic phase progression and overtime.
-- `src/js/planner.js` and `src/js/templates.mjs` implement the Session Editor and
-  validated browser-local Rundown library.
-  `src/js/planner-v1.mjs` isolates the public V1 Planner's pure draft mapping and
-  Save/Delete/import aggregate preparation; UI state and guarded I/O remain in
-  `planner.js`. This refactoring does not perform the native Schema-2 cutover.
-- `src/js/editor-workspace.mjs` is the internal Schema-2 Workspace presentation.
-  It is not a production startup dependency or public route; the browser harness
-  mounts it directly for UI verification until the coordinated cutover.
+- `src/js/editor-workspace.mjs` is the public Schema-2 Workspace presentation and
+  reuses the native Planner, launch, import and persistence services. Legacy
+  `planner.js`, `planner-v1.mjs` and `portability.mjs` remain repository history
+  but are excluded from production startup, precache and packaging.
 - `src/js/recovery.mjs` validates durable runtime records and coordinates
   tab/context ownership. `sessionStorage` associates a tab with its context;
   durable records remain in `localStorage`.
-- `src/js/portability.mjs` implements DATA-001 JSON import/export with strict
-  validation and fresh IDs for imported copies.
+- `src/js/editor-portability.mjs` validates native single-Template documents and
+  passive complete local-data exports. Only single-Template import is public;
+  full backup restore and Execution import are unsupported.
 - `src/js/header.mjs` and shared CSS provide the application and information-page
   header, language, theme and navigation behavior.
 - `src/service-worker.js` precaches the explicit application shell for offline
@@ -300,7 +308,7 @@ node tests/artifact-offline-browser.mjs
 # Development-only synchronization regression
 node tools/app-sync/browser-check.mjs
 
-# Packaging safeguards and deterministic 24-file artifact
+# Packaging safeguards and deterministic 36-file artifact
 node --test tests/packaging.test.mjs
 node tools/release/package.mjs
 

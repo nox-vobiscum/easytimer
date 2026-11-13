@@ -17,9 +17,11 @@ multi-phase workshop Rundowns. The production application is available at
 
 - Quick Timer with additive READY timeboxes, runtime adjustments, pause,
   overtime and durable recovery.
-- Session Timer for saved manual or automatic multi-phase Rundowns.
-- Session Editor with direct session launch, local JSON import/export and
-  guarded navigation.
+- Session Timer backed by independent native executions for manual or automatic
+  multi-phase Rundowns.
+- Native Session Editor and unified Template/Execution library with direct
+  launch, explicit lifecycle actions, single-Template JSON portability and a
+  clearly labelled complete local-data export.
 - Responsive DE/EN interface with Light, Dark and System themes.
 - Installable, offline-capable PWA with no mandatory account or backend.
 
@@ -29,10 +31,12 @@ derived from real deadlines rather than animation ticks.
 
 ## Local-first and privacy
 
-Rundowns, preferences and recoverable runtime state stay in the browser. The
+Templates, independent executions, preferences and recoverable runtime state
+stay in the browser. The
 production release does not include Google Drive synchronization, analytics or
-mandatory sign-in. Users can move Rundowns manually through the validated JSON
-export/import workflow. See the public
+mandatory sign-in. Users can move one Template at a time through the validated
+JSON export/import workflow and can download the complete native local-data
+aggregate. Full backup restore is not yet supported. See the public
 [privacy information](https://easytimer.at/privacy.html) for the released
 application disclosure.
 

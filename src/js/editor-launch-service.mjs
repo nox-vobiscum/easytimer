@@ -3,12 +3,12 @@ import { planExecutionFromTemplateInRecord } from './editor-storage.mjs';
 
 const fail = code => { throw new Error(code); };
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-const uncertainWrites = new Set(['storageUnconfirmed', 'storageReadback']);
+const uncertainWrites = new Set(['storageUnconfirmed', 'storageReadback', 'lockRequestUnconfirmed']);
 const conflicts = new Set(['conflict', 'duplicateId', 'activeExecutionExists']);
 const missing = new Set(['templateNotFound', 'executionNotFound']);
 const storage = new Set([
     'storageRead', 'storageWrite', 'storageQuota', 'storageValidation',
-    'storageBlocked', 'storageUnconfirmed', 'storageReadback',
+    'storageBlocked', 'storageUnconfirmed', 'storageReadback', 'lockRequestUnconfirmed',
 ]);
 const locks = new Set([
     'lockUnavailable', 'lockBusy', 'lockRequest', 'activeLockRequired',

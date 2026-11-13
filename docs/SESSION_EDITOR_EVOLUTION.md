@@ -1,27 +1,26 @@
 # Session Editor Evolution & Facilitator Panel
 
-**Status:** Strategic direction agreed; the native Schema-2 domain, persistence,
-runtime-transition, UI-neutral Template Library read/create/update/delete boundary
-and Planner-facing draft/outcome service, plus a passive Schema-2 JSON portability
-contract and UI-neutral native Session-launch orchestration boundary, are
-implemented and verified
-locally but not released. The boundaries
-map prepared Editor data to native Templates and use the lock-protected Editor
-Store without exposing a second library. A complete native Workspace UI is now
-implemented behind an internal-only direct mount boundary. Public cutover and
-unified navigation, remaining public lifecycle/archive workflows and the
-Facilitator Panel remain pending.
+**Status:** Strategic direction agreed. The coordinated public Schema-2 cutover
+is implemented locally for independent review but is not committed, merged or
+deployed. One native Workspace now serves as the public Editor, and one native
+aggregate serves the Template/Execution library, Picker, Direct Launch,
+ownership-safe ACTIVE entry, lifecycle operations and minimal completed archive.
+The existing Timer/Session engine, Runtime Bridge, Store Writer, Active Lock,
+Web Locks and Quick Recovery remain authoritative. The Facilitator Panel and
+reflection editing remain pending.
 **Priority:** High / Near-term. Every subsequent implementation slice requires
 separate explicit Product Owner approval.
 
-**Public Planner preparation:** The existing public V1 Planner now isolates its
-draft mapping and Save/Delete/import aggregate preparation in `planner-v1.mjs`.
-These pure V1 operations retain the released data shape; they are not a native
-adapter. The Planner still owns UI state, asynchronous I/O guards, navigation,
-backup and launch callbacks. Native UI integration remains pending. The new
-module is packaged and precached with the current unreleased PWA asset references.
+**Public cutover boundary:** `app.js` mounts one
+`createNativeEditorWorkspace()` instance in the existing Planner root and uses
+the native Planner, launch, import and Runtime Bridge services. V1 Planner,
+Template Store and JSON modules are not part of the production import graph,
+precache or package. No V1 migration or second public Editor exists. Legacy V1
+Session recovery remains stored until explicit DE/EN discard confirmation and is
+never resumed or converted; discarding a candidate preserves the current Quick
+Recovery.
 
-**Internal native Editor Workspace (unreleased):**
+**Native Editor Workspace (implemented locally, unreleased):**
 `createNativeEditorWorkspace()` mounts one coherent Schema-2 Library and Editor
 into a caller-supplied root. It reads the complete native Workspace snapshot and
 groups Templates plus PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions with
@@ -29,7 +28,9 @@ stable IDs, revisions and explicit lifecycle copy. Templates support Create,
 Update, confirmed Delete, all native rundown/phase fields, expandable notes and
 labeled HTTP(S) resources. PLANNED Executions can be created from a Template and
 then edit their independent current plan without changing the source Template.
-ACTIVE, SUSPENDED and COMPLETED records are informational only.
+ACTIVE records open the owned timer, SUSPENDED records support safe resume and
+explicit retain/discard/complete actions, and COMPLETED records have a minimal
+read-only archive. ACTIVE/SUSPENDED structural and timing edits remain read-only.
 
 New Execution editing stays entirely local before the first explicit Save. That
 Save uses the existing stable Template-to-PLANNED launch operation and then the
@@ -41,14 +42,45 @@ resubmits the write. Template, Execution, Delete and single-Template import
 uncertainty similarly use their existing caller-held reconciliation tickets.
 Stale writes never merge or rebase.
 
-The Workspace also exports one validated native Template document and reviews
-one imported Template copy before explicit persistence. DE/EN copy, semantic
+The Workspace also exports one validated native Template document, reviews one
+imported Template copy before explicit persistence and provides a clearly
+labelled complete local-data export through `serializeEditorBackup()`. Full
+backup restore, Execution import and bulk Template import remain unsupported.
+DE/EN copy, semantic
 forms, expandable phases, safe external links, 44 px controls, accessible
 Delete confirmation with Escape/focus restoration and responsive portrait/
-landscape rules reuse the existing Planner design. The module has no import from
-`app.js`, `planner.js` or production HTML. The browser harness mounts it directly;
-the public V1 Editor/Picker, Direct Launch, Timer/Runtime and Recovery remain
-unchanged until 0AV-T. The Facilitator Panel is still pending.
+landscape rules reuse the existing Planner design. The public App owns surrounding
+navigation and lifecycle callbacks; the Workspace remains UI-neutral about Timer
+implementation. The Facilitator Panel is still pending.
+
+**Runtime and lifecycle safety:** entering an ACTIVE Execution requires the
+matching Active Lock and exact Execution, Attempt, Run and runtime-revision
+binding. Confirmed complete Store records are installed before subsequent timer
+actions. Suspend preserves progress and its checkpoint; Resume preserves started
+Attempt/Run identity; Retain Plan resets progress to PLANNED and discards
+execution-only Workshop-Notizen. Uncertain writes retain their original Bridge or
+Workspace ticket for read-only reconciliation and never trigger automatic retry,
+merge or rebase. A local handoff failure never repeats an already confirmed
+lifecycle write. A Store-lock request that rejects after Activation or Resume has
+already produced a source and target is treated as uncertain, retains ownership
+and the original Bridge ticket, and exposes only source/target/conflict Recheck.
+Workspace reads may update an owned Runtime only with the same exact identities
+and monotonic aggregate, Execution and runtime revisions. Older delayed reads are
+ignored, equal revisions must be byte-equivalent at the Store-record boundary,
+and aggregate-only updates preserve the newer in-memory running clock. A
+conflicting or unreadable record blocks further Runtime mutation safely.
+
+Picker reads are single-shot and navigation-scoped: delayed success, empty and
+failure states render when still current, while a response from an abandoned
+view cannot reopen or overwrite newer navigation. Repeated App ticks pass the
+same language to the Workspace without rebuilding its DOM; a real language
+change still rerenders localized controls while retaining the complete draft.
+
+**Historical increment record:** The detailed foundation sections below retain
+the scope boundaries at the time each internal slice was reviewed. References to
+a still-pending public cutover or absent public lifecycle UI are historical and
+are superseded by the coordinated 0AV-T status above; the underlying data,
+identity and reconciliation contracts remain current.
 
 **Internal Template CRUD reconciliation and workspace read (unreleased):**
 `createNativePlannerService()` now treats ambiguous Template Create, Update and

@@ -26,6 +26,20 @@ const template = {
     },
 };
 
+const automaticTemplate = {
+    ...template,
+    id: 'browser-automatic-template',
+    plan: {
+        ...template.plan,
+        name: 'Native automatic workshop',
+        transitionMode: 'automatic',
+        phases: [
+            { id: 'automatic-first', title: 'Automatic first', durationSeconds: 60, category: 'uncategorized', notes: '', resources: [] },
+            { id: 'automatic-second', title: 'Automatic second', durationSeconds: 60, category: 'uncategorized', notes: '', resources: [] },
+        ],
+    },
+};
+
 function readyRecord(savedAt = 1000) {
     let record = { schemaVersion: 1, revision: 0, templates: [], executions: [], activeRuntime: null };
     record = insertTemplateInRecord(record, { template, expectedAggregateRevision: 0 });
@@ -68,6 +82,32 @@ function pausedRecord() {
     });
 }
 
+function startedAutomaticRecord() {
+    let record = { schemaVersion: 1, revision: 0, templates: [], executions: [], activeRuntime: null };
+    record = insertTemplateInRecord(record, { template: automaticTemplate, expectedAggregateRevision: 0 });
+    record = planExecutionFromTemplateInRecord(record, {
+        templateId: automaticTemplate.id,
+        executionId: 'browser-automatic-execution',
+        expectedAggregateRevision: 1,
+    });
+    record = activatePlannedExecutionInRecord(record, {
+        executionId: 'browser-automatic-execution',
+        expectedAggregateRevision: 2,
+        expectedExecutionRevision: 1,
+        expectedRuntimeRevision: 0,
+        runtimeRunId: 'browser-automatic-run',
+        savedAt: 1000,
+    });
+    return startReadyExecutionInRecord(record, {
+        executionId: 'browser-automatic-execution',
+        expectedAggregateRevision: 3,
+        expectedExecutionRevision: 2,
+        expectedRuntimeRevision: 1,
+        attemptId: 'browser-automatic-attempt',
+        startedAt: 2000,
+    });
+}
+
 export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
     let clockScript;
     const wait = async expression => {
@@ -86,6 +126,10 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         const origin = await evaluate('performance.timeOrigin');
         await cdp('Page.reload');
         await wait(`performance.timeOrigin!==${origin}&&document.body?.dataset.mode===${JSON.stringify(expectedMode)}&&Boolean(document.querySelector('#primary')?.title)`);
+    };
+    const menuAction = async selector => {
+        if (await evaluate(`document.querySelector('#preferences').hidden`)) await click('#menu-toggle');
+        await click(selector);
     };
     const install = record => evaluate(`(()=>{
         if(window.exitProbe){exitProbe.armed=false;exitProbe.mode=null;}
@@ -131,6 +175,57 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         await reload('session', 32_000);
         assert.equal(await text('#time'), '00:30');
         assert.equal(await raw(), JSON.stringify(running), 'RUNNING reconciliation remains in memory');
+        assert.equal(await evaluate(`(async()=>{
+            const app=await import('./js/app.js');
+            return app.installNativeRecord(JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)}))).status;
+        })()`), 'unchanged');
+        assert.equal(await text('#time'), '00:30', 'same-revision Workspace reads cannot rewind a running in-memory clock');
+        const newerAggregate = structuredClone(running); newerAggregate.revision += 1;
+        await evaluate(`localStorage.setItem(${JSON.stringify(EDITOR_STORAGE_KEY)},${JSON.stringify(JSON.stringify(newerAggregate))})`);
+        assert.equal(await evaluate(`(async()=>{
+            const app=await import('./js/app.js');
+            return app.installNativeRecord(${JSON.stringify(newerAggregate)}).status;
+        })()`), 'record');
+        assert.equal(await text('#time'), '00:30', 'a newer aggregate with unchanged Runtime revision preserves the running clock');
+        assert.equal(await evaluate(`(async()=>{
+            const app=await import('./js/app.js');
+            return app.installNativeRecord(${JSON.stringify(running)}).status;
+        })()`), 'stale');
+        assert.equal(await text('#time'), '00:30', 'a stale aggregate cannot replace the newer installed Runtime authority');
+
+        await evaluate(`(()=>{
+            const locks=navigator.locks, original=locks.request.bind(locks);
+            window.runtimeReadProbe={original,hold:true,captured:false,release:null};
+            locks.request=function(name,options,callback){
+                const request=original(name,options,callback), probe=window.runtimeReadProbe;
+                if(name!=='easyTimerEditor.v1.write'||!probe.hold) return request;
+                probe.hold=false;
+                return request.then(result=>new Promise(resolve=>{
+                    probe.captured=true;probe.release=()=>resolve(result);
+                }));
+            };
+        })()`);
+        await menuAction('#open-planner');
+        await wait(`runtimeReadProbe.captured`);
+        await evaluate(`document.querySelector('#primary').click()`);
+        await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='PAUSED'`);
+        const interleaved = JSON.parse(await raw());
+        await evaluate(`runtimeReadProbe.release()`);
+        await wait(`document.querySelector('#planner h1')?.textContent==='Session Editor'`);
+        await click('#planner .planner-back');
+        assert.equal(await text('#status'), 'Paused', 'a delayed stale Workspace read cannot replace a newer Timer write');
+        assert.equal(await raw(), JSON.stringify(interleaved), 'the delayed read performs no compensating write');
+        await evaluate(`navigator.locks.request=runtimeReadProbe.original;delete window.runtimeReadProbe`);
+
+        const divergentWorkspace = structuredClone(interleaved);
+        divergentWorkspace.templates[0].plan.name = 'Divergent same-revision Workspace';
+        await evaluate(`localStorage.setItem(${JSON.stringify(EDITOR_STORAGE_KEY)},${JSON.stringify(JSON.stringify(divergentWorkspace))})`);
+        await menuAction('#open-planner');
+        await wait(`!document.querySelector('#runtime-recovery').hidden`);
+        assert.equal(await evaluate(`document.querySelector('#primary').disabled`), true,
+            'a conflicting same-revision Workspace read blocks the active Runtime safely');
+        await click('#planner .planner-back');
+        await install(running);
         await reload('session', 72_000);
         assert.equal(await text('#status'), 'Phase time elapsed');
         assert.equal(await raw(), JSON.stringify(running), 'FINISHED reconciliation remains in memory');
@@ -160,6 +255,22 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
             'Stopping native overtime moves smartphone focus to the enabled menu control');
         await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
         await cdp('Emulation.clearDeviceMetricsOverride');
+
+        const automatic = startedAutomaticRecord();
+        await install(automatic);
+        await reload('session', 65_000);
+        assert.equal(await text('#current-phase'), 'Automatic second');
+        assert.equal(await text('#time'), '00:57');
+        assert.equal(await raw(), JSON.stringify(automatic), 'Automatic catch-up is derived without a speculative write');
+        await click('#primary');
+        await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='PAUSED'`);
+        const automaticPaused = JSON.parse(await raw());
+        assert.equal(automaticPaused.activeRuntime.run.currentIndex, 1);
+        assert.equal(automaticPaused.activeRuntime.attemptId, 'browser-automatic-attempt');
+        assert.equal(automaticPaused.activeRuntime.run.runId, 'browser-automatic-run');
+        await reload('session', 100_000);
+        assert.equal(await text('#current-phase'), 'Automatic second');
+        assert.equal(await text('#status'), 'Paused');
 
         await install(ready);
         await reload('session', 5000);
@@ -260,15 +371,18 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
                 assert.equal(await raw(), JSON.stringify(archived), 'Old callbacks cannot recreate the exited runtime');
                 assert.equal(await evaluate(`exitProbe.events.includes('legacy-session-write')`), false);
                 await click('#open-session');
-                assert.equal(await evaluate(`document.body.dataset.mode`), 'quick', 'Native re-entry cannot select a V1 definition');
+                assert.equal(await evaluate(`document.body.dataset.mode==='session'&&!document.querySelector('#session-picker').hidden`), true,
+                    'Native re-entry opens the authoritative native Picker');
+                await click('#picker-back');
                 await click('[data-preset="60000"]'); await click('#primary');
                 await reload('quick', 13_000);
                 assert.equal(await text('#status'), 'Running');
                 assert.equal(await text('#time'), '00:59', 'Quick recovery works after native handoff');
                 assert.equal(await raw(), JSON.stringify(archived));
                 await click('#open-session');
-                assert.equal(await evaluate(`document.body.dataset.mode`), 'quick',
-                    'Reload after discarding the last native execution cannot re-enable the V1 Picker');
+                assert.equal(await evaluate(`document.body.dataset.mode==='session'&&!document.querySelector('#session-picker').hidden`), true,
+                    'Reload after exit exposes only the native Template/Execution Picker');
+                await click('#picker-back');
             }
             for (const mode of ['unconfirmed', 'source', 'conflict']) {
                 await install(startedRecord()); await reload('session', 12_000);
@@ -336,10 +450,10 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
             await evaluate(`exitProbe.armed=true;exitProbe.mode='cleanup'`);
             assert.equal((await call('exitNativeExecution', exitOptions('complete'))).status, 'handoffFailed');
             const persistedExit = await raw();
-            await reload('quick', 14_000);
+            await reload('session', 14_000);
             assert.equal(await raw(), persistedExit, 'Reload after confirmation cannot restore the old native run');
-            assert.equal(await evaluate(`document.querySelector('#session-picker').hidden`), true,
-                'Stale Session view metadata cannot reopen the V1 Picker after a native exit');
+            assert.equal(await evaluate(`!document.querySelector('#session-picker').hidden`), true,
+                'Session view metadata may reopen only the native Picker after a native exit');
             assert.equal(await evaluate(`Object.keys(localStorage).filter(key=>key.startsWith('easyTimerRuntime.v1.'))
                 .every(key=>!JSON.parse(localStorage.getItem(key)).run)`), true);
             for (const intent of ['suspend', 'retainPlan', 'discard', 'complete']) {
@@ -382,6 +496,8 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
         await cdp('Emulation.clearDeviceMetricsOverride');
         await evaluate(`(()=>{
+            if(window.runtimeReadProbe) navigator.locks.request=window.runtimeReadProbe.original;
+            delete window.runtimeReadProbe;
             window.nativeOwner?.close();
             window.open('','native-runtime-owner').close();
             localStorage.removeItem(${JSON.stringify(EDITOR_STORAGE_KEY)});

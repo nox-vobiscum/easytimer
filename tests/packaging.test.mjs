@@ -7,7 +7,12 @@ import { packageProduction, verifyArtifact, validateProduction, sourceRoot } fro
 
 test('production packaging is repeatable, allowlisted and checksum-verifiable across checkout line endings', async () => {
     const a = await packageProduction(), b = await packageProduction();
-    assert.equal(a.inventory.files.length, 31);
+    assert.equal(a.inventory.files.length, 36);
+    const paths = a.inventory.files.map(file => file.path);
+    for (const file of ['src/js/editor-workspace.mjs', 'src/js/editor-launch-service.mjs',
+        'src/js/editor-planner-service.mjs', 'src/js/editor-portability.mjs']) assert(paths.includes(file));
+    for (const file of ['src/js/planner.js', 'src/js/planner-v1.mjs',
+        'src/js/portability.mjs']) assert(!paths.includes(file));
     assert.deepEqual(a.inventory, b.inventory);
     assert.deepEqual(await verifyArtifact(a.directory), a.inventory);
     const source = await mkdtemp(join(tmpdir(), 'easytimer-package-lines-'));

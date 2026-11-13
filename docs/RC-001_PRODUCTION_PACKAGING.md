@@ -5,6 +5,16 @@
 > pipelines. The local NO-GO wording below records the original RC-001 review
 > stage and is preserved as historical evidence.
 
+> **Unreleased EDITOR-001 update (2026-11-12):** The coordinated Schema-2
+> cutover expands the deterministic package to 36 files for PWA v73. The native
+> Workspace, Planner/launch/import/portability services and their dependencies
+> replace public `planner.js`, `planner-v1.mjs` and `portability.mjs`; those V1
+> modules are excluded from the allowlist and precache. The package verifier still
+> requires exact inventory, hashes, static dependency closure and matching cache
+> versions. This update is under review and has not been deployed. The explicit
+> 18-file inventory below remains historical RC-001 evidence, not the current
+> allowlist; `tools/release/package.mjs` is authoritative.
+
 Based on `4b2de246712f855d21b3e986280be5efbe06457f`, on
 `feature/rc-001-production-hardening`. Local RC-001 owner acceptance is COMPLETE
 for PWA v54. This is not production authorization. Production remains NO-GO.

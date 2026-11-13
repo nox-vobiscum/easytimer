@@ -588,6 +588,12 @@ body.clock-only.presentation main { padding-top:env(safe-area-inset-top); paddin
     width:100%; grid-template-columns:repeat(3,minmax(44px,1fr));
 }
 .native-editor-workspace .rundown-actions .rundown-launch { grid-column:1 / -1; }
+.native-lifecycle-choices { display:grid; gap:.75rem; }
+.native-lifecycle-choice { display:grid; grid-template-columns:minmax(10rem,auto) 1fr; gap:.75rem; align-items:start; }
+.native-lifecycle-choice p { margin:.65rem 0 0; }
+@media (max-width:38rem) {
+  .native-lifecycle-choice { grid-template-columns:1fr; gap:.2rem; }
+}
 @container (max-width:34rem) {
   .native-workspace-resource { grid-template-columns:minmax(0,1fr) auto; }
   .native-workspace-resource > label { grid-column:1 / -1; }

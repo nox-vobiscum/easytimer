@@ -7,9 +7,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const sourceRoot = fileURLToPath(new URL('../../src/', import.meta.url));
 export const productionFiles = Object.freeze([
     'about.html', 'faq.html', 'imprint.html', 'privacy.html', 'js/info.js', 'js/header.mjs',
-    'index.html', 'css/styles.css', 'js/app.js', 'js/planner.js', 'js/planner-v1.mjs', 'js/portability.mjs',
-    'js/editor-active-lock.mjs', 'js/editor-domain.mjs', 'js/editor-runtime-bridge.mjs',
-    'js/editor-storage-lock.mjs', 'js/editor-storage.mjs', 'js/execution-runtime.mjs',
+    'index.html', 'css/styles.css', 'js/app.js',
+    'js/editor-active-lock.mjs', 'js/editor-domain.mjs', 'js/editor-launch-service.mjs',
+    'js/editor-phase-fields.mjs', 'js/editor-planner-service.mjs', 'js/editor-portability.mjs',
+    'js/editor-runtime-bridge.mjs', 'js/editor-storage-lock.mjs', 'js/editor-storage.mjs',
+    'js/editor-template-draft.mjs', 'js/editor-template-import.mjs',
+    'js/editor-template-integration.mjs', 'js/editor-workspace.mjs', 'js/execution-runtime.mjs',
     'js/recovery.mjs', 'js/session.mjs', 'js/templates.mjs', 'js/time-visuals.mjs', 'js/timer.mjs',
     'service-worker.js', 'manifest.webmanifest', 'assets/branding/favicon.ico',
     'assets/branding/apple-touch-icon.png', 'assets/branding/android-chrome-192x192.png',

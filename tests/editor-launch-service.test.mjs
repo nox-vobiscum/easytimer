@@ -352,6 +352,37 @@ test('activation uncertainty uses the existing Bridge reconciliation contract', 
     await activeLock.release();
 });
 
+test('late lock request rejection after activation is reported as uncertainty and reconciled without retry', async () => {
+    const { locks, storage, activeLock, service } = await setup();
+    const planned = await service.planFromTemplate({
+        templateId: 'template-1', expectedAggregateRevision: 1,
+    });
+    const normalRequest = locks.request;
+    locks.request = async function(name, options, callback) {
+        const result = await normalRequest.call(this, name, options, callback);
+        if (name === 'easyTimerEditor.v1.write') throw new Error('Late request failure');
+        return result;
+    };
+    const writes = storage.state.writes;
+    const uncertain = await service.activatePlanned({
+        executionId: planned.executionId,
+        expectedAggregateRevision: planned.record.revision,
+        expectedExecutionRevision: 1,
+        expectedRuntimeRevision: 0,
+    });
+    locks.request = normalRequest;
+    assert.equal(uncertain.status, 'uncertain');
+    assert.deepEqual(uncertain.error, { type: 'storage', code: 'lockRequestUnconfirmed' });
+    assert.equal(activeLock.held, true);
+    const reconciled = await service.reconcilePendingActivation({
+        executionId: uncertain.executionId,
+        runtimeRunId: uncertain.runtimeRunId,
+    });
+    assert.equal(reconciled.status, 'ready');
+    assert.equal(storage.state.writes, writes + 1, 'reconciliation performs no duplicate write');
+    await activeLock.release();
+});
+
 test('failed readback can reconcile to the unchanged PLANNED source without retry', async () => {
     const { storage, activeLock, service } = await setup();
     const planned = await service.planFromTemplate({

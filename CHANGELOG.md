@@ -6,11 +6,38 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 coordinated public Schema-2 cutover (implemented, not deployed):**
+  the native Workspace is now the single public Session Editor and its native
+  aggregate is the single public Template/Execution library. The Picker groups
+  Templates and PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions; direct
+  launch, activation, ownership-safe ACTIVE entry, checkpoint-preserving resume,
+  Suspend, Retain Plan/reset, discard, completion and a minimal read-only archive
+  reuse the existing Store Writer, Runtime Bridge, Active Lock and Timer/Session
+  engine. Exact aggregate/entity/runtime/Attempt/Run identities guard every
+  mutation. Confirmed records are installed before further timer actions;
+  uncertain writes retain their original ticket for read-only reconciliation and
+  are never retried or rebased. Unsaved Workspace drafts now guard closing and
+  navigation. Old V1 Session Recovery is not resumed, converted or silently
+  deleted: DE/EN confirmation is required before discard, and candidate discard
+  preserves the current Quick Recovery. Single-Template import/export remains;
+  a complete local-data export is explicitly labelled as not restorable. Public
+  V1 Planner, V1 Template Store and V1 JSON modules leave the production graph.
+  Packaging and cache references advance together to unreleased PWA v73. The
+  Facilitator Panel, full restore, migration, merge and deployment remain out of
+  scope; real-browser acceptance remains a mandatory open gate until Chromium
+  can initialize successfully in the test environment.
+  Targeted integration hardening keeps asynchronous Picker results scoped to the
+  navigation that requested them, avoids rerendering the Workspace on unchanged
+  language ticks, retains late Activation/Resume lock failures for source/target
+  reconciliation, and prevents stale or same-revision-divergent Workspace reads
+  from replacing a newer owned Runtime or rewinding its in-memory clock.
+
 - **EDITOR-001 internal CSS consolidation:** native phase-field styles now live
   in the central application stylesheet; their declarations and UI behavior are
   unchanged. Tests use that stylesheet directly. The briefing records the file
   architecture convention, and CSS/App shell references advance together to
-  unreleased PWA v72. Native Editor UI is not publicly available.
+  unreleased PWA v72 at that checkpoint; the coordinated cutover supersedes it
+  with v73.
 
 - **BUG-001 follow-up:** Escape now cancels the document-modal Session Stop
   confirmation without invoking the global fullscreen or expanded-view exit.

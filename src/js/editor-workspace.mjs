@@ -7,18 +7,21 @@ import {
     removeNativeDraftPhase,
     repositionNativeDraftPhase,
 } from './editor-template-draft.mjs';
-import { serializeEditorTemplate } from './editor-portability.mjs';
+import { serializeEditorBackup, serializeEditorTemplate } from './editor-portability.mjs';
 
 const fail = code => { throw new Error(code); };
 const copy = {
     en: {
-        heading: 'Native Editor Workspace', internal: 'Internal preview. The public Editor is unchanged.',
+        heading: 'Session Editor', internal: 'Templates and independent executions stored on this device.', back: 'Back',
         templates: 'Templates', planned: 'Planned executions', active: 'Active in Timer',
         suspended: 'Suspended', completed: 'Completed', empty: 'No entries.',
         identity: 'ID', revision: 'Revision', edit: 'Edit', create: 'Create template',
-        createExecution: 'Create planned execution', exportTemplate: 'Export JSON',
+        createExecution: 'Create planned execution', launchTemplate: 'Start independent session', startExecution: 'Start session',
+        resumeExecution: 'Resume', openTimer: 'Open active timer', openArchive: 'Open archive', exportTemplate: 'Export JSON',
+        retainPlan: 'Keep plan and reset progress', discardExecution: 'Discard run', completeExecution: 'Complete and archive',
         importTemplate: 'Import one template', importHint: 'Imports one independent Template copy, not an application backup.',
-        importReview: 'Review import', importConfirm: 'Import copy', importCancel: 'Cancel import',
+        importReview: 'Review import', importConfirm: 'Import copy', importCancel: 'Cancel import', exportAll: 'Export all local data',
+        exportAllHint: 'Complete local-data export. Full backup restore is not yet supported.',
         templateEditor: 'Edit Template', newTemplate: 'New Template', executionEditor: 'Edit planned execution',
         newExecution: 'New planned execution', templateEntity: 'Template draft', executionEntity: 'Independent Execution draft',
         name: 'Rundown name', category: 'Rundown category', transition: 'Phase transition',
@@ -27,6 +30,7 @@ const copy = {
         resourceLabel: 'Link label', resourceUrl: 'HTTPS or HTTP URL', addResource: 'Add resource',
         removeResource: 'Remove link', openResource: 'Open link in a new tab', earlier: 'Move earlier',
         later: 'Move later', removePhase: 'Remove phase', save: 'Save', cancel: 'Cancel',
+        discardDraft: 'Discard this unsaved draft?',
         delete: 'Delete', deleteHeading: 'Delete Template?', deleteBody: 'This removes only the selected Template. Existing Executions remain independent.',
         keep: 'Keep Template', confirmDelete: 'Delete Template', recheck: 'Recheck without writing',
         loading: 'Loading native Workspace…', saved: 'Saved.', deleted: 'Template deleted.', imported: 'Template copy imported.',
@@ -42,17 +46,25 @@ const copy = {
         readFailed: 'The native Workspace could not be read.',
         lifecycleInfo: 'Lifecycle actions are intentionally unavailable until the coordinated public cutover.',
         source: 'Source Template', noSource: 'No Template source', total: 'Total', minutes: 'min',
+        archive: 'Completed archive', completedAt: 'Completed', reflection: 'Reflection', workshopNotes: 'Workshop notes',
+        lifecycleHeading: 'Confirm execution action', keepExecution: 'Keep execution',
+        retainConfirm: 'Reset this execution to Planned? Actual progress and Workshop notes will be discarded.',
+        discardConfirm: 'Discard this execution and all of its progress and notes?',
+        completeConfirm: 'Complete this execution and create its immutable archive?',
         uncategorized: 'Uncategorized', workshop: 'Workshop', meeting: 'Meeting', training: 'Training', conference: 'Conference',
         indicators: (notes, resources) => `${notes ? 'Notes' : 'No notes'} · ${resources} link${resources === 1 ? '' : 's'}`,
     },
     de: {
-        heading: 'Nativer Editor-Arbeitsbereich', internal: 'Interne Vorschau. Der öffentliche Editor bleibt unverändert.',
+        heading: 'Session-Editor', internal: 'Vorlagen und unabhängige Durchführungen auf diesem Gerät.', back: 'Zurück',
         templates: 'Vorlagen', planned: 'Geplante Durchführungen', active: 'Im Timer aktiv',
         suspended: 'Unterbrochen', completed: 'Abgeschlossen', empty: 'Keine Einträge.',
         identity: 'ID', revision: 'Revision', edit: 'Bearbeiten', create: 'Vorlage erstellen',
-        createExecution: 'Geplante Durchführung erstellen', exportTemplate: 'JSON exportieren',
+        createExecution: 'Geplante Durchführung erstellen', launchTemplate: 'Unabhängige Session starten', startExecution: 'Session starten',
+        resumeExecution: 'Fortsetzen', openTimer: 'Aktiven Timer öffnen', openArchive: 'Archiv öffnen', exportTemplate: 'JSON exportieren',
+        retainPlan: 'Nur Ablaufplan behalten und Fortschritt zurücksetzen', discardExecution: 'Durchlauf verwerfen', completeExecution: 'Abschließen und archivieren',
         importTemplate: 'Eine Vorlage importieren', importHint: 'Importiert eine unabhängige Vorlagenkopie, kein Anwendungs-Backup.',
-        importReview: 'Import prüfen', importConfirm: 'Kopie importieren', importCancel: 'Import abbrechen',
+        importReview: 'Import prüfen', importConfirm: 'Kopie importieren', importCancel: 'Import abbrechen', exportAll: 'Alle lokalen Daten exportieren',
+        exportAllHint: 'Vollständiger lokaler Datenexport. Eine vollständige Wiederherstellung wird noch nicht unterstützt.',
         templateEditor: 'Vorlage bearbeiten', newTemplate: 'Neue Vorlage', executionEditor: 'Geplante Durchführung bearbeiten',
         newExecution: 'Neue geplante Durchführung', templateEntity: 'Vorlagenentwurf', executionEntity: 'Unabhängiger Durchführungsentwurf',
         name: 'Ablaufname', category: 'Ablaufkategorie', transition: 'Phasenwechsel',
@@ -61,6 +73,7 @@ const copy = {
         resourceLabel: 'Linkbezeichnung', resourceUrl: 'HTTPS- oder HTTP-URL', addResource: 'Ressource hinzufügen',
         removeResource: 'Link entfernen', openResource: 'Link in neuem Tab öffnen', earlier: 'Nach vorne',
         later: 'Nach hinten', removePhase: 'Phase entfernen', save: 'Speichern', cancel: 'Abbrechen',
+        discardDraft: 'Diesen ungespeicherten Entwurf verwerfen?',
         delete: 'Löschen', deleteHeading: 'Vorlage löschen?', deleteBody: 'Nur die gewählte Vorlage wird gelöscht. Bestehende Durchführungen bleiben unabhängig.',
         keep: 'Vorlage behalten', confirmDelete: 'Vorlage löschen', recheck: 'Ohne Schreiben erneut prüfen',
         loading: 'Nativer Arbeitsbereich wird geladen…', saved: 'Gespeichert.', deleted: 'Vorlage gelöscht.', imported: 'Vorlagenkopie importiert.',
@@ -76,6 +89,11 @@ const copy = {
         readFailed: 'Der native Arbeitsbereich konnte nicht gelesen werden.',
         lifecycleInfo: 'Lebenszyklusaktionen bleiben bis zur koordinierten öffentlichen Umstellung absichtlich nicht verfügbar.',
         source: 'Quellvorlage', noSource: 'Keine Vorlagenquelle', total: 'Gesamt', minutes: 'Min.',
+        archive: 'Abgeschlossenes Archiv', completedAt: 'Abgeschlossen', reflection: 'Reflexion', workshopNotes: 'Workshop-Notizen',
+        lifecycleHeading: 'Aktion für Durchführung bestätigen', keepExecution: 'Durchführung behalten',
+        retainConfirm: 'Diese Durchführung auf Geplant zurücksetzen? Tatsächlicher Fortschritt und Workshop-Notizen werden verworfen.',
+        discardConfirm: 'Diese Durchführung mit ihrem gesamten Fortschritt und allen Notizen verwerfen?',
+        completeConfirm: 'Diese Durchführung abschließen und ein unveränderliches Archiv erstellen?',
         uncategorized: 'Ohne Kategorie', workshop: 'Workshop', meeting: 'Besprechung', training: 'Training', conference: 'Konferenz',
         indicators: (notes, resources) => `${notes ? 'Notizen' : 'Keine Notizen'} · ${resources} Link${resources === 1 ? '' : 's'}`,
     },
@@ -99,6 +117,8 @@ const safeLink = value => {
 export function createNativeEditorWorkspace({
     root, plannerService, plannedExecutionService, launchService, importService,
     language = 'en', createPhaseId = () => crypto.randomUUID(),
+    onClose = () => {}, onRequest = async () => ({ status: 'error' }),
+    onRecheck = async () => ({ status: 'error' }), onRecord = () => {},
     downloadTemplate = ({ name, text }) => {
         const link = document.createElement('a');
         link.download = name; link.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
@@ -107,11 +127,14 @@ export function createNativeEditorWorkspace({
 } = {}) {
     if (!(root instanceof HTMLElement) || !copy[language]
         || !plannerService || !plannedExecutionService || !launchService || !importService
-        || typeof createPhaseId !== 'function' || typeof downloadTemplate !== 'function') fail('invalidWorkspace');
+        || typeof createPhaseId !== 'function' || typeof downloadTemplate !== 'function'
+        || typeof onClose !== 'function' || typeof onRequest !== 'function'
+        || typeof onRecheck !== 'function' || typeof onRecord !== 'function') fail('invalidWorkspace');
     let active = false; let workspace = null; let draft = null; let editorKind = null;
     let baseline = null; let feedbackCode = null; let feedbackError = false;
     let pending = null; let mutationBusy = false;
     let importCandidate = null; let deleteTarget = null; let deleteTrigger = null;
+    let lifecycleRequest = null; let archiveId = null; let closeAfterMutation = false;
     let fileReadId = 0;
     const t = () => copy[language];
     const library = () => ({ revision: workspace.revision, templates: workspace.templates });
@@ -125,8 +148,14 @@ export function createNativeEditorWorkspace({
 
     async function loadWorkspace() {
         const result = await plannerService.loadWorkspace();
-        if (result.status !== 'success') { setFeedback('readFailed'); return false; }
-        workspace = result.workspace; return true;
+        if (result.status !== 'success') {
+            try { onRecord(null); } catch { /* Host remains fail-closed. */ }
+            setFeedback('readFailed'); return false;
+        }
+        workspace = result.workspace;
+        try { onRecord(structuredClone(workspace)); }
+        catch { setFeedback('unexpected'); return false; }
+        return true;
     }
     const mutationBlocked = () => mutationBusy || pending !== null;
     function clearEditor({ clearPending = false } = {}) {
@@ -146,8 +175,21 @@ export function createNativeEditorWorkspace({
         mutationBusy = true; lockRenderedControls();
         try { await operation(); }
         catch { setFeedback('unexpected'); }
-        finally { mutationBusy = false; render(); }
+        finally {
+            mutationBusy = false;
+            if (closeAfterMutation) {
+                closeAfterMutation = false;
+                deactivate();
+                onClose({ focus: 'timer' });
+            } else render();
+        }
         return true;
+    }
+
+    function deactivate() {
+        active = false; fileReadId += 1; window.removeEventListener('beforeunload', beforeUnload);
+        clearEditor(); workspace = null; importCandidate = null; deleteTarget = null; lifecycleRequest = null; archiveId = null;
+        root.replaceChildren(); root.classList.remove('planner', 'native-editor-workspace'); delete root.dataset.nativeEditorWorkspace;
     }
     async function finishWrite(message) {
         if (!await loadWorkspace()) { render(); return; }
@@ -244,6 +286,20 @@ export function createNativeEditorWorkspace({
         if (!pending) return Promise.resolve(false);
         return runMutation(async () => {
             let result;
+            if (pending.kind === 'host') {
+                result = await onRecheck(structuredClone(pending.ticket));
+                if (result.status === 'entered') {
+                    pending = null; closeAfterMutation = true; return;
+                }
+                if (['success', 'confirmed', 'partial', 'source'].includes(result.status)) {
+                    pending = null; await finishWrite(result.status === 'partial' ? 'creationObserved' : 'saved'); return;
+                }
+                if (result.status === 'uncertain') {
+                    pending = { kind: 'host', ticket: structuredClone(result.ticket ?? pending.ticket) };
+                    setFeedback('unresolved'); render(); return;
+                }
+                setFeedback(resultCode(result)); render(); return;
+            }
             if (pending.kind === 'plan') {
                 result = await launchService.observeExecution(pending.executionId);
                 const observed = result.execution;
@@ -295,6 +351,56 @@ export function createNativeEditorWorkspace({
         if (restore && deleteTrigger?.isConnected) deleteTrigger.focus({ preventScroll: true });
         deleteTrigger = null;
     }
+    function openLifecycleDialog(kind, entry, trigger) {
+        if (mutationBlocked()) return;
+        lifecycleRequest = { kind, entry: structuredClone(entry), trigger };
+        renderLifecycleDialog();
+        const dialog = root.querySelector('[data-native-lifecycle-dialog]'); dialog.showModal();
+        dialog.querySelector('[data-action="keep"]')?.focus();
+    }
+    function closeLifecycleDialog(restore = true) {
+        root.querySelector('[data-native-lifecycle-dialog]')?.close();
+        const trigger = lifecycleRequest?.trigger; lifecycleRequest = null;
+        if (restore && trigger?.isConnected) trigger.focus({ preventScroll: true });
+    }
+    function confirmLifecycle() {
+        if (!lifecycleRequest) return Promise.resolve(false);
+        const { kind, entry } = lifecycleRequest; closeLifecycleDialog(false);
+        return requestHost(kind, entry);
+    }
+    function renderLifecycleDialog() {
+        root.querySelector('[data-native-lifecycle-dialog]')?.remove();
+        if (!lifecycleRequest) return;
+        const dialog = el('dialog', undefined, 'confirmation-dialog'); dialog.dataset.nativeLifecycleDialog = '';
+        const form = el('form'); form.method = 'dialog'; form.addEventListener('submit', event => event.preventDefault());
+        const key = lifecycleRequest.kind === 'retainPlan' ? 'retainConfirm'
+            : lifecycleRequest.kind === 'completeExecution' ? 'completeConfirm' : 'discardConfirm';
+        form.append(el('h2', t().lifecycleHeading), el('p', t()[key]));
+        const actions = el('div', undefined, 'confirmation-dialog-actions');
+        const keep = button(t().keepExecution, () => closeLifecycleDialog()); keep.dataset.action = 'keep';
+        const confirm = button(t()[lifecycleRequest.kind], confirmLifecycle, 'confirm-stop');
+        actions.append(keep, confirm); form.append(actions); dialog.append(form);
+        dialog.addEventListener('cancel', event => { event.preventDefault(); closeLifecycleDialog(); }); root.append(dialog);
+    }
+    function renderArchive() {
+        const entry = workspace.executions.find(item => item.execution.id === archiveId);
+        if (!entry || entry.execution.lifecycle !== 'completed') { archiveId = null; renderLibrary(); return; }
+        const execution = entry.execution; const section = el('section'); heading(section);
+        section.append(el('h2', t().archive), el('h3', execution.currentPlan.name),
+            el('p', entityMeta(execution)),
+            el('p', `${t().completedAt}: ${new Date(execution.completion.completedAt).toLocaleString(language)}`),
+            el('h3', t().workshopNotes), el('p', execution.workshopNotes.rundown || '—'));
+        const phases = el('ol', undefined, 'phase-list');
+        execution.currentPlan.phases.forEach(phase => {
+            const outcome = execution.phaseOutcomes.find(item => item.phaseId === phase.id);
+            const item = el('li'); item.append(el('h3', phase.title),
+                el('p', `${Math.round(phase.durationSeconds / 60)} ${t().minutes}`),
+                el('p', outcome?.conducted ? `${Math.round(outcome.activeMs / 1000)} s` : '—'));
+            phases.append(item);
+        });
+        section.append(phases, el('h3', t().reflection), el('p', execution.reflection || '—'));
+        root.replaceChildren(section); renderLifecycleDialog();
+    }
     async function prepareImport(file) {
         if (mutationBlocked()) return;
         const id = ++fileReadId; importCandidate = null;
@@ -319,6 +425,24 @@ export function createNativeEditorWorkspace({
         const safe = template.plan.name.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-|-$/g, '') || 'template';
         downloadTemplate({ name: `${safe}.json`, text: serializeEditorTemplate(template), templateId: template.id });
     }
+    function exportAll() {
+        downloadTemplate({ name: 'easytimer-local-data.json', text: serializeEditorBackup(workspace) });
+        setFeedback('saved', false); render();
+    }
+    function requestHost(kind, entity) {
+        return runMutation(async () => {
+            const result = await onRequest({ kind, record: structuredClone(workspace), entity: structuredClone(entity) });
+            if (result.status === 'cancelled') return;
+            if (result.status === 'entered') { closeAfterMutation = true; return; }
+            if (result.status === 'uncertain') {
+                pending = { kind: 'host', ticket: structuredClone(result.ticket) }; setFeedback('uncertain'); render(); return;
+            }
+            if (['success', 'confirmed', 'partial', 'source'].includes(result.status)) {
+                await finishWrite(result.status === 'partial' ? 'creationObserved' : 'saved'); return;
+            }
+            setFeedback(resultCode(result)); render();
+        });
+    }
 
     function renderFeedback(container) {
         const line = el('p', feedbackText(), 'planner-feedback'); line.dataset.error = String(feedbackError);
@@ -331,7 +455,13 @@ export function createNativeEditorWorkspace({
     function heading(container) {
         const top = el('div', undefined, 'planner-top');
         const block = el('div'); const title = el('h1', t().heading); title.tabIndex = -1;
-        block.append(title, el('p', t().internal, 'planner-hint')); top.append(block); container.append(top);
+        block.append(title, el('p', t().internal, 'planner-hint'));
+        const back = button(t().back, () => {
+            if (archiveId) { archiveId = null; render(); focusHeading(); return; }
+            if (!close()) return;
+            onClose({ focus: 'menu' });
+        }, 'planner-back');
+        top.append(block, back); container.append(top);
     }
     function entityMeta(entity) {
         return `${t().identity}: ${entity.id} · ${t().revision}: ${entity.revision}`;
@@ -341,6 +471,7 @@ export function createNativeEditorWorkspace({
         info.append(el('h3', template.plan.name), el('p', entityMeta(template)));
         const actions = el('div', undefined, 'planner-actions rundown-actions');
         actions.append(
+            button(t().launchTemplate, () => requestHost('launchTemplate', template), 'rundown-launch'),
             button(t().createExecution, () => beginNewExecution(template), 'rundown-launch'),
             button(t().edit, () => beginTemplate(template.id)),
             button(t().exportTemplate, () => exportOne(template)),
@@ -353,8 +484,22 @@ export function createNativeEditorWorkspace({
         info.append(el('h3', execution.currentPlan.name), el('p', entityMeta(execution)));
         info.append(el('p', execution.source?.kind === 'template'
             ? `${t().source}: ${execution.source.id}` : t().noSource));
-        if (execution.lifecycle === 'planned') row.append(info, button(t().edit, () => beginExecution(execution.id)));
-        else { info.append(el('p', t().lifecycleInfo)); row.append(info); }
+        const actions = el('div', undefined, 'planner-actions rundown-actions');
+        if (execution.lifecycle === 'planned') {
+            actions.append(button(t().startExecution, () => requestHost('activateExecution', entry), 'rundown-launch'),
+                button(t().edit, () => beginExecution(execution.id)));
+        } else if (execution.lifecycle === 'active') {
+            actions.append(button(t().openTimer, () => requestHost('showActive', entry), 'rundown-launch'));
+        } else if (execution.lifecycle === 'suspended') {
+            actions.append(button(t().resumeExecution, () => requestHost('resumeExecution', entry), 'rundown-launch'),
+                button(t().retainPlan, event => openLifecycleDialog('retainPlan', entry, event.currentTarget)),
+                button(t().discardExecution, event => openLifecycleDialog('discardExecution', entry, event.currentTarget)));
+            if (execution.attempt !== null) actions.append(button(t().completeExecution,
+                event => openLifecycleDialog('completeExecution', entry, event.currentTarget)));
+        } else {
+            actions.append(button(t().openArchive, () => { archiveId = execution.id; render(); }));
+        }
+        row.append(info, actions);
         return row;
     }
     function group(container, title, entries, row) {
@@ -379,7 +524,8 @@ export function createNativeEditorWorkspace({
                 importCandidate = null; render();
             })); review.append(actions); body.append(review);
         }
-        details.append(body); container.append(details);
+        body.append(el('p', t().exportAllHint, 'planner-hint'), button(t().exportAll, exportAll));
+        details.id = 'data-backup'; details.append(body); container.append(details);
     }
     function renderLibrary() {
         const section = el('section'); heading(section);
@@ -497,7 +643,8 @@ export function createNativeEditorWorkspace({
         if (!active) return;
         root.className = 'planner native-editor-workspace'; root.dataset.nativeEditorWorkspace = '';
         if (!workspace) { root.replaceChildren(el('p', t().loading)); return; }
-        if (draft) renderEditor(); else renderLibrary();
+        if (draft) renderEditor(); else if (archiveId) renderArchive(); else renderLibrary();
+        renderLifecycleDialog();
         lockRenderedControls();
     }
     function focusHeading() { root.querySelector('h1')?.focus({ preventScroll: true }); }
@@ -506,20 +653,23 @@ export function createNativeEditorWorkspace({
     };
 
     return Object.freeze({
-        async open() {
-            if (active) { focusHeading(); return; }
+        async open(options = {}) {
+            const requestedArchive = options?.archiveId ?? null;
+            if (active) { if (requestedArchive) { archiveId = requestedArchive; render(); } focusHeading(); return; }
             active = true; window.addEventListener('beforeunload', beforeUnload); render();
-            await loadWorkspace(); render(); focusHeading();
+            await loadWorkspace(); archiveId = requestedArchive; render(); focusHeading();
         },
         close() {
             if (mutationBlocked()) { render(); root.querySelector('[data-native-recheck]')?.focus({ preventScroll: true }); return false; }
-            active = false; fileReadId += 1; window.removeEventListener('beforeunload', beforeUnload);
-            clearEditor(); workspace = null; importCandidate = null; deleteTarget = null;
-            root.replaceChildren(); root.classList.remove('planner', 'native-editor-workspace'); delete root.dataset.nativeEditorWorkspace;
+            if (dirty() && !window.confirm(t().discardDraft)) return false;
+            deactivate();
             return true;
         },
+        canChangeAccount: () => !draft && !importCandidate && !mutationBlocked(),
         setLanguage(next) {
-            if (!copy[next]) fail('invalidLanguage'); language = next; render(); focusHeading();
+            if (!copy[next]) fail('invalidLanguage');
+            if (language === next) return;
+            language = next; render(); focusHeading();
         },
     });
 }

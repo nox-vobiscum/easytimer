@@ -403,6 +403,51 @@ test('exit acknowledgement lost after the writer callback is reconciled without 
     }
 });
 
+test('late lock request failures for activation and resume retain exact source and target for read-only reconciliation', async () => {
+    for (const kind of ['activation', 'resume']) {
+        for (const outcome of ['source', 'target', 'conflict']) {
+            const c = kind === 'activation' ? setup() : await suspendedStartedBridgeSetup();
+            const source = kind === 'activation' ? initialRecord() : c.suspended;
+            const options = kind === 'activation' ? activationOptions() : resumeOptions(source, 20_000);
+            const method = kind === 'activation' ? 'activatePlanned' : 'resumeSuspended';
+            const normalRequest = c.locks.request;
+            c.locks.request = async function(name, lockOptions, callback) {
+                const result = await normalRequest.call(this, name, lockOptions, callback);
+                if (name === 'easyTimerEditor.v1.write') throw new Error('Late request failure');
+                return result;
+            };
+            const writes = c.storage.state.writes;
+            await assert.rejects(c.bridge[method](options), /lockRequestUnconfirmed/);
+            c.locks.request = normalRequest;
+            const target = JSON.parse(c.storage.values.get(EDITOR_STORAGE_KEY));
+            let observed = outcome === 'source' ? source : target;
+            if (outcome === 'conflict') {
+                observed = structuredClone(target);
+                observed.revision += 1;
+                observed.templates[0].plan.name = 'Concurrent valid change';
+            }
+            c.storage.values.set(EDITOR_STORAGE_KEY, JSON.stringify(observed));
+            await assert.rejects(c.bridge[method](options), kind === 'activation' ? /pendingActivation/ : /pendingOperation/);
+            const result = kind === 'activation'
+                ? await c.bridge.reconcilePendingActivation({
+                    executionId: 'execution-1',
+                    runtimeRunId: kind === 'activation' ? 'runtime-ready-1' : target.activeRuntime.run.runId,
+                })
+                : await c.bridge.reconcilePendingOperation();
+            assert.equal(result.outcome, outcome);
+            assert.deepEqual(result.record, observed);
+            assert.equal(c.storage.state.writes, writes + 1, 'reconciliation never retries the write');
+            assert.equal(c.activeLock.held, true, 'uncertain entry retains active ownership');
+            if (outcome === 'conflict') {
+                await assert.rejects(c.bridge[method](options), kind === 'activation' ? /pendingActivation/ : /pendingOperation/);
+            } else {
+                await assert.rejects(c.bridge.reconcilePendingOperation(), /noPendingOperation/);
+            }
+            await c.activeLock.release();
+        }
+    }
+});
+
 test('native reload adoption exposes current outcomes read-only and later writes do not double count them', async () => {
     for (const transitionMode of ['manual', 'automatic']) {
         const c = await persistedActiveSetup({ started: true, transitionMode });

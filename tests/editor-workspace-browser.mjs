@@ -27,7 +27,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             width: 1280, height: 800, screenWidth: 1280, screenHeight: 800, mobile: false, deviceScaleFactor: 1,
         });
         assert.equal(await evaluate(`document.querySelector('[data-native-editor-workspace]')`), null,
-            'native Workspace is not publicly activated');
+            'public native Workspace remains unmounted until requested');
         await evaluate(`(async () => {
             const [workspaceModule, plannerModule, integrationModule, writerModule, storeModule, importModule,
                 launchModule, domain, runtimeModule] = await Promise.all([
@@ -161,12 +161,27 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 [...root.querySelectorAll('h2')].map(node => node.textContent),
                 root.textContent.includes('Lifecycle actions are intentionally unavailable'),
                 document.querySelector('#open-planner').textContent.includes('Native')];
-        })()`), [true, 'Native Editor Workspace', ['Templates', 'Planned executions', 'Active in Timer', 'Suspended', 'Completed'], true, false]);
+        })()`), [true, 'Session Editor', ['Templates', 'Planned executions', 'Active in Timer', 'Suspended', 'Completed'], false, false]);
         assert.deepEqual(await evaluate(`nativeWorkspaceFixture.keys.every(key => key === 'easyTimerEditor.v1')`), true,
             'Workspace reads only native storage');
 
         await action('Create template');
         await field('[data-field="name"]', 'Independent workshop');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, input = f.root.querySelector('[data-field="name"]');
+            input.focus(); input.renderIdentity = 'unchanged-language';
+            f.workspace.setLanguage('en');
+            const current = f.root.querySelector('[data-field="name"]');
+            return [current === input, current.renderIdentity, current.value, document.activeElement === current];
+        })()`), [true, 'unchanged-language', 'Independent workshop', true],
+        'unchanged language does not rerender, steal focus or replace the draft input');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture; f.workspace.setLanguage('de');
+            const input = f.root.querySelector('[data-field="name"]');
+            const result = [input.value, f.root.querySelector('h1').textContent, document.activeElement === f.root.querySelector('h1')];
+            f.workspace.setLanguage('en'); return result;
+        })()`), ['Independent workshop', 'Session-Editor', true],
+        'a real language change rerenders localized UI while preserving the complete draft');
         await field('.native-workspace-control', 'training', 'change');
         await field('[data-field="prepared"]', 'Goals and **plain text**');
         await action('Add phase'); await action('Add phase');
@@ -318,6 +333,13 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             const file = nativeWorkspaceFixture.downloads[0], parsed = JSON.parse(file.text);
             return [file.name, parsed.kind, parsed.template.id, parsed.template.plan.name];
         })()`), ['Independent-workshop.json', 'editor-template', 'template-1', 'Independent workshop']);
+        await action('Export all local data');
+        assert.deepEqual(await evaluate(`(() => {
+            const file = nativeWorkspaceFixture.downloads[1], parsed = JSON.parse(file.text);
+            return [file.name, parsed.kind, parsed.record.schemaVersion,
+                nativeWorkspaceFixture.root.textContent.includes('Full backup restore is not yet supported.')];
+        })()`), ['easytimer-local-data.json', 'editor-backup', 1, true],
+        'complete native local-data export is accurately labelled and does not expose restore');
         await evaluate(`(() => {
             const input = nativeWorkspaceFixture.root.querySelector('input[type="file"]');
             const transfer = new DataTransfer(); transfer.items.add(new File(['not json'], 'invalid.json', { type: 'application/json' }));
@@ -420,7 +442,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.root.querySelector('h1').textContent,
             [...nativeWorkspaceFixture.root.querySelectorAll('h2')].map(node => node.textContent).slice(0, 5),
-        ]`), ['Nativer Editor-Arbeitsbereich', ['Vorlagen', 'Geplante Durchführungen', 'Im Timer aktiv', 'Unterbrochen', 'Abgeschlossen']]);
+        ]`), ['Session-Editor', ['Vorlagen', 'Geplante Durchführungen', 'Im Timer aktiv', 'Unterbrochen', 'Abgeschlossen']]);
         await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('en')`);
 
         for (const [width, height, mobile] of [[320, 640, true], [568, 320, true]]) {
@@ -442,8 +464,8 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             return [f.root.childElementCount, f.root.hasAttribute('data-native-editor-workspace'),
                 document.body.dataset.mode, document.querySelector('#time').textContent,
                 document.body.classList.contains('planner-open'), localStorage.getItem('easyTimerTemplates') === f.publicState.v1];
-        })()`), [0, false, 'quick', '00:00', false, true], 'unmount preserves public Quick/V1 state');
-        console.log('PASS: internally mounted native Workspace; shared lifecycle library, Template CRUD, planned Execution creation/editing, phase content, single-template portability, explicit-only persistence, stale/uncertain reconciliation safety, DE/EN, dialog focus/Escape, mobile portrait/landscape, no V1 or Runtime effects.');
+        })()`), [0, false, 'quick', '00:00', false, true], 'fixture unmount preserves the public Quick state and unrelated legacy data');
+        console.log('PASS: native Workspace; shared lifecycle library, Template CRUD, planned Execution creation/editing, phase content, single-template and full-data export, explicit-only persistence, stale/uncertain reconciliation safety, DE/EN, dialog focus/Escape and mobile portrait/landscape.');
     } finally {
         await cdp('Emulation.clearDeviceMetricsOverride').catch(() => {});
         await evaluate(`(() => {

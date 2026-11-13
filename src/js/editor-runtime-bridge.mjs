@@ -34,8 +34,10 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
                 return target;
             });
         } catch (error) {
-            if ((error?.message === 'storageUnconfirmed' || error?.message === 'storageReadback'
-                || (['suspend', 'retainPlan', 'discard', 'complete', 'reflection'].includes(kind) && error?.message === 'lockRequest'))
+            const lateLockRequest = error?.message === 'lockRequest'
+                && ['activation', 'resume', 'suspend', 'retainPlan', 'discard', 'complete', 'reflection'].includes(kind)
+                && source !== null && target !== null;
+            if ((error?.message === 'storageUnconfirmed' || error?.message === 'storageReadback' || lateLockRequest)
                 && source !== null && target !== null) {
                 pendingOperation = {
                     kind,
@@ -44,6 +46,7 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
                     target: structuredClone(target),
                 };
             }
+            if (lateLockRequest && ['activation', 'resume'].includes(kind)) fail('lockRequestUnconfirmed');
             throw error;
         } finally {
             busy = false;
