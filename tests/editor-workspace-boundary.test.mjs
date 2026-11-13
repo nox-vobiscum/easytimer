@@ -38,7 +38,23 @@ test('Workspace retains reconciliation state and serializes local mutations', as
     assert.match(workspace, /clearEditor\(\{ clearPending: true \}\)/);
     assert.match(workspace, /if \(mutationBlocked\(\)\) return;\s*clearEditor\(\)/);
     assert.match(workspace, /data-native-recheck/);
-    assert.match(workspace, /if \(mutationBlocked\(\)\).*return false/);
+    assert.match(workspace, /if \(mutationBlocked\(\)\)[\s\S]*return false/);
+});
+
+test('Workspace shares one guarded close path and validates resource snapshots before writing', async () => {
+    const workspace = await read('src/js/editor-workspace.mjs');
+    assert.match(workspace, /function close\(\)[\s\S]*if \(mutationBlocked\(\)\)[\s\S]*if \(dirty\(\)/);
+    assert.match(workspace, /if \(!close\(\)\) return;\s*onClose\(\{ focus: 'menu' \}\)/);
+    assert.match(workspace, /return Object\.freeze\(\{[\s\S]*\n\s*close,/);
+    assert.match(workspace, /function resourceSaveSnapshot\(\)/);
+    assert.match(workspace, /if \(!label && !url\) return false/);
+    assert.match(workspace, /else if \(!safeLink\(url\)\)/);
+    assert.match(workspace, /if \(prepared\.issues\.length\)[\s\S]*return Promise\.resolve\(false\)/);
+    assert.match(workspace, /saveTemplate\(prepared\.snapshot\)/);
+    assert.match(workspace, /saveExistingExecution\(prepared\.snapshot\)/);
+    assert.match(workspace, /restorePhaseDisclosures\(expanded\)/);
+    assert.match(workspace, /aria-invalid/);
+    assert.match(workspace, /aria-describedby/);
 });
 
 test('public native entry and Picker orchestration retain identity, ownership and unresolved-operation guards', async () => {
@@ -68,11 +84,11 @@ test('central styles and app shell advance together for the public native Worksp
         read('src/css/styles.css'), read('src/index.html'), read('src/service-worker.js'),
     ]);
     assert.match(css, /\.native-editor-workspace/);
-    assert.match(html, /css\/styles\.css\?v=74/);
-    assert.match(html, /js\/app\.js\?v=74/);
-    assert.match(worker, /easytimer-shell-v74/);
-    assert.match(worker, /css\/styles\.css\?v=74/);
-    assert.match(worker, /js\/app\.js\?v=74/);
+    assert.match(html, /css\/styles\.css\?v=75/);
+    assert.match(html, /js\/app\.js\?v=75/);
+    assert.match(worker, /easytimer-shell-v75/);
+    assert.match(worker, /css\/styles\.css\?v=75/);
+    assert.match(worker, /js\/app\.js\?v=75/);
     assert.match(worker, /js\/editor-workspace\.mjs/);
     assert.doesNotMatch(worker, /planner-v1|planner\.js|portability\.mjs\?v=37/);
 });

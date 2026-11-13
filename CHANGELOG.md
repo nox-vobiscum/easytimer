@@ -6,6 +6,18 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 native Editor interaction fixes:** Workspace Back now uses the
+  same dirty-draft and pending-mutation close guard as host navigation and
+  restores the originating Home, Quick or Session view without changing Timer,
+  Recovery or ownership state. Adding and removing resource rows preserves open
+  phase disclosures and moves keyboard focus to the new or nearest surviving
+  control. Explicit Save omits only completely empty resource placeholders from
+  its isolated write snapshot; partially completed or unsupported links remain
+  in the editable draft, receive localized field-level errors and are focused
+  before any Store write. Failed and uncertain writes retain the caller's
+  original draft and complete reconciliation ticket. The application shell
+  advances consistently to unreleased PWA v75.
+
 - **EDITOR-001 Landing Page scaffold (implemented, not deployed):** a fresh
   ordinary visit now opens a small DE/EN Home view with Quick Timer, Session
   Timer and Session Editor entry points plus a clearly disabled Stopwatch
@@ -18,7 +30,8 @@ commit, staging and production deployment are distinct events.
   Timer, terminal SUSPENDED actions now require the existing departure
   confirmation before their irreversible write; rejection changes neither
   timer nor Execution. Information-page origin continuity includes Home, and the
-  application shell advances consistently to unreleased PWA v74.
+  application shell advanced consistently to unreleased PWA v74; the Editor
+  interaction fixes now supersede that checkpoint with v75.
 
 - **EDITOR-001 first-START hotfix:** installing a confirmed native
   ACTIVE/READY-to-STARTED write now accepts its one valid `null`-to-first-Attempt

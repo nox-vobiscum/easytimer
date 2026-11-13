@@ -87,6 +87,16 @@ retain late Activation/Resume lock failures for read-only reconciliation, and
 enforce monotonic active Runtime installation without clock rewind. Mandatory
 real-browser acceptance remains open.
 
+The focused native Editor interaction correction is implemented for review:
+Library Back and post-Cancel Back share the guarded close path, dirty and pending
+states retain their existing protection, resource-row edits preserve disclosure
+and focus, and explicit Save treats only completely empty resource rows as
+unused placeholders. Partial or invalid HTTP(S) links remain visible with DE/EN
+field errors and cannot write. Failed or uncertain operations retain the
+original editable draft and reconciliation ticket. This advances the unreleased
+shell to PWA v75 without changing Runtime, Recovery, ownership or lifecycle
+semantics. Real-browser acceptance remains open.
+
 The minimal public Home scaffold is implemented locally on top of this cutover.
 It provides DE/EN entry points for Quick Timer, Session Timer and Session Editor,
 with an explicitly unavailable Stopwatch placeholder. Recovery and ACTIVE
@@ -94,15 +104,17 @@ Runtime adoption remain prior states; only confirmed lifecycle completion
 returns Home. Visual/text refinement and Stopwatch implementation remain
 separate future work. Terminal SUSPENDED actions confirm departure before their
 write when a progressed independent Quick Timer is behind the Workspace, so a
-rejected Home transition preserves both states. The unreleased public shell is
-now PWA v74.
+rejected Home transition preserves both states. The Landing Page checkpoint was
+PWA v74; the focused Editor interaction fixes advance the unreleased public shell
+to PWA v75.
 
 V1 Planner, Template Store and JSON sources remain only as repository history and
 focused legacy evidence; they are no longer reachable from public startup,
 precache or the deterministic production package. There is no V1 migration,
 compatibility import, dual library or second public Editor. Production
-dependency/precache references were aligned at the v73 cutover checkpoint and
-are now aligned for the unreleased PWA v74 Landing Page shell.
+dependency/precache references were aligned at the v73 cutover checkpoint, then
+for the v74 Landing Page shell, and are now aligned for the v75 Editor
+interaction-fix shell.
 
 The native Editor Workspace is implemented and covered
 by a direct browser harness. One native snapshot presents Templates and all

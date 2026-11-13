@@ -263,6 +263,17 @@ Execution/Attempt/Run identity and monotonic aggregate, Execution and runtime
 revisions. Equal Store revisions must be identical, aggregate-only advances must
 not rewind the in-memory clock, and conflicting or unreadable reads fail closed.
 
+Workspace Back and host-driven close share one guard: dirty drafts require
+explicit confirmation and pending or uncertain mutations remain mounted for
+read-only reconciliation. Resource-row structural edits preserve phase
+disclosures and keyboard focus. Completely empty resource placeholders are
+removed only from an explicit Save snapshot; the caller's editable draft remains
+available across failed or uncertain writes. Partially completed and invalid
+HTTP(S) resources are identified at their fields before any Store write. These
+presentation rules do not change native domain validation, Store records,
+Runtime, Recovery, Active Lock or lifecycle semantics. The corresponding
+unreleased application shell is PWA v75.
+
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.
 - `src/js/timer.mjs` owns Quick Timer transitions and authoritative deadlines.

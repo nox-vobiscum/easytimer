@@ -595,6 +595,7 @@ body.clock-only.presentation main { padding-top:env(safe-area-inset-top); paddin
 }
 .native-workspace-resource > a,
 .native-workspace-resource > button { display:inline-flex; align-items:center; min-height:44px; overflow-wrap:anywhere; }
+.native-resource-error { display:block; margin:.25rem 0 0; }
 .native-workspace-phase-actions,
 .native-workspace-save-actions { margin-top:.75rem; }
 .native-editor-workspace details > summary { min-height:44px; }

@@ -254,6 +254,23 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         await click('#planner .planner-back');
         assert.equal(await evaluate(`document.body.classList.contains('planner-open')`), true, 'Archive Back returns to the single native library');
         await click('#planner .planner-back');
+        assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.body.classList.contains('planner-open')`), true,
+            'Library Back restores the Home context');
+        await click('#home-quick');
+        if (await evaluate(`document.querySelector('#primary').disabled`)) await click('[data-preset="60000"]');
+        await click('#primary'); await wait(`document.querySelector('#status').textContent==='Running'`);
+        const quickBeforeEditorBack = await evaluate(`(()=>{const key=sessionStorage.getItem('easyTimerRuntimeContext.v1');return {
+            key,record:JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+key))};})()`);
+        await menuAction('#open-planner'); await wait(`document.body.classList.contains('planner-open')`);
+        await click('#planner .planner-back');
+        assert.deepEqual(await evaluate(`(()=>{const value=JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+${JSON.stringify(quickBeforeEditorBack.key)}));return [
+            document.body.dataset.mode,document.body.classList.contains('planner-open'),document.querySelector('#status').textContent,
+            value.contextId,value.clock.status,value.clock.deadlineMs];})()`),
+        ['quick', false, 'Running', quickBeforeEditorBack.record.contextId, quickBeforeEditorBack.record.clock.status,
+            quickBeforeEditorBack.record.clock.deadlineMs],
+        'Library Back restores the running Quick Timer without resetting its Recovery ownership or deadline');
+        await click('#stop'); await menuAction('#open-home');
+        assert.equal(await evaluate(`document.body.dataset.mode`), 'home');
 
         await evaluate(`window.quickLifecycleConfirm=window.confirm`);
         for (const [label, lifecycle] of [

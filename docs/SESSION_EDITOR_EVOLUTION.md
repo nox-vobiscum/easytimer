@@ -76,6 +76,18 @@ view cannot reopen or overwrite newer navigation. Repeated App ticks pass the
 same language to the Workspace without rebuilding its DOM; a real language
 change still rerenders localized controls while retaining the complete draft.
 
+Workspace Back now shares the same internal close guard as App navigation, so
+Library and cancelled-draft exits work while dirty drafts still require consent
+and pending reconciliation remains protected. Resource Add/Remove rerenders
+restore all currently open phase disclosures and place focus on the created or
+nearest surviving control. Fully empty or whitespace-only resource placeholders
+are omitted only from the isolated explicit-Save snapshot. Partial rows and
+unsupported URLs remain in the caller's draft, receive localized field-level
+ARIA errors, expand their phase and focus the first invalid field before any
+write. Failed and uncertain writes retain the original editable draft and exact
+source/target ticket. The native HTTP(S) domain validator remains authoritative;
+no Store, Runtime, Recovery, Active Lock or lifecycle contract changes.
+
 **Historical increment record:** The detailed foundation sections below retain
 the scope boundaries at the time each internal slice was reviewed. References to
 a still-pending public cutover or absent public lifecycle UI are historical and

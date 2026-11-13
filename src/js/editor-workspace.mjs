@@ -28,6 +28,8 @@ const copy = {
         manual: 'Manual', automatic: 'Automatic', prepared: 'Prepared rundown information',
         phases: 'Phases', addPhase: 'Add phase', notes: 'Prepared phase notes', resources: 'Resource links',
         resourceLabel: 'Link label', resourceUrl: 'HTTPS or HTTP URL', addResource: 'Add resource',
+        resourceLabelRequired: 'Enter a link label.', resourceUrlRequired: 'Enter an HTTP or HTTPS URL.',
+        resourceUrlInvalid: 'Enter a valid HTTP or HTTPS URL.',
         removeResource: 'Remove link', openResource: 'Open link in a new tab', earlier: 'Move earlier',
         later: 'Move later', removePhase: 'Remove phase', save: 'Save', cancel: 'Cancel',
         discardDraft: 'Discard this unsaved draft?',
@@ -71,6 +73,8 @@ const copy = {
         manual: 'Manuell', automatic: 'Automatisch', prepared: 'Vorbereitete Ablaufinformationen',
         phases: 'Phasen', addPhase: 'Phase hinzufügen', notes: 'Vorbereitete Phasennotizen', resources: 'Ressourcenlinks',
         resourceLabel: 'Linkbezeichnung', resourceUrl: 'HTTPS- oder HTTP-URL', addResource: 'Ressource hinzufügen',
+        resourceLabelRequired: 'Eine Linkbezeichnung eingeben.', resourceUrlRequired: 'Eine HTTP- oder HTTPS-URL eingeben.',
+        resourceUrlInvalid: 'Eine gültige HTTP- oder HTTPS-URL eingeben.',
         removeResource: 'Link entfernen', openResource: 'Link in neuem Tab öffnen', earlier: 'Nach vorne',
         later: 'Nach hinten', removePhase: 'Phase entfernen', save: 'Speichern', cancel: 'Abbrechen',
         discardDraft: 'Diesen ungespeicherten Entwurf verwerfen?',
@@ -135,10 +139,10 @@ export function createNativeEditorWorkspace({
     let pending = null; let mutationBusy = false;
     let importCandidate = null; let deleteTarget = null; let deleteTrigger = null;
     let lifecycleRequest = null; let archiveId = null; let closeAfterMutation = null;
-    let fileReadId = 0;
+    let fileReadId = 0; let resourceErrors = new Map();
     const t = () => copy[language];
     const library = () => ({ revision: workspace.revision, templates: workspace.templates });
-    const currentPlan = () => { const { id, ...plan } = draft.template; return plan; };
+    const currentPlan = (source = draft) => { const { id, ...plan } = source.template; return plan; };
     const dirty = () => draft !== null && JSON.stringify(draft) !== baseline;
     const setFeedback = (code, error = true) => { feedbackCode = code; feedbackError = error; };
     const feedbackText = () => feedbackCode ? (t()[feedbackCode] || t().unexpected) : '';
@@ -159,7 +163,7 @@ export function createNativeEditorWorkspace({
     }
     const mutationBlocked = () => mutationBusy || pending !== null;
     function clearEditor({ clearPending = false } = {}) {
-        draft = null; editorKind = null; baseline = null;
+        draft = null; editorKind = null; baseline = null; resourceErrors = new Map();
         if (clearPending) pending = null;
     }
     function lockRenderedControls() {
@@ -190,6 +194,14 @@ export function createNativeEditorWorkspace({
         active = false; fileReadId += 1; window.removeEventListener('beforeunload', beforeUnload);
         clearEditor(); workspace = null; importCandidate = null; deleteTarget = null; lifecycleRequest = null; archiveId = null;
         root.replaceChildren(); root.classList.remove('planner', 'native-editor-workspace'); delete root.dataset.nativeEditorWorkspace;
+    }
+    function close() {
+        if (mutationBlocked()) {
+            render(); root.querySelector('[data-native-recheck]')?.focus({ preventScroll: true }); return false;
+        }
+        if (dirty() && !window.confirm(t().discardDraft)) return false;
+        deactivate();
+        return true;
     }
     async function finishWrite(message) {
         if (!await loadWorkspace()) { render(); return; }
@@ -239,10 +251,11 @@ export function createNativeEditorWorkspace({
         if (!entry) fail('invalidPlanningResult');
         return actualExecutionDraft(record, executionId, { id: executionId, ...entry.execution.currentPlan });
     }
-    async function saveNewExecution() {
-        try { validateRundownPlan(currentPlan()); }
+    async function saveNewExecution(saveDraft) {
+        try { validateRundownPlan(currentPlan(saveDraft)); }
         catch { setFeedback('validation'); render(); return; }
         const retained = structuredClone(draft.template);
+        const retainedForWrite = structuredClone(saveDraft.template);
         const source = workspace.templates.find(template => template.id === draft.sourceTemplateId);
         if (!source) { setFeedback('conflict'); render(); return; }
         const result = await launchService.planFromTemplate({
@@ -259,27 +272,53 @@ export function createNativeEditorWorkspace({
         if (result.status !== 'planned') { setFeedback(resultCode(result)); render(); return; }
         draft = actualExecutionDraft(result.record, result.executionId, retained);
         editorKind = 'execution'; baseline = JSON.stringify(persistedExecutionDraft(result.record, result.executionId));
-        await saveExistingExecution();
+        await saveExistingExecution(actualExecutionDraft(result.record, result.executionId, retainedForWrite));
     }
-    async function saveExistingExecution() {
-        const result = await plannedExecutionService.saveDraft(draft);
+    async function saveExistingExecution(saveDraft = draft) {
+        const result = await plannedExecutionService.saveDraft(saveDraft);
         if (result.status === 'success') { await finishWrite('saved'); return; }
         if (result.status === 'uncertain') { pending = { kind: 'executionSave', ticket: result.reconciliation }; setFeedback('uncertain'); }
         else setFeedback(resultCode(result));
         render();
     }
-    async function saveTemplate() {
-        const result = await plannerService.saveDraft(draft);
+    async function saveTemplate(saveDraft) {
+        const result = await plannerService.saveDraft(saveDraft);
         if (result.status === 'success') { await finishWrite('saved'); return; }
         if (result.status === 'uncertain') { pending = { kind: 'templateSave', ticket: result.reconciliation }; setFeedback('uncertain'); }
         else setFeedback(resultCode(result));
         render();
     }
+    function resourceSaveSnapshot() {
+        const snapshot = structuredClone(draft); const issues = [];
+        for (const phase of snapshot.template.phases) {
+            phase.resources = phase.resources.filter((resource, index) => {
+                const label = resource.label.trim(); const url = resource.url.trim();
+                if (!label && !url) return false;
+                if (!label) issues.push({ phaseId: phase.id, index, field: 'label', code: 'resourceLabelRequired' });
+                else if (!url) issues.push({ phaseId: phase.id, index, field: 'url', code: 'resourceUrlRequired' });
+                else if (!safeLink(url)) issues.push({ phaseId: phase.id, index, field: 'url', code: 'resourceUrlInvalid' });
+                return true;
+            });
+        }
+        return { snapshot, issues };
+    }
+    function showResourceValidation(issues) {
+        resourceErrors = new Map(issues.map(issue => [`${issue.phaseId}:${issue.index}:${issue.field}`, issue.code]));
+        setFeedback('validation');
+        const expanded = expandedPhaseIds(); expanded.add(issues[0].phaseId);
+        render(); restorePhaseDisclosures(expanded);
+        const field = root.querySelector(`[data-native-phase-id="${CSS.escape(issues[0].phaseId)}"]`
+            + ` [data-resource-index="${issues[0].index}"] [data-resource-field="${issues[0].field}"]`);
+        field?.focus({ preventScroll: true }); field?.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
     function save() {
+        const prepared = resourceSaveSnapshot();
+        if (prepared.issues.length) { showResourceValidation(prepared.issues); return Promise.resolve(false); }
+        resourceErrors = new Map();
         return runMutation(async () => {
-            if (editorKind === 'template') await saveTemplate();
-            else if (editorKind === 'newExecution') await saveNewExecution();
-            else await saveExistingExecution();
+            if (editorKind === 'template') await saveTemplate(prepared.snapshot);
+            else if (editorKind === 'newExecution') await saveNewExecution(prepared.snapshot);
+            else await saveExistingExecution(prepared.snapshot);
         });
     }
     function recheck() {
@@ -543,42 +582,90 @@ export function createNativeEditorWorkspace({
     }
     function controlLabel(text, control) { const label = el('label'); label.append(el('span', text), control); return label; }
     function editTemplate(changes) { draft = editNativeTemplateDraft(draft, changes); }
+    function expandedPhaseIds() {
+        return new Set([...root.querySelectorAll('[data-native-phase-id]')]
+            .filter(row => row.querySelector('[data-action="details"]')?.getAttribute('aria-expanded') === 'true')
+            .map(row => row.dataset.nativePhaseId));
+    }
+    function restorePhaseDisclosures(ids) {
+        for (const phaseId of ids) {
+            const row = root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"]`);
+            const disclosure = row?.querySelector('[data-action="details"]');
+            const details = row?.querySelector('.native-phase-details');
+            if (!disclosure || !details) continue;
+            details.hidden = false; disclosure.setAttribute('aria-expanded', 'true');
+        }
+    }
+    function renderResourceMutation(phaseId, focusSelector) {
+        const expanded = expandedPhaseIds(); expanded.add(phaseId); resourceErrors = new Map();
+        render(); restorePhaseDisclosures(expanded);
+        root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"] ${focusSelector}`)
+            ?.focus({ preventScroll: true });
+    }
+    const emptyResource = resource => !resource.label.trim() && !resource.url.trim();
     function renderResources(details, phase) {
         details.append(el('h3', t().resources));
         phase.resources.forEach((resource, index) => {
             const row = el('div', undefined, 'native-workspace-resource');
+            row.dataset.resourceIndex = String(index);
             const label = el('input'); label.type = 'text'; label.value = resource.label;
+            label.dataset.resourceField = 'label';
+            const labelError = resourceErrors.get(`${phase.id}:${index}:label`);
             label.setAttribute('aria-label', t().resourceLabel); label.addEventListener('input', () => {
                 const current = draft.template.phases.find(item => item.id === phase.id);
                 const resources = structuredClone(current.resources); resources[index].label = label.value;
                 draft = editNativePhaseDraft(draft, phase.id, { resources });
+                resourceErrors.delete(`${phase.id}:${index}:label`);
+                label.removeAttribute('aria-invalid'); label.removeAttribute('aria-describedby');
+                label.parentElement?.querySelector('.native-resource-error')?.remove();
             });
-            const url = el('input'); url.type = 'url'; url.value = resource.url; url.inputMode = 'url';
+            const url = el('input'); url.type = 'text'; url.value = resource.url; url.inputMode = 'url';
+            url.dataset.resourceField = 'url';
+            const urlError = resourceErrors.get(`${phase.id}:${index}:url`);
             url.setAttribute('aria-label', t().resourceUrl); url.addEventListener('input', () => {
                 const current = draft.template.phases.find(item => item.id === phase.id);
                 const resources = structuredClone(current.resources); resources[index].url = url.value;
                 draft = editNativePhaseDraft(draft, phase.id, { resources });
                 const href = safeLink(url.value); preview.hidden = !href; if (href) preview.href = href;
+                resourceErrors.delete(`${phase.id}:${index}:url`);
+                url.removeAttribute('aria-invalid'); url.removeAttribute('aria-describedby');
+                url.parentElement?.querySelector('.native-resource-error')?.remove();
             });
             const preview = el('a', t().openResource); preview.target = '_blank'; preview.rel = 'noopener noreferrer';
             const href = safeLink(resource.url); preview.hidden = !href; if (href) preview.href = href;
             const remove = button(t().removeResource, () => {
                 const resources = structuredClone(draft.template.phases.find(item => item.id === phase.id).resources);
-                resources.splice(index, 1); draft = editNativePhaseDraft(draft, phase.id, { resources }); render();
+                resources.splice(index, 1); draft = editNativePhaseDraft(draft, phase.id, { resources });
+                const focusIndex = Math.min(index, resources.length - 1);
+                renderResourceMutation(phase.id, focusIndex >= 0
+                    ? `[data-resource-index="${focusIndex}"] [data-resource-field="label"]`
+                    : '[data-action="add-resource"]');
             });
-            row.append(controlLabel(t().resourceLabel, label), controlLabel(t().resourceUrl, url), preview, remove); details.append(row);
+            const labelControl = controlLabel(t().resourceLabel, label);
+            const urlControl = controlLabel(t().resourceUrl, url);
+            for (const [control, controlLabelElement, code] of [[label, labelControl, labelError], [url, urlControl, urlError]]) {
+                if (!code) continue;
+                const error = el('span', t()[code], 'planner-feedback native-resource-error');
+                error.id = `native-resource-error-${crypto.randomUUID()}`; error.dataset.error = 'true';
+                control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', error.id);
+                controlLabelElement.append(error);
+            }
+            row.append(labelControl, urlControl, preview, remove); details.append(row);
         });
-        details.append(button(t().addResource, () => {
+        const add = button(t().addResource, () => {
             const current = draft.template.phases.find(item => item.id === phase.id);
-            draft = editNativePhaseDraft(draft, phase.id, { resources: [...current.resources, { label: '', url: '' }] }); render();
-        }));
+            const index = current.resources.length;
+            draft = editNativePhaseDraft(draft, phase.id, { resources: [...current.resources, { label: '', url: '' }] });
+            renderResourceMutation(phase.id, `[data-resource-index="${index}"] [data-resource-field="label"]`);
+        });
+        add.dataset.action = 'add-resource'; details.append(add);
     }
     function renderPhase(phase, index, list) {
         const fields = createNativePhaseFields({
             getDraft: () => draft, onDraftChange: next => { draft = next; }, phaseId: phase.id, language,
         });
         const details = fields.element.querySelector('.native-phase-details');
-        details.prepend(el('p', t().indicators(Boolean(phase.notes.trim()), phase.resources.length), 'planner-hint'));
+        details.prepend(el('p', t().indicators(Boolean(phase.notes.trim()), phase.resources.filter(resource => !emptyResource(resource)).length), 'planner-hint'));
         const notes = el('textarea'); notes.rows = 4; notes.value = phase.notes; notes.dataset.field = 'notes';
         notes.addEventListener('input', () => { draft = editNativePhaseDraft(draft, phase.id, { notes: notes.value }); });
         details.append(controlLabel(t().notes, notes)); renderResources(details, phase);
@@ -663,12 +750,7 @@ export function createNativeEditorWorkspace({
             active = true; window.addEventListener('beforeunload', beforeUnload); render();
             await loadWorkspace(); archiveId = requestedArchive; render(); focusHeading();
         },
-        close() {
-            if (mutationBlocked()) { render(); root.querySelector('[data-native-recheck]')?.focus({ preventScroll: true }); return false; }
-            if (dirty() && !window.confirm(t().discardDraft)) return false;
-            deactivate();
-            return true;
-        },
+        close,
         canChangeAccount: () => !draft && !importCandidate && !mutationBlocked(),
         setLanguage(next) {
             if (!copy[next]) fail('invalidLanguage');

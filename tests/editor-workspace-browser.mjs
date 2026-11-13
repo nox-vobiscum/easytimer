@@ -38,7 +38,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             ]);
             const f = window.nativeWorkspaceFixture = {
                 raw: null, writes: 0, keys: [], uncertainOnSet: false, throwReadback: false,
-                downloads: [], phase: 0, execution: 0, imported: 0,
+                downloads: [], closeCalls: [], phase: 0, execution: 0, imported: 0,
                 publicState: {
                     mode: document.body.dataset.mode,
                     time: document.querySelector('#time').textContent,
@@ -151,6 +151,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 launchService: f.launch, importService: f.importer,
                 createPhaseId: () => 'phase-' + (++f.phase),
                 downloadTemplate: file => f.downloads.push(file),
+                onClose: options => f.closeCalls.push(options),
             });
             await f.workspace.open();
         })()`);
@@ -164,6 +165,34 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         })()`), [true, 'Session Editor', ['Templates', 'Planned executions', 'Active in Timer', 'Suspended', 'Completed'], false, false]);
         assert.deepEqual(await evaluate(`nativeWorkspaceFixture.keys.every(key => key === 'easyTimerEditor.v1')`), true,
             'Workspace reads only native storage');
+
+        await action('Back');
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.root.dataset.nativeEditorWorkspace,
+            nativeWorkspaceFixture.closeCalls.length,
+            nativeWorkspaceFixture.closeCalls[0]?.focus,
+        ]`), [undefined, 1, 'menu'], 'Back from the Library closes through the host callback');
+        await evaluate(`nativeWorkspaceFixture.workspace.open()`);
+        await action('Create template'); await action('Cancel'); await action('Back');
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.root.dataset.nativeEditorWorkspace,
+            nativeWorkspaceFixture.closeCalls.length,
+        ]`), [undefined, 2], 'Back closes after a cancelled new Template draft');
+        await evaluate(`nativeWorkspaceFixture.workspace.open()`);
+        await action('Create template'); await field('[data-field="name"]', 'Keep this draft');
+        await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => false`);
+        await action('Back');
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
+            nativeWorkspaceFixture.closeCalls.length,
+            nativeWorkspaceFixture.root.dataset.nativeEditorWorkspace,
+        ]`), ['Keep this draft', 2, ''], 'rejected Back confirmation preserves the complete draft and view');
+        await evaluate(`window.confirm = () => true`); await action('Back');
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.root.dataset.nativeEditorWorkspace,
+            nativeWorkspaceFixture.closeCalls.length,
+        ]`), [undefined, 3], 'accepted Back confirmation closes the dirty Workspace');
+        await evaluate(`window.confirm = window.nativeWorkspaceConfirm; delete window.nativeWorkspaceConfirm; nativeWorkspaceFixture.workspace.open()`);
 
         await action('Create template');
         await field('[data-field="name"]', 'Independent workshop');
@@ -190,11 +219,61 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         await field('[data-native-phase-id="phase-2"] [data-field="title"]', 'Second phase');
         await field('[data-native-phase-id="phase-2"] [data-field="duration"]', '20');
         await click('[data-native-phase-id="phase-1"] [data-action="details"]');
+        await click('[data-native-phase-id="phase-2"] [data-action="details"]');
         await field('[data-native-phase-id="phase-1"] [data-field="notes"]', 'Facilitator notes');
         await action('Add resource', '[data-native-phase-id="phase-1"]');
+        assert.deepEqual(await evaluate(`(() => {
+            const root = nativeWorkspaceFixture.root, phase = root.querySelector('[data-native-phase-id="phase-1"]');
+            return [
+                phase.querySelector('[data-action="details"]').getAttribute('aria-expanded'),
+                root.querySelector('[data-native-phase-id="phase-2"] [data-action="details"]').getAttribute('aria-expanded'),
+                document.activeElement === phase.querySelector('[data-resource-index="0"] [data-resource-field="label"]'),
+                phase.querySelector('.planner-hint').textContent.includes('0 links'), nativeWorkspaceFixture.writes,
+            ];
+        })()`), ['true', 'true', true, true, 0], 'adding a resource preserves all disclosures, focuses its label and does not persist');
         await field('[data-native-phase-id="phase-1"] input[aria-label="Link label"]', 'Board');
         await field('[data-native-phase-id="phase-1"] input[aria-label="HTTPS or HTTP URL"]', 'https://example.com/board');
-        await click('[data-native-phase-id="phase-2"] [data-action="details"]');
+        await action('Add resource', '[data-native-phase-id="phase-1"]');
+        await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="label"]', 'Only label');
+        await evaluate(`nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
+        assert.deepEqual(await evaluate(`(() => {
+            const root = nativeWorkspaceFixture.root, phase = root.querySelector('[data-native-phase-id="phase-1"]');
+            const input = phase.querySelector('[data-resource-index="1"] [data-resource-field="url"]');
+            return [nativeWorkspaceFixture.writes, input.getAttribute('aria-invalid'),
+                input.getAttribute('aria-describedby') === input.parentElement.querySelector('.native-resource-error').id,
+                input.parentElement.textContent.includes('Enter an HTTP or HTTPS URL.'),
+                document.activeElement === input, phase.querySelector('[data-action="details"]').getAttribute('aria-expanded')];
+        })()`), [0, 'true', true, true, true, 'true'], 'partial resource identifies and focuses its missing URL without writing');
+        await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="label"]', '');
+        await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="url"]', 'https://example.com/second');
+        await evaluate(`nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
+        assert.deepEqual(await evaluate(`(() => {
+            const input = nativeWorkspaceFixture.root.querySelector('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="label"]');
+            return [nativeWorkspaceFixture.writes, input.getAttribute('aria-invalid'), input.parentElement.textContent.includes('Enter a link label.'), document.activeElement === input];
+        })()`), [0, 'true', true, true], 'URL-only resource identifies and focuses its missing label');
+        await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="label"]', 'Unsupported');
+        await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="url"]', 'ftp://example.com/file');
+        await evaluate(`nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
+        assert.deepEqual(await evaluate(`(() => {
+            const input = nativeWorkspaceFixture.root.querySelector('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="url"]');
+            return [nativeWorkspaceFixture.writes, input.getAttribute('aria-invalid'), input.parentElement.textContent.includes('Enter a valid HTTP or HTTPS URL.'), document.activeElement === input];
+        })()`), [0, 'true', true, true], 'unsupported resource URL receives the precise English error');
+        await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('de')`);
+        await evaluate(`nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
+        assert.equal(await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-resource-index="1"] [data-resource-field="url"]').parentElement.textContent.includes('Eine gültige HTTP- oder HTTPS-URL eingeben.')`), true,
+            'resource URL validation is localized in German');
+        await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('en')`);
+        await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="label"]', '   ');
+        await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="url"]', '  ');
+        await action('Add resource', '[data-native-phase-id="phase-1"]');
+        await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id="phase-1"] [data-resource-index="2"] button').click()`);
+        assert.deepEqual(await evaluate(`(() => {
+            const root = nativeWorkspaceFixture.root, phase = root.querySelector('[data-native-phase-id="phase-1"]');
+            return [phase.querySelector('[data-action="details"]').getAttribute('aria-expanded'),
+                root.querySelector('[data-native-phase-id="phase-2"] [data-action="details"]').getAttribute('aria-expanded'),
+                document.activeElement === phase.querySelector('[data-resource-index="1"] [data-resource-field="label"]'),
+                phase.querySelectorAll('[data-resource-index]').length, nativeWorkspaceFixture.writes];
+        })()`), ['true', 'true', true, 2, 0], 'removing a resource preserves disclosure, focuses the surviving row and does not persist');
         await action('Move earlier', '[data-native-phase-id="phase-2"]');
         assert.deepEqual(await evaluate(`nativeWorkspaceFixture.root.querySelectorAll('[data-native-phase-id]')
             ? [...nativeWorkspaceFixture.root.querySelectorAll('[data-native-phase-id]')].map(row => row.dataset.nativePhaseId) : []`),
@@ -217,10 +296,18 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         }
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture;
+            const phase = f.root.querySelector('[data-native-phase-id="phase-1"]');
+            const target = f.tickets.templateSave.target.templates.find(item => item.plan.name === 'Independent workshop');
+            const targetPhase = target.plan.phases.find(item => item.id === 'phase-1');
             return [f.writes, f.root.querySelector('[data-field="name"]').value,
                 f.root.textContent.includes('write acknowledgement is uncertain'),
-                Boolean([...f.root.querySelectorAll('button')].find(button => button.textContent === 'Recheck without writing'))];
-        })()`), [1, 'Independent workshop', true, true], 'uncertain Create retains the full draft');
+                Boolean([...f.root.querySelectorAll('button')].find(button => button.textContent === 'Recheck without writing')),
+                phase.querySelectorAll('[data-resource-index]').length,
+                phase.querySelector('[data-resource-index="1"] [data-resource-field="label"]').value,
+                phase.querySelector('[data-resource-index="1"] [data-resource-field="url"]').value,
+                targetPhase.resources.length];
+        })()`), [1, 'Independent workshop', true, true, 2, '   ', '  ', 1],
+        'uncertain Create retains the original editable draft while its complete ticket contains the normalized target');
         await evaluate(`(() => {
             const f = nativeWorkspaceFixture, divergent = structuredClone(f.tickets.templateSave.target);
             divergent.revision += 1; f.raw = JSON.stringify(divergent);
@@ -249,9 +336,10 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, record = JSON.parse(f.raw), saved = record.templates.find(item => item.plan.name === 'Independent workshop');
             return [f.writes, Boolean(saved), saved.plan.phases.map(phase => phase.id), saved.plan.phases[1].notes,
-                saved.plan.phases[1].resources[0], f.root.textContent.includes('Saved.')];
+                saved.plan.phases[1].resources.length, saved.plan.phases[1].resources[0], f.root.textContent.includes('Saved.')];
         })()`), [1, true, ['phase-2', 'phase-1'], 'Facilitator notes',
-            { label: 'Board', url: 'https://example.com/board' }, true], 'read-only reconciliation performs no duplicate write');
+            1, { label: 'Board', url: 'https://example.com/board' }, true],
+        'read-only reconciliation performs no duplicate write and persists no empty resource placeholders');
 
         await rowAction('Independent workshop', 'Edit');
         const writesBeforeCancel = await evaluate('nativeWorkspaceFixture.writes');
@@ -470,6 +558,8 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         await cdp('Emulation.clearDeviceMetricsOverride').catch(() => {});
         await evaluate(`(() => {
             const f = window.nativeWorkspaceFixture;
+            if (window.nativeWorkspaceConfirm) window.confirm = window.nativeWorkspaceConfirm;
+            delete window.nativeWorkspaceConfirm;
             f?.workspace?.close(); f?.root?.remove(); delete window.nativeWorkspaceFixture;
         })()`).catch(() => {});
     }
