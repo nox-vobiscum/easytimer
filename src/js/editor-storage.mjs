@@ -354,6 +354,28 @@ export function startReadyExecutionInRecord(record, options) {
     });
 }
 
+export function isFirstStartTransitionInRecord(sourceRecord, targetRecord) {
+    try {
+        const source = validateEditorStoreRecord(sourceRecord);
+        const target = validateEditorStoreRecord(targetRecord);
+        if (source.activeRuntime === null || target.activeRuntime === null
+            || target.activeRuntime.attemptId === null) return false;
+        const selected = source.executions.find(entry => (
+            entry.execution.id === source.activeRuntime.executionId
+        ));
+        if (!selected) return false;
+        const expected = startReadyExecutionInRecord(source, {
+            executionId: selected.execution.id,
+            expectedAggregateRevision: source.revision,
+            expectedExecutionRevision: selected.execution.revision,
+            expectedRuntimeRevision: selected.execution.runtimeRevision,
+            attemptId: target.activeRuntime.attemptId,
+            startedAt: target.activeRuntime.savedAt,
+        });
+        return JSON.stringify(expected) === JSON.stringify(target);
+    } catch { return false; }
+}
+
 export function applyStartedSessionActionInRecord(record, options) {
     const valid = validateEditorStoreRecord(record);
     if (!isObject(options)) fail('invalidData');

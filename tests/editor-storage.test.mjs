@@ -22,6 +22,7 @@ import {
     discardExecutionInRecord,
     deleteTemplateInRecord,
     insertTemplateInRecord,
+    isFirstStartTransitionInRecord,
     planExecutionFromTemplateInRecord,
     retainExecutionPlanInRecord,
     resumeSuspendedExecutionInRecord,
@@ -1489,6 +1490,25 @@ test('starts READY with one attempt bound to the existing run and an immutable p
     assert.notEqual(execution, ready.executions[0].execution);
     assert.notEqual(execution.attempt.startSnapshot, ready.executions[0].execution.currentPlan);
     assert.notEqual(result.activeRuntime.run, ready.activeRuntime.run);
+});
+
+test('recognizes only the exact authoritative READY-to-first-START record transition', () => {
+    const ready = activatePlannedExecutionInRecord(
+        record({ templates: [template()], executions: [entry(planned())] }),
+        activationOptions(),
+    );
+    const started = startReadyExecutionInRecord(ready, startOptions());
+    assert.equal(isFirstStartTransitionInRecord(ready, started), true);
+
+    const replacement = structuredClone(started);
+    replacement.executions[0].execution.attempt.id = 'replacement-attempt';
+    replacement.activeRuntime.attemptId = 'replacement-attempt';
+    assert.equal(isFirstStartTransitionInRecord(started, replacement), false);
+
+    const changedTarget = structuredClone(started); changedTarget.revision += 1;
+    assert.equal(isFirstStartTransitionInRecord(ready, changedTarget), false);
+    assert.equal(isFirstStartTransitionInRecord(started, ready), false);
+    assert.equal(isFirstStartTransitionInRecord(ready, { ...started, activeRuntime: null }), false);
 });
 
 test('requires the first START time to be at or after the saved READY runtime', () => {

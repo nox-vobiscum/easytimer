@@ -6,7 +6,7 @@ import { createRecovery } from './recovery.mjs?v=55';
 import { createEditorActiveTimerLock } from './editor-active-lock.mjs';
 import { createEditorRuntimeBridge } from './editor-runtime-bridge.mjs';
 import { createEditorStoreWriter } from './editor-storage-lock.mjs';
-import { validateEditorStoreRecord } from './editor-storage.mjs';
+import { isFirstStartTransitionInRecord, validateEditorStoreRecord } from './editor-storage.mjs';
 import { createNativeEditorTemplateIntegration } from './editor-template-integration.mjs';
 import {
     createNativePlannerService,
@@ -504,8 +504,9 @@ export function installNativeRecord(record) {
     if (!nativeRuntime || !editorActiveLock.held) throw new Error('invalidActiveRuntimeBinding');
     const next = activeBinding(record);
     const current = activeBinding(nativeRuntime.record);
+    const attemptChanged = next.runtime.attemptId !== current.runtime.attemptId;
     if (next.execution.id !== current.execution.id
-        || next.runtime.attemptId !== current.runtime.attemptId
+        || (attemptChanged && !isFirstStartTransitionInRecord(current.record, next.record))
         || next.runtime.run.runId !== current.runtime.run.runId) throw new Error('invalidActiveRuntimeBinding');
     if (next.record.revision < current.record.revision) {
         if (next.execution.revision > current.execution.revision

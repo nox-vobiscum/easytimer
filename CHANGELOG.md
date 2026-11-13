@@ -6,6 +6,14 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 first-START hotfix:** installing a confirmed native
+  ACTIVE/READY-to-STARTED write now accepts its one valid `null`-to-first-Attempt
+  identity transition. The App proves the complete target by replaying the
+  existing pure Store transformation against the authoritative READY source;
+  every other Attempt replacement remains rejected. Store revisions, Run
+  identity, first-start baseline, Active Lock ownership and reload adoption are
+  unchanged, and a blocked local handoff never repeats the persisted START.
+
 - **EDITOR-001 coordinated public Schema-2 cutover (implemented, not deployed):**
   the native Workspace is now the single public Session Editor and its native
   aggregate is the single public Template/Execution library. The Picker groups

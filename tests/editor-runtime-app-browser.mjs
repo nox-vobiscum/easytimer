@@ -156,19 +156,93 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         await click('#primary');
         await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision===4`);
         let persisted = JSON.parse(await raw());
+        const firstAttemptId = persisted.executions[0].execution.attempt.id;
+        assert.equal(persisted.revision, 4);
+        assert.equal(persisted.executions[0].execution.revision, 3);
+        assert.equal(persisted.executions[0].execution.runtimeRevision, 2);
+        assert.equal(persisted.executions[0].execution.attempt.startedAt, 5000);
         assert.equal(persisted.executions[0].execution.attempt.runtimeRunId, 'browser-run');
+        assert.equal(persisted.activeRuntime.attemptId, firstAttemptId);
+        assert.equal(persisted.activeRuntime.runtimeRevision, 2);
+        assert.equal(persisted.activeRuntime.savedAt, 5000);
         assert.equal(persisted.activeRuntime.clock.status, 'RUNNING');
+        assert.equal(persisted.activeRuntime.clock.deadlineMs, 65_000);
+        assert.equal(await text('#status'), 'Running');
+        assert.equal(await evaluate(`document.querySelector('#runtime-recovery').hidden
+            && !document.querySelector('#primary').disabled`), true,
+        'confirmed first START installs locally without blocking the Timer');
+        assert.equal(await evaluate(`navigator.locks.request('easyTimerEditor.v1.active-runtime',
+            {mode:'exclusive',ifAvailable:true},lock=>lock===null)`), true,
+        'first START retains the existing Active Lock');
         assert.equal(await noLegacyRuntime(), true);
+
+        const replacement = structuredClone(persisted);
+        replacement.executions[0].execution.attempt.id = 'replacement-attempt';
+        replacement.activeRuntime.attemptId = 'replacement-attempt';
+        assert.equal(await evaluate(`(async()=>{
+            const app=await import('./js/app.js');
+            try{app.installNativeRecord(${JSON.stringify(replacement)});return null}
+            catch(error){return error.message}
+        })()`), 'invalidActiveRuntimeBinding', 'an unexpected Attempt replacement remains rejected');
+        assert.equal(await raw(), JSON.stringify(persisted), 'local installation rejection never writes or repeats START');
+        assert.equal(await evaluate(`(async()=>{
+            const app=await import('./js/app.js');
+            try{app.installNativeRecord(${JSON.stringify(ready)});return null}
+            catch(error){return error.message}
+        })()`), 'invalidActiveRuntimeBinding', 'a stale pre-Attempt record cannot replace STARTED authority');
+
+        await reload('session', 6000);
+        assert.equal(await text('#status'), 'Running');
+        assert.equal(await text('#time'), '00:59');
+        assert.equal(JSON.parse(await raw()).executions[0].execution.attempt.id, firstAttemptId,
+            'reload adopts the single persisted first Attempt');
 
         await click('#primary');
         await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='PAUSED'`);
         persisted = JSON.parse(await raw());
+        assert.equal(persisted.executions[0].execution.attempt.id, firstAttemptId,
+            'subsequent actions preserve the first Attempt identity');
+        assert.equal(persisted.activeRuntime.attemptId, firstAttemptId);
         const pausedRaw = JSON.stringify(persisted);
         await evaluate(`document.dispatchEvent(new Event('visibilitychange'))`);
         assert.equal(await raw(), pausedRaw, 'Display ticks do not persist native runtime');
         await reload('session', 50_000);
         assert.equal(await text('#status'), 'Paused');
         assert.equal(await raw(), pausedRaw, 'Paused adoption remains frozen and read-only');
+
+        await install(ready);
+        await reload('session', 7000);
+        await evaluate(`(()=>{
+            const locks=navigator.locks, original=locks.request.bind(locks);
+            window.firstStartInstallProbe={original,armed:true,writes:0};
+            locks.request=async function(name,options,callback){
+                const result=await original(name,options,callback), probe=window.firstStartInstallProbe;
+                if(name!=='easyTimerEditor.v1.write'||!probe.armed) return result;
+                probe.armed=false;probe.writes+=1;
+                const invalid=structuredClone(result);invalid.revision+=1;return invalid;
+            };
+        })()`);
+        await click('#primary');
+        await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision===4
+            && !document.querySelector('#runtime-recovery').hidden`);
+        const persistedAfterInstallFailure = await raw();
+        const recoveredAttemptId = JSON.parse(persistedAfterInstallFailure).activeRuntime.attemptId;
+        assert.deepEqual(await evaluate(`[firstStartInstallProbe.writes,
+            document.querySelector('#primary').disabled,
+            JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status]`),
+        [1, true, 'RUNNING'], 'local installation failure blocks after exactly one persisted START');
+        await evaluate(`document.querySelector('#primary').click()`); await delay(50);
+        assert.equal(await evaluate(`firstStartInstallProbe.writes`), 1, 'blocked Runtime cannot repeat first START');
+        assert.equal(await raw(), persistedAfterInstallFailure);
+        assert.equal(await evaluate(`navigator.locks.request('easyTimerEditor.v1.active-runtime',
+            {mode:'exclusive',ifAvailable:true},lock=>lock===null)`), true,
+        'blocked local installation retains Active Lock until reload');
+        await evaluate(`navigator.locks.request=firstStartInstallProbe.original;delete window.firstStartInstallProbe`);
+        await reload('session', 8000);
+        assert.equal(await text('#status'), 'Running');
+        assert.equal(JSON.parse(await raw()).activeRuntime.attemptId, recoveredAttemptId,
+            'reload recovers the persisted START without creating another Attempt');
+        assert.equal(await evaluate(`document.querySelector('#runtime-recovery').hidden`), true);
 
         const running = startedRecord();
         await install(running);
@@ -496,6 +570,8 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
         await cdp('Emulation.clearDeviceMetricsOverride');
         await evaluate(`(()=>{
+            if(window.firstStartInstallProbe) navigator.locks.request=window.firstStartInstallProbe.original;
+            delete window.firstStartInstallProbe;
             if(window.runtimeReadProbe) navigator.locks.request=window.runtimeReadProbe.original;
             delete window.runtimeReadProbe;
             window.nativeOwner?.close();

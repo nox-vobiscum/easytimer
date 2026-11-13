@@ -46,7 +46,8 @@ test('public native entry and Picker orchestration retain identity, ownership an
     assert.match(app, /function activeBinding\(record\)/);
     assert.match(app, /!editorActiveLock\.held/);
     assert.match(app, /next\.execution\.id !== current\.execution\.id/);
-    assert.match(app, /next\.runtime\.attemptId !== current\.runtime\.attemptId/);
+    assert.match(app, /isFirstStartTransitionInRecord/);
+    assert.match(app, /attemptChanged && !isFirstStartTransitionInRecord\(current\.record, next\.record\)/);
     assert.match(app, /next\.runtime\.run\.runId !== current\.runtime\.run\.runId/);
     assert.match(app, /let pickerBusy = false/);
     assert.match(app, /let pickerLoadRevision = 0/);
