@@ -173,6 +173,7 @@ main { flex:1; display:flex; padding:clamp(1rem,3vh,2rem) 1rem; }
 .home-open .bottom-dock { display:none; }
 @media(max-width:720px) { .home-actions { grid-template-columns:repeat(2,minmax(0,1fr)); } .home-action { min-height:7rem; } }
 @media(max-width:360px) { .home-actions { grid-template-columns:1fr; } .home-action { min-height:5.5rem; flex-direction:row; } }
+.timer[hidden] { display:none; }
 .timer { position:relative; display:flex; flex-direction:column; flex:1; max-width:1100px; min-width:0; margin:0 auto; text-align:center; }
 .timer-stage { --clock-limit:12rem; --readout-details:3.5rem; flex:1; min-height:clamp(9rem,32svh,24rem); container-type:size; display:flex; flex-direction:column; align-items:center; justify-content:center; }
 h1 { font-size:.95rem; font-weight:500; color:var(--muted); margin:0 0 1rem; }

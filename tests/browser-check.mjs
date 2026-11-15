@@ -95,6 +95,19 @@ try {
     async function configure(h, m, s) {
         await configureQuickTimebox(evaluate, (h * 3600 + m * 60 + s) * 1000);
     }
+    async function assertPrimaryView(expected, label) {
+        const state = await evaluate(`(() => {
+            const views={home:'#home-view',quick:'#timer-view',picker:'#session-picker',editor:'#planner'};
+            const entries=Object.entries(views).map(([name,selector])=>{
+                const node=document.querySelector(selector);
+                return [name,{hidden:node.hidden,display:getComputedStyle(node).display,focused:node.contains(document.activeElement)}];
+            });
+            return Object.fromEntries(entries);
+        })()`);
+        assert.deepEqual(Object.entries(state).filter(([, value]) => value.display !== 'none').map(([name]) => name), [expected], label);
+        assert.equal(Object.entries(state).some(([name, value]) => name !== expected && value.focused), false,
+            `${label}: hidden primary views retain no focus`);
+    }
     async function checkMenu(state) {
         const before=await evaluate(`({status:document.querySelector('#status').textContent,time:document.querySelector('#time').textContent,budget:document.querySelector('#time-budget').textContent,presentation:document.body.classList.contains('presentation')})`);
         assert.equal(await evaluate(`document.querySelectorAll('#menu-toggle').length===1&&document.querySelectorAll('#preferences').length===1&&document.querySelectorAll('button[data-language]').length===2&&document.querySelectorAll('button[data-theme]').length===3`),true,'One shared menu and preferences');
@@ -152,6 +165,7 @@ try {
         await delay(50);
     }
     assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.querySelector('#home-view').hidden&&document.querySelector('#timer-view').hidden`),true,'Fresh ordinary visit opens Home');
+    await assertPrimaryView('home', 'Fresh ordinary visit exposes only Home');
     assert.equal(await evaluate(`document.querySelector('#home-stopwatch').disabled&&document.querySelector('#home-stopwatch').getAttribute('aria-describedby')==='home-stopwatch-note'`),true,'Stopwatch is visible and accessibly unavailable');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.home-action .navigation-icon')).length===4`),true,'Landing actions reuse the established menu icon artwork');
     await click('[data-language="de"]');
@@ -166,17 +180,38 @@ try {
     await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:720,deviceScaleFactor:1,mobile:false});
     await click('#home-session');
     assert.equal(await evaluate(`document.body.dataset.mode==='session'&&!document.querySelector('#session-picker').hidden`),true,'Home opens the native Session Picker');
+    await assertPrimaryView('picker', 'Session navigation exposes only the Picker');
     await click('#open-home');
     assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.querySelector('#home-view').hidden`),true,'Menu returns safely to Home');
+    await assertPrimaryView('home', 'Picker to Home hides the Picker and Timer');
     await click('#home-editor');
     assert.equal(await evaluate(`document.body.classList.contains('planner-open')&&!document.querySelector('#planner').hidden`),true,'Home opens the native Editor Workspace');
+    await assertPrimaryView('editor', 'Editor navigation exposes only the Workspace');
     await click('.planner-back');
     assert.equal(await evaluate(`document.body.dataset.mode==='home'`),true,'Editor Back returns to its Home origin');
+    await assertPrimaryView('home', 'Editor Back restores only Home');
     await evaluate(`document.querySelector('#home-quick').focus()`);
     assert.notEqual(await evaluate(`getComputedStyle(document.activeElement).outlineStyle`),'none','Home action has visible keyboard focus');
     await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
     await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
     assert.equal(await evaluate(`document.body.dataset.mode==='quick'&&!document.querySelector('#timer-view').hidden`),true,'Home opens Quick Timer');
+    await assertPrimaryView('quick', 'Home to Quick exposes only the Timer');
+    for (const [width,height] of [[1280,720],[320,568]]) {
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
+        await assertPrimaryView('quick', `Quick remains isolated at ${width}x${height}`);
+    }
+    await cdp('Emulation.clearDeviceMetricsOverride');
+    for (let index=0;index<2;index++) {
+        await click('#menu-toggle');
+        await evaluate(`document.querySelector('#open-home').click()`);
+        await assertPrimaryView('home', `Quick READY to Home transition ${index+1}`);
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#home-heading')`),true,
+            'Home navigation focuses its heading');
+        await click('#home-quick');
+        await assertPrimaryView('quick', `Repeated Home to Quick transition ${index+1}`);
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#primary')`),true,
+            'Quick navigation focuses its primary action');
+    }
     if(timeTravelOptions.names.length) {
         await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
         assert.equal(errors.length,0,JSON.stringify(errors));
@@ -205,8 +240,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=75'&&js==='js/app.js?v=75'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'75','app.js':'75','info.js':'59','header.mjs':'59','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=76'&&js==='js/app.js?v=76'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'76','app.js':'76','info.js':'59','header.mjs':'59','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');

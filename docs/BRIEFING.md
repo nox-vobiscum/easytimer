@@ -238,6 +238,14 @@ before a terminal SUSPENDED write begins. Rejection is write-free; reconciliatio
 never repeats the confirmation or mutation. Quick Stop remains a reset within
 Quick Timer.
 
+Primary public views are mutually isolated by their existing `hidden`
+attributes. In particular, the central Timer container has an explicit hidden
+style so its flex layout cannot override browser hiding while Home, the native
+Session Picker or the Session Editor is active. Hidden primary views are absent
+from layout and keyboard navigation; this is presentation-only and does not add
+a router or change the existing view-state, Timer, Runtime or Recovery
+orchestration.
+
 Native Template Create, Update and Delete now retain their stable operation plus
 complete Store source/target snapshots when readback or a late Store-lock
 acknowledgement is uncertain. The Planner service validates caller-held tickets
@@ -272,7 +280,7 @@ available across failed or uncertain writes. Partially completed and invalid
 HTTP(S) resources are identified at their fields before any Store write. These
 presentation rules do not change native domain validation, Store records,
 Runtime, Recovery, Active Lock or lifecycle semantics. The corresponding
-unreleased application shell is PWA v75.
+unreleased application shell is PWA v76.
 
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.

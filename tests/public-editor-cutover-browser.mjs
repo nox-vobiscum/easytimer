@@ -256,6 +256,8 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         await click('#planner .planner-back');
         assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.body.classList.contains('planner-open')`), true,
             'Library Back restores the Home context');
+        assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner'].map(selector=>getComputedStyle(document.querySelector(selector)).display)`),
+            ['flex', 'none', 'none', 'none'], 'Home is the only computed-visible primary view after library navigation');
         await click('#home-quick');
         if (await evaluate(`document.querySelector('#primary').disabled`)) await click('[data-preset="60000"]');
         await click('#primary'); await wait(`document.querySelector('#status').textContent==='Running'`);
@@ -269,6 +271,8 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         ['quick', false, 'Running', quickBeforeEditorBack.record.contextId, quickBeforeEditorBack.record.clock.status,
             quickBeforeEditorBack.record.clock.deadlineMs],
         'Library Back restores the running Quick Timer without resetting its Recovery ownership or deadline');
+        assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner'].map(selector=>getComputedStyle(document.querySelector(selector)).display==='none')`),
+            [true, false, true, true], 'running Quick Timer is isolated after Editor Back');
         await click('#stop'); await menuAction('#open-home');
         assert.equal(await evaluate(`document.body.dataset.mode`), 'home');
 

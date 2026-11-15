@@ -97,6 +97,14 @@ original editable draft and reconciliation ticket. This advances the unreleased
 shell to PWA v75 without changing Runtime, Recovery, ownership or lifecycle
 semantics. Real-browser acceptance remains open.
 
+UX-002 view isolation is implemented for renewed review. The existing Home,
+Picker, Workspace and Timer orchestration is unchanged; a scoped Timer hidden
+style now guarantees that only the selected primary view participates in layout
+or keyboard navigation. Computed-visibility regressions cover Home, Quick Timer,
+Session Picker, Session Editor and ACTIVE Session across repeated and responsive
+navigation. The unreleased shell advances to PWA v76. This is a corrective
+presentation boundary, not the pending Editor redesign.
+
 The minimal public Home scaffold is implemented locally on top of this cutover.
 It provides DE/EN entry points for Quick Timer, Session Timer and Session Editor,
 with an explicitly unavailable Stopwatch placeholder. Recovery and ACTIVE
@@ -113,8 +121,8 @@ focused legacy evidence; they are no longer reachable from public startup,
 precache or the deterministic production package. There is no V1 migration,
 compatibility import, dual library or second public Editor. Production
 dependency/precache references were aligned at the v73 cutover checkpoint, then
-for the v74 Landing Page shell, and are now aligned for the v75 Editor
-interaction-fix shell.
+for the v74 Landing Page shell and the v75 Editor interaction-fix shell, and are
+now aligned for the v76 view-isolation shell.
 
 The native Editor Workspace is implemented and covered
 by a direct browser harness. One native snapshot presents Templates and all

@@ -507,6 +507,13 @@ return Home only after confirmed persistence and safe handoff. A progressed
 independent Quick Timer behind the Workspace is never reset implicitly: its
 existing departure confirmation precedes any terminal SUSPENDED write.
 
+**Public view isolation correction:** Home, Quick/Session Timer, Session Picker
+and Session Editor continue to use the existing application view state. An
+explicit hidden style for the Timer container prevents its flex rule from
+keeping it visible beside another selected view. This correction changes only
+computed visibility and keyboard reachability; it introduces no router and no
+Timer, Runtime, Recovery, Store, lock or lifecycle behavior.
+
 ## 1. Session Editor — preparation workspace
 
 Give the Session Editor more space and a clearer identity as a first-class feature rather than a compact settings panel. Keep the default workflow approachable; richer details should be available on demand.

@@ -150,6 +150,8 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         assert.equal(await text('#time'), '01:00');
         assert.equal(await raw(), JSON.stringify(ready), 'READY adoption is read-only');
         assert.equal(await noLegacyRuntime(), true, 'Native adoption creates no legacy runtime');
+        assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner'].map(selector=>getComputedStyle(document.querySelector(selector)).display==='none')`),
+            [true, false, true, true], 'ACTIVE READY Session exposes only its Timer view');
         assert.equal(await evaluate(`document.querySelector('#open-quick').disabled&&document.querySelector('#next').disabled&&document.querySelector('#export-rundown').hidden`), true,
             'Unsupported replacement, pre-start phase progress and V1 export are unavailable');
 
@@ -281,6 +283,8 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         })()`);
         await menuAction('#open-planner');
         await wait(`runtimeReadProbe.captured`);
+        assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner'].map(selector=>getComputedStyle(document.querySelector(selector)).display==='none')`),
+            [true, true, true, false], 'Session Editor hides every other primary view');
         await evaluate(`document.querySelector('#primary').click()`);
         await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='PAUSED'`);
         const interleaved = JSON.parse(await raw());
@@ -288,6 +292,10 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         await wait(`document.querySelector('#planner h1')?.textContent==='Session Editor'`);
         await click('#planner .planner-back');
         assert.equal(await text('#status'), 'Paused', 'a delayed stale Workspace read cannot replace a newer Timer write');
+        assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner'].map(selector=>getComputedStyle(document.querySelector(selector)).display==='none')`),
+            [true, false, true, true], 'Editor Back restores only the ACTIVE Session Timer');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#primary')`), true,
+            'Editor Back restores keyboard focus to the active Timer');
         assert.equal(await raw(), JSON.stringify(interleaved), 'the delayed read performs no compensating write');
         await evaluate(`navigator.locks.request=runtimeReadProbe.original;delete window.runtimeReadProbe`);
 

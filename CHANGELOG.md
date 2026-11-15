@@ -6,6 +6,14 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 / UX-002 public view isolation:** the existing `hidden`
+  orchestration now reliably removes the Timer container from layout and
+  keyboard interaction while Home, the Session Picker or the Session Editor is
+  active. Focused computed-style coverage verifies isolated Home, Quick Timer,
+  Picker, Editor and ACTIVE Session views across repeated navigation and desktop
+  and narrow viewports. Timer, Runtime, Recovery, Store and navigation state are
+  unchanged. The unreleased application shell advances consistently to PWA v76.
+
 - **EDITOR-001 native Editor interaction fixes:** Workspace Back now uses the
   same dirty-draft and pending-mutation close guard as host navigation and
   restores the originating Home, Quick or Session view without changing Timer,

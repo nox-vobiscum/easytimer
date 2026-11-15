@@ -79,16 +79,17 @@ test('public native entry and Picker orchestration retain identity, ownership an
         'uncertain launch handling must not retry the mutation');
 });
 
-test('central styles and app shell advance together for the public native Workspace', async () => {
+test('central styles isolate hidden primary views and the app shell advances together', async () => {
     const [css, html, worker] = await Promise.all([
         read('src/css/styles.css'), read('src/index.html'), read('src/service-worker.js'),
     ]);
     assert.match(css, /\.native-editor-workspace/);
-    assert.match(html, /css\/styles\.css\?v=75/);
-    assert.match(html, /js\/app\.js\?v=75/);
-    assert.match(worker, /easytimer-shell-v75/);
-    assert.match(worker, /css\/styles\.css\?v=75/);
-    assert.match(worker, /js\/app\.js\?v=75/);
+    assert.match(css, /\.timer\[hidden\]\s*{\s*display:\s*none;/);
+    assert.match(html, /css\/styles\.css\?v=76/);
+    assert.match(html, /js\/app\.js\?v=76/);
+    assert.match(worker, /easytimer-shell-v76/);
+    assert.match(worker, /css\/styles\.css\?v=76/);
+    assert.match(worker, /js\/app\.js\?v=76/);
     assert.match(worker, /js\/editor-workspace\.mjs/);
     assert.doesNotMatch(worker, /planner-v1|planner\.js|portability\.mjs\?v=37/);
 });
