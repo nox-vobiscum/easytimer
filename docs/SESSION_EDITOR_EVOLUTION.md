@@ -1,5 +1,7 @@
 # Session Editor Evolution & Facilitator Panel
 
+> **UX-001 decision update (2026-11-16):** The binding, consolidated library/editor/phase/notes/resources interaction decisions are recorded in [`EDITOR-001_UX-001_DECISIONS_2026-11-16.md`](EDITOR-001_UX-001_DECISIONS_2026-11-16.md). For this UX-001 scope, that later decision record supersedes contradictory exploratory UX wording below (including underline, preview length, link-row editing and save boundaries). It does **not** supersede the existing timer, Schema-2, ACTIVE/recovery, archival or Facilitator Panel contracts. The note-editor library is a preferred candidate only, not a released feature.
+
 **Status:** Strategic direction agreed. The coordinated public Schema-2 cutover
 is implemented locally for independent review but is not committed, merged or
 deployed. One native Workspace now serves as the public Editor, and one native
