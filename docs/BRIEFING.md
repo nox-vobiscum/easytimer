@@ -404,6 +404,7 @@ Operational detail belongs in
 Keep the documentation root small and current:
 
 - [`backlog.md`](backlog.md) — future work and unresolved decisions.
+- [`EDITOR-001_UX-001_DECISIONS_2026-11-16.md`](EDITOR-001_UX-001_DECISIONS_2026-11-16.md) — accepted UX-001 library/editor/notes/resources decisions and remaining integration checks.
 - [`EASYTIMER_UX_KONZEPT_v2.md`](EASYTIMER_UX_KONZEPT_v2.md) — detailed binding
   UX/product decisions.
 - [`DATA-001_RUNDOWN_PORTABILITY.md`](DATA-001_RUNDOWN_PORTABILITY.md) — current
