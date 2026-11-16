@@ -27,6 +27,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | --- | --- | --- | --- |
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
+| PLAN-003 | Optional target total duration for Rundowns | Later / Future idea | Planning aid only; no automatic duration allocation |
 | EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — public Schema-2 cutover implemented locally; independent review and real-browser acceptance open | One native public Editor/library, lifecycle and archive implemented; Facilitator Panel remains open |
 | NANO-001 | Nano-View – Always-on-Top Timer View | Next feature after EDITOR-001 is complete, accepted and production-released; before SW-001 | Secondary Document Picture-in-Picture view of the authoritative active timer; separate approval required |
 | EDITOR-002 | Restore unsaved Workshop-Notizen after reload/crash | Someday / Spike — „für lange Winternächte“ | Explicitly deferred; at most a tiny feasibility spike if a safe, simple approach appears |
@@ -40,6 +41,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | BUG-001 | Fullscreen-safe Workshop Stop confirmation | Released in PWA v67 | Document-modal confirmation replaces the browser-native prompt |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
+| ST-004 | Hybrid countdown and unlimited Session phases | Later / Future idea | Evaluate alongside or after SW-001; one authoritative Session timer |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
 | ADHOC-002 | Minimal Ad-hoc Timer Overlay | After EDITOR-001 including the Facilitator Panel | Ephemeral independent overlay; separate scope and explicit approval required |
 | QT-002 | Optional manual Quick Timer duration entry | Later | Subtraction and contextual controls are delivered; preserve current one-timer simplicity |
@@ -69,6 +71,27 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 **Guardrails:** Cosmetic only; never alter minute inputs, duration semantics, calculations, or stored integer seconds. Handle very long workshops (including 100+ hours) and DE/EN cleanly. Only planned totals use `h` and `min`; live countdowns retain their clock-style representation.
 
 **Status:** Released to staging and production in PWA v65 at commit `56e02b5bc989359b3e1e15f817ec1b3886a7667b`; verified production workflow run [`41302013099`](https://github.com/nox-vobiscum/easytimer/actions/runs/41302013099).
+
+### PLAN-003 — Optional target total duration for Rundowns
+
+**Priority:** Later. **Status:** Future idea only; not part of the current
+EDITOR-001 scope and no implementation is authorized.
+
+Allow a facilitator to define an optional **available time** or **target total
+duration** for a Rundown and compare it with the sum of all already specified
+phase durations. Show the remaining or exceeded amount and recalculate it
+immediately when phase durations change or phases are added or removed. A
+restrained progress indicator may be explored, but Rundowns without a target
+total must remain fully usable.
+
+Missing phase durations must remain visibly distinct from the time already
+planned. Never automatically adjust, distribute or infer phase durations. For
+example, an eight-hour target with six hours and thirty minutes planned and
+three phases still lacking timeboxes would show one hour and thirty minutes
+remaining to allocate while still identifying those incomplete phases.
+
+Before any implementation, review the data model, presentation of an exceeded
+target and interaction with deliberately unlimited phases.
 
 ### EDITOR-001 — Session Editor Evolution & Facilitator Panel
 
@@ -375,6 +398,29 @@ Delivered Session Timer, Session Editor, recovery and navigation increments are 
 Add an optional third timer mode that counts elapsed time upward until explicitly stopped. While it is running, users can record time marks. Marks may optionally receive names, but entering or editing a name must never pause or otherwise interrupt the stopwatch.
 
 Whether marks display absolute elapsed timestamps, intervals between marks, or both remains an open product decision. Interaction design, persistence and recovery behavior also require a separately approved design review. Preserve all existing Quick Timer and Session Timer functionality, and do not introduce this mode by changing their timing semantics.
+
+### ST-004 — Hybrid countdown and unlimited Session phases
+
+**Priority:** Later. **Status:** Future idea only; explicitly outside
+EDITOR-001 and not authorized for implementation. Evaluate alongside or after
+the standalone Stopwatch capability in SW-001.
+
+A Session phase may eventually use either a fixed countdown timebox or an
+explicitly selected unlimited duration. An unlimited phase measures elapsed
+time in stopwatch style and is displayed with an unambiguous infinity symbol
+(`∞`) plus accessible text. An unspecified duration (`-- min`) remains
+incomplete and prevents Session start; it must never implicitly mean unlimited.
+
+When the facilitator deliberately advances from an unlimited phase, retain its
+elapsed time and let the following phase use its own selected timing mode. A
+representative Rundown is: Welcome (15 min) → Keynote (30 min) → Open Discussion
+(unlimited) → Outro (15 min).
+
+Explore reuse of the future standalone Stopwatch capability without creating a
+competing Timer engine. Preserve authoritative Session ownership, Pause/Resume,
+Recovery, lifecycle semantics and compatibility with future synchronization.
+Reporting and statistics implications require evaluation before any design or
+implementation approval.
 
 ### ST-003 — Editing and statistics during a session
 
