@@ -127,3 +127,52 @@
 - Ensure the data contracts for Rundown-wide prepared information, prepared phase notes and **execution-only Workshop-Notizen** remain distinct; do not apply this notes-overlay specification automatically to the Facilitator Panel's live note-capture behavior.
 - Preserve `PLAN-003`, `ST-004`, Nano-View and all other deferred backlog items unchanged.
 - Maintain this document and the canonical session concept together when actual integration is independently approved. No invented implementation-complete claims.
+
+## 13. Subsequent UX-001 decisions — notes overlay and editor (2026-11-16)
+
+**Status:** Explicitly accepted UX behavior, superseding earlier exploratory or conditional presentation suggestions in this file where stated. This is documentation only; no production implementation or release approval.
+
+### Entry, focus and modal navigation
+
+- The specific initiating action determines initial overlay mode: **Notiz hinzufügen / Notiz bearbeiten** opens the shared information overlay *directly in that note's editing mode*, with the text field focused immediately; **Informationen anzeigen** opens in **reading mode**. No unnecessary second click. The same direct intent principle applies to corresponding link editing actions.
+- For a **new** note, place the caret at the **start** of the blank field. For an **existing** note, place the caret at the **end** of its content. Do **not** select all existing text automatically.
+- This focus rule applies on desktop **and mobile**, accepting that deliberate editing may open the soft keyboard; the overlay must remain usable when the keyboard appears.
+- **Übernehmen** finishes only the current note edit and updates the caller-owned rundown draft. It returns to the **read view inside the still-open information overlay**, preserving its current expansion/scroll context as far as practical. Do not automatically close the overlay or force reopening to edit another note/link. Applying an individual link row likewise must not close the shared overlay.
+- **Abbrechen** exits only the currently edited field/row, discards its un-applied buffer and returns to the corresponding read state without closing the overlay or affecting other rows.
+- Close the information overlay by explicit **X/Schließen** or **Escape**, not by clicking outside it. When no genuinely losable un-applied content remains, close immediately and return to the previously opened phase with expansion/scroll position preserved as far as practical.
+- When closing would discard **meaningful, currently present un-applied content**, show **one collective confirmation**, never one per link or field. Already applied caller-owned draft edits survive closing and remain pending until global rundown Save.
+
+### Empty content and destructive confirmation
+
+- The **current contents** determine empty versus populated, **not editing history**. Completely empty content is empty even if text/fields were populated earlier and then cleared again.
+- Closing/dismissing a currently empty new edit does not require confirmation. Never warn merely because a field was once touched.
+- Destructive removal of **currently populated content** needs a deliberate confirmation where loss would otherwise be unprotected; preserve explicit scope and existing higher-level save/discard protections. Do **not** conflate closing an empty edit with permanently discarding previously saved data.
+- **Previously accepted exception for links remains binding:** the per-link trash action removes an existing link **from the caller-owned draft immediately, without an additional per-link confirmation**. That deletion is still reversible via global discard until authoritative rundown Save. Do not silently replace this specific accepted rule with a new trash confirmation.
+- Existing phase deletion rules remain in force: currently empty phase = no confirmation; populated phase = brief confirmation.
+- For an empty phase note, show only a restrained **+ Notiz hinzufügen …** affordance in expanded phase read mode. No permanent blank textarea, rich toolbar, preview box or trash icon while empty.
+
+### Minimal OverType editor geometry and native behavior
+
+- Product Owner confirmed the first working real-Firefox OverType presentation as a suitable general UX basis; minor text-size tuning remains visual acceptance. Visual text-size reference is the comfortable perceived size of ChatGPT at **80% browser zoom**, optionally about 2–3 percentage points larger; translate to appropriate CSS sizing at ordinary browser zoom and preserve browser accessibility scaling, rather than requiring users to change zoom.
+- **Fixed editor frame, not auto-growing textarea:** show approximately **8–10 lines** of editable text initially and throughout editing. Do not increase editor/textarea height for additional content. The edit field alone scrolls internally for long content.
+- Keep the four-button **formatting toolbar fixed at the top** of this editor frame, at its **minimum practical height with no unnecessary padding or extra rows**. The toolbar itself never scrolls with the note text.
+- Keep **Abbrechen / Übernehmen** available below the fixed-height text field. Avoid adding other scrollable regions *inside* the editor frame. On small mobile viewports, adapt to available keyboard-safe space without losing toolbar/actions.
+- Opening a long **existing** note positions caret **and viewport at the end** of the text; new empty notes start at the beginning. The editor itself remains the same fixed size.
+- Use learned/native OverType editor shortcuts, e.g. **Ctrl/Cmd+B** bold and **Ctrl/Cmd+I** italic, and ordinary browser/OS clipboard and undo/redo behavior. No exotic, self-authored shortcut scheme or customization UI. Keep only bold, italic, unordered list, ordered list and ordinary paragraphs/line breaks as previously specified.
+- OverType stays the preferred locally vendored candidate; no self-built engine or automatic third-party update workflow. The actual Firefox spike needed an adapter fix to correctly use browser globals `window.OverType` (constructor) and `window.toolbarButtons` (separate actions); preserve the verified browser export contract in future integration.
+- The corrected standalone spike was able to initialize and show the editor in real Firefox; initial interaction was accepted as a promising basis, **not** a full production acceptance. Security/CSP, actual offline, mobile and wider regression acceptance remain distinct.
+
+### Phase reorder retains complete UI state
+
+- Moving a phase up/down or directly to a chosen position **moves it exactly in its current state**: expanded stays expanded, collapsed stays collapsed, its unsaved field values remain intact and all other phases retain their expansion/edit states.
+- Preserve focus on the relevant used control and the user's useful scroll context as far as feasible. Only its order and **computed** visible phase numbering change. Do not remount/reset fields or collapse any phase merely because it moved.
+
+### Attribution tone
+
+- In addition to required locally shipped full notices, the public **About/FAQ** reference should **warmly and explicitly credit David Miranda for his work on OverType**, conveying appreciation rather than just a mechanical license disclaimer. This is **outside the editor and overlay**; no new third-party runtime dependencies. A normal editorial project link is compatible with an offline-capable locally available notice; it must never be fetched as a runtime dependency.
+
+### Reminder for future implementing agents
+
+- When preflighting `feature/editor-001-data-contract`, known Product Owner-authorized direct GitHub documentation commits are **not mysterious drift**. The previous three are `5ab01e78` (consolidated decisions), `1b80f634` (concept link), and `ed941516` (BRIEFING link). This section was added as a **fourth, explicitly authorized documentation change**; verify the current remote HEAD and reconcile the local clone via a safe fast-forward only after preserving any untracked OverType spike and review ZIP.
+- The local clone may legitimately be behind the remote branch. This alone is **not** a reason to stop or classify the documents as unauthorized modifications. Still stop on **actual conflicts, unexpected commits or dirty tracked files**; never reset, stash, delete, force-push or overwrite to make history fit.
+- Productive code, timer, Schema-2, release packaging and service worker remain outside the authority of this documentation-only change.
