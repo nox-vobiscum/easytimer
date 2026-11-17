@@ -52,6 +52,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | LIVE-001 | Shared Live Timer & Remote Control | Low / Someday-Maybe | After current UX, sync productization and production-release priorities; related to REMOTE-001, separate from Drive backup/sync |
 | VIS-001 | Alternative Timer Visualizations | Candidate / Design Review | Alternate views of the existing timer; visual and overtime behavior remain open |
 | CUSTOM-001 | Optional presentation customization | Someday | Stable core UI and audience-display requirements |
+| I18N-001 | On-demand translation of saved Rundowns | Later / Future idea | Explicit user action to translate a copy of title, phases, prepared notes and other authored content; no automatic mutation on UI language changes |
 | AI-001 | Image-to-Rundown conversion | Someday (low priority) | DATA-001 portability; separate design/feasibility review |
 
 ## Session Planner improvements
@@ -564,6 +565,17 @@ Consider user-configurable colors, progress-bar treatment/visibility, informatio
 **Status:** Someday, low priority.
 
 UX-008 endgame highlighting is implemented locally and always enabled in both timer modes; it is not a pending customization item. A simple global ON/OFF preference remains an optional later refinement. Threshold percentages/tables, custom warning durations, endgame color pickers, flashing and additional warning levels are not planned as part of UX-008. See the [canonical UX-008 record](EASYTIMER_UX_KONZEPT_v2.md#ux-008--shared-timebox-endgame-highlight-approved-implemented-locally).
+
+
+### I18N-001 — On-demand translation of a Rundown
+
+**Priority:** Later / Future idea. **Status:** Parked at Product Owner request, not approved for implementation.
+
+**User need:** A facilitator regularly switches the easyTimer UI between German and English for different teams, and wants a deliberate **Translate / Übersetzen** action to prepare an existing user-authored template or planned execution in the other language, rather than manually translating every title and note.
+
+**Potential scope:** Rundown title, phase titles, prepared rundown-wide and phase notes, and other authored descriptive text as appropriate; resource URLs remain unchanged, and display labels need deliberate treatment. Target languages initially DE/EN. Avoid translating runtime state, IDs, timestamps, durations, categories or captured workshop notes implicitly. Preserve phase identity and the original text unless the user explicitly approves replacing it; favor preview/copy, safe confirmation and offline/free-first feasibility.
+
+**Boundary:** Changing the interface language must **never automatically translate or mutate an existing personal template/execution**. The protected built-in retrospective may display bundled DE/EN content dynamically under the separate EDITOR-001 Pareto constraint. Any translation engine, privacy implications, offline operation, cost and preview UX require a separate future review; do not assume a third-party translation API or subscription.
 
 ## Reliability and browser compatibility
 
