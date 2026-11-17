@@ -274,10 +274,54 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 document.activeElement === phase.querySelector('[data-resource-index="1"] [data-resource-field="label"]'),
                 phase.querySelectorAll('[data-resource-index]').length, nativeWorkspaceFixture.writes];
         })()`), ['true', 'true', true, 2, 0], 'removing a resource preserves disclosure, focuses the surviving row and does not persist');
+        await click('[data-native-phase-id="phase-2"] [data-action="position"]');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, root = f.root;
+            const row = root.querySelector('[data-native-phase-id="phase-2"]');
+            const select = row.querySelector('[data-field="position"]');
+            return [row.querySelector('[data-action="position"]').getAttribute('aria-label'),
+                [...select.options].map(option => option.textContent), select.value,
+                row.querySelector('[data-action="move-position"]').disabled,
+                [...root.querySelectorAll('[data-native-phase-id]')].map(node => node.dataset.nativePhaseId),
+                [...root.querySelectorAll('[data-action="details"]')].map(button => button.getAttribute('aria-expanded')),
+                f.writes];
+        })()`), ['Phase 02 – Change position', ['01 · Opening', '02 · Work'], '2', true,
+            ['phase-1', 'phase-2'], ['true', 'true'], 0], 'position menu is complete, preselected and disclosure-neutral');
+        await field('[data-native-phase-id="phase-2"] [data-field="position"]', '1', 'change');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, row = f.root.querySelector('[data-native-phase-id="phase-2"]');
+            return [[...f.root.querySelectorAll('[data-native-phase-id]')].map(node => node.dataset.nativePhaseId),
+                row.querySelector('[data-action="move-position"]').disabled, f.writes];
+        })()`), [['phase-1', 'phase-2'], false, 0], 'target selection alone does not mutate the draft or Store');
+        await press('Escape', 'Escape', 27);
+        assert.equal(await evaluate(`(() => {
+            const button = nativeWorkspaceFixture.root.querySelector('[data-native-phase-id="phase-2"] [data-action="position"]');
+            return document.activeElement === button && button.getAttribute('aria-expanded') === 'false';
+        })()`), true, 'Escape cancels position selection without mutation');
+        await click('[data-native-phase-id="phase-2"] [data-action="position"]');
+        await field('[data-native-phase-id="phase-2"] [data-field="position"]', '1', 'change');
+        await click('[data-native-phase-id="phase-2"] [data-action="move-position"]');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, root = f.root;
+            const moved = root.querySelector('[data-native-phase-id="phase-2"]');
+            const phase1 = root.querySelector('[data-native-phase-id="phase-1"]');
+            return [[...root.querySelectorAll('[data-native-phase-id]')].map(row => row.dataset.nativePhaseId),
+                [...root.querySelectorAll('[data-action="details"]')].map(button => button.getAttribute('aria-expanded')),
+                document.activeElement === moved.querySelector('[data-action="position"]'),
+                phase1.querySelector('[data-field="notes"]').value,
+                phase1.querySelector('[data-resource-index="1"] [data-resource-field="label"]').value,
+                f.writes];
+        })()`), [['phase-2', 'phase-1'], ['true', 'true'], true, 'Facilitator notes', '   ', 0],
+        'Move reorders once while preserving disclosure, unsaved fields, stable IDs, focus and write-free editing');
+        await action('Move later', '[data-native-phase-id="phase-2"]');
         await action('Move earlier', '[data-native-phase-id="phase-2"]');
-        assert.deepEqual(await evaluate(`nativeWorkspaceFixture.root.querySelectorAll('[data-native-phase-id]')
-            ? [...nativeWorkspaceFixture.root.querySelectorAll('[data-native-phase-id]')].map(row => row.dataset.nativePhaseId) : []`),
-        ['phase-2', 'phase-1'], 'phase reorder retains stable IDs');
+        assert.deepEqual(await evaluate(`(() => {
+            const root = nativeWorkspaceFixture.root;
+            return [[...root.querySelectorAll('[data-native-phase-id]')].map(row => row.dataset.nativePhaseId),
+                [...root.querySelectorAll('[data-action="details"]')].map(button => button.getAttribute('aria-expanded')),
+                document.activeElement === root.querySelector('[data-native-phase-id="phase-2"] [data-action="position"]')];
+        })()`), [['phase-2', 'phase-1'], ['true', 'true'], true],
+        'existing earlier/later controls share the disclosure- and focus-preserving reorder path');
 
         await evaluate(`(() => {
             const f = nativeWorkspaceFixture; f.uncertainOnSet = true; f.hold('templateSave');

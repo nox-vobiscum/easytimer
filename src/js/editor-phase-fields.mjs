@@ -9,6 +9,8 @@ const copy = {
         phaseTitle: 'Each phase needs a title containing 1–120 characters.',
         durationError: 'Enter a whole number from 1 to 6,000 minutes.',
         invalidCategory: 'Choose a supported phase category.',
+        changePosition: position => `Phase ${position} – Change position`,
+        position: 'Position', move: 'Move', cancel: 'Cancel', untitled: 'Untitled phase',
         phaseNotFound: 'This phase is no longer in the draft. Your input has been retained.',
         editFailed: 'The draft could not be updated. Your input has been retained.',
     },
@@ -19,6 +21,8 @@ const copy = {
         phaseTitle: 'Jede Phase benötigt einen Titel mit 1–120 Zeichen.',
         durationError: 'Eine ganze Zahl von 1 bis 6.000 Minuten eingeben.',
         invalidCategory: 'Eine unterstützte Phasenkategorie auswählen.',
+        changePosition: position => `Phase ${position} – Position ändern`,
+        position: 'Position', move: 'Verschieben', cancel: 'Abbrechen', untitled: 'Unbenannte Phase',
         phaseNotFound: 'Diese Phase ist nicht mehr im Entwurf. Deine Eingabe bleibt erhalten.',
         editFailed: 'Der Entwurf konnte nicht geändert werden. Deine Eingabe bleibt erhalten.',
     },
@@ -26,18 +30,32 @@ const copy = {
 
 // One phase's presentation only. The caller owns the current Planner Service
 // draft and adopts edits synchronously; no draft, library or storage is cached.
-export function createNativePhaseFields({ getDraft, onDraftChange, phaseId, language = 'en' }) {
+export function createNativePhaseFields({ getDraft, onDraftChange, onReposition, phaseId, language = 'en' }) {
     if (typeof getDraft !== 'function' || typeof onDraftChange !== 'function'
-        || typeof phaseId !== 'string' || !phaseId.trim() || !copy[language]) {
+        || typeof onReposition !== 'function' || typeof phaseId !== 'string' || !phaseId.trim() || !copy[language]) {
         throw new Error('invalidPhaseFields');
     }
     const row = document.createElement('li');
     row.className = 'native-phase-fields';
     row.dataset.nativePhaseId = phaseId;
     const prefix = `native-phase-${crypto.randomUUID()}`;
-    const number = document.createElement('span');
-    number.className = 'phase-number';
-    number.setAttribute('aria-hidden', 'true');
+    const number = document.createElement('button');
+    number.type = 'button'; number.className = 'phase-number phase-position-button';
+    number.dataset.action = 'position';
+    number.setAttribute('aria-expanded', 'false');
+    number.setAttribute('aria-controls', `${prefix}-position`);
+    const positionPanel = document.createElement('div');
+    positionPanel.id = `${prefix}-position`; positionPanel.className = 'phase-reposition-popover';
+    positionPanel.hidden = true; positionPanel.setAttribute('role', 'group');
+    const positionLabel = document.createElement('label');
+    const positionText = document.createElement('span');
+    const positionSelect = document.createElement('select');
+    positionSelect.dataset.field = 'position';
+    positionLabel.append(positionText, positionSelect);
+    const positionActions = document.createElement('div'); positionActions.className = 'planner-actions';
+    const move = document.createElement('button'); move.type = 'button'; move.dataset.action = 'move-position';
+    const cancelPosition = document.createElement('button'); cancelPosition.type = 'button'; cancelPosition.dataset.action = 'cancel-position';
+    positionActions.append(move, cancelPosition); positionPanel.append(positionLabel, positionActions);
     const titleLabel = document.createElement('label');
     titleLabel.className = 'phase-title';
     const titleText = document.createElement('span');
@@ -76,7 +94,7 @@ export function createNativePhaseFields({ getDraft, onDraftChange, phaseId, lang
     const feedback = document.createElement('p');
     feedback.id = `${prefix}-feedback`; feedback.className = 'planner-feedback native-phase-feedback';
     feedback.dataset.error = 'true'; feedback.setAttribute('role', 'status');
-    row.append(number, titleLabel, durationLabel, actions, details, feedback);
+    row.append(number, titleLabel, durationLabel, actions, details, feedback, positionPanel);
     let errorCode = null;
 
     function showValidationError(code = null) {
@@ -118,7 +136,40 @@ export function createNativePhaseFields({ getDraft, onDraftChange, phaseId, lang
         if (!details.hidden) collapse();
         else { details.hidden = false; disclosure.setAttribute('aria-expanded', 'true'); }
     });
+    function closePosition(restoreFocus = false) {
+        positionPanel.hidden = true; number.setAttribute('aria-expanded', 'false');
+        if (restoreFocus) number.focus({ preventScroll: true });
+    }
+    function openPosition() {
+        const phases = getDraft().template.phases;
+        const index = phases.findIndex(phase => phase.id === phaseId);
+        if (index < 0) { showValidationError('phaseNotFound'); return; }
+        positionSelect.replaceChildren(...phases.map((phase, optionIndex) => {
+            const option = document.createElement('option'); option.value = String(optionIndex + 1);
+            option.textContent = `${String(optionIndex + 1).padStart(2, '0')} · ${phase.title.trim() || copy[language].untitled}`;
+            return option;
+        }));
+        positionSelect.value = String(index + 1); move.disabled = true;
+        positionPanel.hidden = false; number.setAttribute('aria-expanded', 'true');
+        positionSelect.focus({ preventScroll: true });
+    }
+    number.addEventListener('click', () => {
+        if (positionPanel.hidden) openPosition(); else closePosition(true);
+    });
+    positionSelect.addEventListener('change', () => {
+        const index = getDraft().template.phases.findIndex(phase => phase.id === phaseId);
+        move.disabled = Number(positionSelect.value) === index + 1;
+    });
+    move.addEventListener('click', () => {
+        if (move.disabled) return;
+        const position = Number(positionSelect.value);
+        closePosition(); onReposition(phaseId, position);
+    });
+    cancelPosition.addEventListener('click', () => closePosition(true));
     row.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !positionPanel.hidden) {
+            event.preventDefault(); event.stopPropagation(); closePosition(true); return;
+        }
         if (event.key === 'Escape' && !details.hidden) {
             event.preventDefault(); event.stopPropagation(); collapse();
         }
@@ -131,6 +182,7 @@ export function createNativePhaseFields({ getDraft, onDraftChange, phaseId, lang
         categoryText.textContent = text.category;
         disclosure.setAttribute('aria-label', text.details);
         disclosure.title = text.details;
+        positionText.textContent = text.position; move.textContent = text.move; cancelPosition.textContent = text.cancel;
         for (const option of category.options) option.textContent = text[option.value];
         showValidationError(errorCode);
     }
@@ -139,7 +191,8 @@ export function createNativePhaseFields({ getDraft, onDraftChange, phaseId, lang
         const index = phases.findIndex(phase => phase.id === phaseId);
         if (index < 0) { showValidationError('phaseNotFound'); return; }
         const phase = phases[index];
-        number.textContent = String(index + 1);
+        const position = String(index + 1).padStart(2, '0');
+        number.textContent = position; number.setAttribute('aria-label', copy[language].changePosition(position));
         title.value = phase.title;
         duration.value = typeof phase.durationSeconds === 'number'
             ? String(phase.durationSeconds / 60) : phase.durationSeconds;

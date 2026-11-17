@@ -596,6 +596,22 @@ export function createNativeEditorWorkspace({
             details.hidden = false; disclosure.setAttribute('aria-expanded', 'true');
         }
     }
+    function repositionPhase(phaseId, position) {
+        const expanded = expandedPhaseIds();
+        const scroll = { x: window.scrollX, y: window.scrollY };
+        draft = repositionNativeDraftPhase(draft, phaseId, position);
+        render(); restorePhaseDisclosures(expanded);
+        const trigger = root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"] [data-action="position"]`);
+        trigger?.focus({ preventScroll: true });
+        window.scrollTo(scroll.x, scroll.y);
+        if (trigger) {
+            const bounds = trigger.getBoundingClientRect();
+            const viewportHeight = window.visualViewport?.height || window.innerHeight;
+            if (bounds.top < 0 || bounds.bottom > viewportHeight) {
+                trigger.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+        }
+    }
     function renderResourceMutation(phaseId, focusSelector) {
         const expanded = expandedPhaseIds(); expanded.add(phaseId); resourceErrors = new Map();
         render(); restorePhaseDisclosures(expanded);
@@ -663,6 +679,7 @@ export function createNativeEditorWorkspace({
     function renderPhase(phase, index, list) {
         const fields = createNativePhaseFields({
             getDraft: () => draft, onDraftChange: next => { draft = next; }, phaseId: phase.id, language,
+            onReposition: repositionPhase,
         });
         const details = fields.element.querySelector('.native-phase-details');
         details.prepend(el('p', t().indicators(Boolean(phase.notes.trim()), phase.resources.filter(resource => !emptyResource(resource)).length), 'planner-hint'));
@@ -674,8 +691,8 @@ export function createNativeEditorWorkspace({
             draft = operation(); render();
             root.querySelector(`[data-native-phase-id="${CSS.escape(focusId)}"] [data-action="details"]`)?.focus({ preventScroll: true });
         });
-        const earlier = structural(t().earlier, () => repositionNativeDraftPhase(draft, phase.id, index)); earlier.disabled = index === 0;
-        const later = structural(t().later, () => repositionNativeDraftPhase(draft, phase.id, index + 2)); later.disabled = index === draft.template.phases.length - 1;
+        const earlier = button(t().earlier, () => repositionPhase(phase.id, index)); earlier.disabled = index === 0;
+        const later = button(t().later, () => repositionPhase(phase.id, index + 2)); later.disabled = index === draft.template.phases.length - 1;
         const fallback = draft.template.phases[index + 1]?.id || draft.template.phases[index - 1]?.id;
         actions.append(earlier, later, structural(t().removePhase, () => removeNativeDraftPhase(draft, phase.id), fallback));
         details.append(actions); list.append(fields.element);

@@ -27,7 +27,7 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
                 import('/js/editor-template-draft.mjs'),
             ]);
             const fixture = window.nativePhaseFixture = {
-                raw: null, writes: 0, edits: 0, keys: [],
+                raw: null, writes: 0, edits: 0, repositions: 0, keys: [],
                 wasPlannerOpen: document.body.classList.contains('planner-open'),
                 theme: document.documentElement.dataset.theme,
                 originalFocus: document.activeElement,
@@ -67,6 +67,15 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             fixture.fields = ['phase-a', 'phase-b'].map(phaseId => createNativePhaseFields({
                 getDraft: () => fixture.draft,
                 onDraftChange: draft => { fixture.draft = draft; fixture.edits++; },
+                onReposition: (id, position) => {
+                    fixture.repositions++;
+                    fixture.draft = operations.repositionNativeDraftPhase(fixture.draft, id, position);
+                    const ordered = fixture.draft.template.phases.map(phase => fixture.fields
+                        .find(fields => fields.element.dataset.nativePhaseId === phase.id).element);
+                    fixture.list.append(...ordered); fixture.fields.forEach(fields => fields.refresh());
+                    fixture.fields.find(fields => fields.element.dataset.nativePhaseId === id).element
+                        .querySelector('[data-action="position"]').focus({ preventScroll: true });
+                },
                 phaseId, language: 'en',
             }));
             fixture.list.append(...fixture.fields.map(fields => fields.element));
@@ -145,12 +154,39 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             && parseFloat(getComputedStyle(document.activeElement).outlineWidth) > 0`), true,
         'keyboard focus remains visible with the consolidated CSS');
 
-        await evaluate(`(() => {
+        await click(`${row('phase-a')} [data-action="position"]`);
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativePhaseFixture, row = f.fields[0].element;
+            const select = row.querySelector('[data-field="position"]');
+            const popover = row.querySelector('.phase-reposition-popover');
+            return [row.querySelector('[data-action="details"]').getAttribute('aria-expanded'),
+                row.querySelector('[data-action="position"]').getAttribute('aria-label'),
+                [...select.options].map(option => option.textContent), select.value,
+                row.querySelector('[data-action="move-position"]').disabled,
+                getComputedStyle(popover).position, popover.getAttribute('style'),
+                f.draft.template.phases.map(phase => phase.id), f.repositions, f.writes];
+        })()`), ['true', 'Phase 01 – Change position', ['01 · Edited <safe>', '02 · phase-b'], '1', true,
+            'absolute', null, ['phase-a', 'phase-b'], 0, 1],
+        'opening uses central CSS, preserves disclosure and does not edit or persist');
+        await field('phase-a', 'position', '2', 'change');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativePhaseFixture, row = f.fields[0].element;
+            return [f.draft.template.phases.map(phase => phase.id), f.repositions,
+                row.querySelector('[data-action="move-position"]').disabled];
+        })()`), [['phase-a', 'phase-b'], 0, false], 'selecting a target is not a reorder');
+        await key('Escape', 'Escape', 27);
+        assert.equal(await evaluate(`(() => {
+            const button = nativePhaseFixture.fields[0].element.querySelector('[data-action="position"]');
+            return document.activeElement === button && button.getAttribute('aria-expanded') === 'false';
+        })()`), true, 'Escape cancels and restores position-button focus');
+        await click(`${row('phase-a')} [data-action="position"]`);
+        await field('phase-a', 'position', '2', 'change');
+        await click(`${row('phase-a')} [data-action="move-position"]`);
+        assert.deepEqual(await evaluate(`(() => {
             const f = nativePhaseFixture;
-            f.draft = f.operations.repositionNativeDraftPhase(f.draft, 'phase-a', 2);
-            f.list.append(f.fields[1].element, f.fields[0].element);
-            f.fields.forEach(fields => fields.refresh());
-        })()`);
+            return [f.draft.template.phases.map(phase => phase.id), f.repositions, f.writes,
+                document.activeElement === f.fields[0].element.querySelector('[data-action="position"]')];
+        })()`), [['phase-b', 'phase-a'], 1, 1, true], 'Move applies exactly one local draft operation and restores focus');
         await field('phase-a', 'title', 'After reorder');
         assert.deepEqual(await evaluate(`nativePhaseFixture.draft.template.phases.map(phase => [phase.id, phase.title, phase.notes])`), [
             ['phase-b', 'phase-b', 'Notes for phase-b'], ['phase-a', 'After reorder', 'Notes for phase-a'],
@@ -170,17 +206,21 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             await evaluate(`(() => {
                 document.documentElement.dataset.theme = ${JSON.stringify(theme)};
                 nativePhaseFixture.fields.forEach(fields => fields.setLanguage(${JSON.stringify(language)}));
+                nativePhaseFixture.fields[0].element.querySelector('[data-action="position"]').click();
             })()`);
             assert.equal(await evaluate(`document.body.dataset.device === 'smartphone' && matchMedia('(pointer:coarse)').matches`), true);
             assert.equal(await evaluate(`(() => {
                 const row = nativePhaseFixture.fields[0].element;
                 const targets = [...row.querySelectorAll('input, button, select')];
+                const popover = row.querySelector('.phase-reposition-popover').getBoundingClientRect();
                 return document.documentElement.scrollWidth <= innerWidth
+                    && popover.left >= 0 && popover.right <= innerWidth
                     && targets.every(target => {
                         const rect = target.getBoundingClientRect();
                         return rect.width >= 44 && rect.height >= 44 && rect.left >= 0 && rect.right <= innerWidth;
                     });
             })()`), true, `320px targets fit in ${language}/${theme}`);
+            await click(`${row('phase-a')} [data-action="cancel-position"]`);
         }
 
         const confirmed = await evaluate(`(async () => {

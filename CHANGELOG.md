@@ -6,6 +6,15 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 / UX-001 phase repositioning slice:** every native phase now
+  exposes its computed two-digit position as an accessible DE/EN button. Its
+  compact selector lists every current phase by position and title, requires
+  explicit Move, and leaves the draft unchanged on selection, Cancel or Escape.
+  Direct and earlier/later moves share the existing stable-ID draft operation
+  while preserving phase disclosures, unsaved fields, focus and scroll context;
+  only the global Save can persist the result. The unreleased shell advances to
+  PWA v77 without changing Store, Runtime, Recovery or lifecycle contracts.
+
 - **EDITOR-001 / UX-002 public view isolation:** the existing `hidden`
   orchestration now reliably removes the Timer container from layout and
   keyboard interaction while Home, the Session Picker or the Session Editor is

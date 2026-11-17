@@ -134,6 +134,16 @@ native domain. Discarding a draft has no persistence effect. This module has no
 UI, storage or lifecycle operations and is not imported by the public Planner;
 native presentation and the public cutover remain pending.
 
+**UX-001 phase repositioning slice (unreleased):** The public native Workspace
+now exposes each computed two-digit phase position as an accessible DE/EN
+button. Its compact selector shows every current position and phase title,
+preselects the current phase, and changes the draft only after explicit Move.
+Cancel, Escape and target selection are mutation-free. Direct moves and the
+existing earlier/later actions reuse `repositionNativeDraftPhase()` and preserve
+stable IDs, disclosures, unsaved fields and useful focus/scroll context. Store
+persistence still occurs only through global Save. Drag-and-drop, category
+popover and the remaining compact-row redesign remain separate slices.
+
 **Internal PLANNED Execution plan editing (unreleased):**
 `createNativePlannedExecutionService({ writer })` in `editor-planner-service.mjs`
 loads one existing PLANNED Execution with `loadDraft(executionId)`. Its isolated
