@@ -39,6 +39,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | UX-019 | Subtle Start/Resume and Stop Button Accents | Released in PWA v64 | Owner-accepted semantic Start/Resume and Stop accents |
 | UX-015 | Timer View Typography & Information Hierarchy | Session hierarchy released in PWA v66; remaining work open | Quick Timer typography and compact-landscape menu remain open |
 | BUG-001 | Fullscreen-safe Workshop Stop confirmation | Released in PWA v67 | Document-modal confirmation replaces the browser-native prompt |
+| BUG-002 | Session next-phase transition unexpectedly enters recovery lockout | High / Investigate before next runtime release | Owner Firefox observation on local PWA v77 after first Next Phase; root cause unknown; preserve runtime/Store safety |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
 | ST-004 | Hybrid countdown and unlimited Session phases | Later / Future idea | Evaluate alongside or after SW-001; one authoritative Session timer |
@@ -645,6 +646,23 @@ UX-008 endgame highlighting is implemented locally and always enabled in both ti
 **Boundary:** Changing the interface language must **never automatically translate or mutate an existing personal template/execution**. The protected built-in retrospective may display bundled DE/EN content dynamically under the separate EDITOR-001 Pareto constraint. Any translation engine, privacy implications, offline operation, cost and preview UX require a separate future review; do not assume a third-party translation API or subscription.
 
 ## Reliability and browser compatibility
+
+
+### BUG-002 — Session next-phase transition enters recovery lockout (owner report 2026-11-18)
+
+**Priority:** High — investigate promptly before treating the currently unreleased native Session flow as release-ready. **Status:** Reproduction reported by Product Owner; root cause, exact reproducibility, storage/runtime state and regression scope not yet diagnosed. **Not** authorized to change Runtime, Recovery, Store, ownership or clock semantics without a separately scoped investigation and GO.
+
+**Observed steps (Firefox screenshot; exact origin/build beyond current testing context to verify):**
+
+1. Start a Session using the currently tested native Editor/Session flow; example rundown: “Retrospektive Testdingens”, seven phases, first phase “Erste Phase”.
+2. Let the timer run in phase 1, then activate the existing **Next Phase** arrow/button in the bottom-right of the Session Timer.
+3. The UI displays a prominent **“Timer recovery”** banner: **“This session can no longer be changed safely. Reload to retry; stored data was not overwritten.”** At the same time, the timer remains visually rendered with phase **“Erste Phase”**, **“PHASE 1 OF 7”**, countdown **09:48** and status **“Running”** in the captured screenshot; Pause/Stop Workshop appear unavailable/disabled. Exact internal timer advancement and authoritative stored state are **unknown** from the screenshot alone.
+
+**Expected:** The Next Phase command should either safely advance exactly one phase and continue ordinary timekeeping/persistence, or present a precise recoverable state without an unjustified lockout; never silently overwrite newer or conflicting state. Do not weaken recovery/lock protections to hide this symptom.
+
+**Investigation plan (first, separate narrow diagnostic slice, no speculative fix):** Capture exact reproduction and environment (local v77 production build versus deployment; normal/private tab; single vs multiple tab; previous recovery candidates; local/remote revisions, ownership); browser console/error and relevant safe diagnostic logs; native phase-transition orchestration, active Runtime Bridge, Store writer, lock/revision checks and read-only reconciliation. Compare expected transition and persisted runtime snapshot; test first phase-to-second, later transitions, manual/automatic mode, reload/recovery and cross-tab conflicts without corrupting meaningful runs. Determine whether lockout is a legitimate detected conflict or an actual false conflict/regression. Report concrete causal codepath and smallest safe fix with focused regression tests **before** code changes; seek explicit GO. Avoid requesting user to clear localStorage, reset recovery, delete sessions or bypass safeguards before preserving the state.
+
+**Scope:** This is distinct from resolved `BUG-001` (fullscreen Stop), future `UX-017` recovery-candidate management, `REL-001` recovery hardening and the UX-001 compact-phase-row work. **Do not silently bundle the runtime diagnostic/fix into frontend Slice 2.** Preserve the error screenshot/evidence in review notes; screenshot is not committed here. Real manual Firefox acceptance required after any eventual fix.
 
 ### BUG-001 — Fullscreen-safe Workshop Stop confirmation
 
