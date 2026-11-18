@@ -29,6 +29,10 @@ test('internal Workspace uses reviewed native editing and portability boundaries
     assert.match(workspace, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest' \}\)/);
     const phaseFields = await read('src/js/editor-phase-fields.mjs');
     assert.doesNotMatch(phaseFields, /positionPanel\.style\.(?:left|top)/);
+    assert.match(phaseFields, /categoryIconPaths/);
+    assert.match(phaseFields, /categoryPanel\.className = 'phase-category-popover'/);
+    assert.match(phaseFields, /option\.setAttribute\('aria-pressed'/);
+    assert.doesNotMatch(phaseFields, /category\s*=\s*document\.createElement\('select'\)/);
     assert.match(workspace, /serializeEditorTemplate/);
     assert.match(workspace, /reconcileSave/);
     assert.match(workspace, /reconcileDelete/);
@@ -91,11 +95,11 @@ test('central styles isolate hidden primary views and the app shell advances tog
     ]);
     assert.match(css, /\.native-editor-workspace/);
     assert.match(css, /\.timer\[hidden\]\s*{\s*display:\s*none;/);
-    assert.match(html, /css\/styles\.css\?v=77/);
-    assert.match(html, /js\/app\.js\?v=77/);
-    assert.match(worker, /easytimer-shell-v77/);
-    assert.match(worker, /css\/styles\.css\?v=77/);
-    assert.match(worker, /js\/app\.js\?v=77/);
+    assert.match(html, /css\/styles\.css\?v=78/);
+    assert.match(html, /js\/app\.js\?v=78/);
+    assert.match(worker, /easytimer-shell-v78/);
+    assert.match(worker, /css\/styles\.css\?v=78/);
+    assert.match(worker, /js\/app\.js\?v=78/);
     assert.match(worker, /js\/editor-workspace\.mjs/);
     assert.doesNotMatch(worker, /planner-v1|planner\.js|portability\.mjs\?v=37/);
 });

@@ -280,11 +280,14 @@ available across failed or uncertain writes. Partially completed and invalid
 HTTP(S) resources are identified at their fields before any Store write. These
 presentation rules do not change native domain validation, Store records,
 Runtime, Recovery, Active Lock or lifecycle semantics. The corresponding
-unreleased application shell is PWA v77. The first UX-001 phase-row slice adds
+unreleased application shell is PWA v78. The first UX-001 phase-row slice adds
 an explicit two-digit position button and select-then-Move popover to the native
 Workspace. It reuses the stable-ID draft reposition operation, preserves open
 phase details and unsaved draft values, and remains write-free until global
-Save; drag-and-drop and the remaining compact-row redesign are still pending.
+Save. The second slice keeps inline title/duration editing in the compact row,
+moves the five existing categories into an accessible icon popover, and makes
+the final chevron the sole details disclosure. Functional drag-and-drop and the
+remaining Editor redesign are still pending.
 
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.

@@ -464,6 +464,8 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
 .phase-actions button:active:not(:disabled) { background:color-mix(in srgb,var(--accent) 20%,var(--bg)); color:var(--text); }
 .phase-actions button:disabled { opacity:.35; }
 .phase-actions svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.phase-actions [aria-expanded="true"] svg { transform:rotate(180deg); }
+.phase-actions svg { transition:transform .16s ease; }
 .phase-add-controls { display:flex; flex-wrap:wrap; align-items:flex-start; gap:.5rem; }
 .phase-add-controls .add-phase { flex:none; }
 .insert-position-label { flex:0 1 16.25rem; max-width:16.25rem; }
@@ -567,6 +569,16 @@ body.clock-only.presentation main { padding-top:env(safe-area-inset-top); paddin
 .runtime-recovery button { min-height: 44px; margin-block: .25rem; }
 
 /* Internal native phase fields; keep after the shared Planner rules. */
+.native-phase-fields { grid-template-columns:44px minmax(0,1fr) 4.5rem 44px 44px; }
+.phase-category-control { position:relative; min-width:44px; }
+.phase-category-button { display:grid; place-items:center; width:44px; min-width:44px; height:44px; padding:0; border-color:transparent; background:transparent; color:var(--muted); }
+.phase-category-button:hover, .phase-category-button[aria-expanded="true"] { border-color:transparent; background:var(--selected); color:var(--text); }
+.phase-category-button svg, .phase-category-popover svg { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.phase-category-popover { position:absolute; z-index:7; top:calc(100% + 6px); right:0; display:grid; gap:2px; width:min(14rem,calc(100vw - 16px)); padding:.375rem; border:1px solid var(--border); border-radius:.65rem; background:var(--bg); color:var(--text); box-shadow:0 6px 20px color-mix(in srgb,var(--text) 15%,transparent); }
+.phase-category-popover[hidden] { display:none; }
+.phase-category-popover button { display:flex; align-items:center; gap:.5rem; width:100%; min-height:44px; padding:.45rem .55rem; text-align:left; background:transparent; color:var(--text); border-color:transparent; }
+.phase-category-popover button:hover, .phase-category-popover button[aria-pressed="true"] { background:var(--selected); }
+.phase-category-popover button[aria-pressed="true"] { color:var(--accent); font-weight:600; }
 .native-phase-fields .native-phase-details,
 .native-phase-fields .native-phase-feedback { grid-column:1 / -1; }
 .native-phase-fields .native-phase-details[hidden] { display:none; }
@@ -581,6 +593,16 @@ body.clock-only.presentation main { padding-top:env(safe-area-inset-top); paddin
 }
 .native-phase-fields input[aria-invalid="true"],
 .native-phase-fields select[aria-invalid="true"] { border-color:var(--error); }
+.native-phase-fields button[aria-invalid="true"] { border-color:var(--error); }
+
+@container (max-width:20rem) {
+    .native-phase-fields { grid-template-columns:44px minmax(0,1fr) 44px 44px; }
+    .native-phase-fields .phase-number { grid-column:1; grid-row:1; }
+    .native-phase-fields .phase-title { grid-column:2 / -1; grid-row:1; }
+    .native-phase-fields .phase-duration { grid-column:2; grid-row:2; }
+    .native-phase-fields .phase-category-control { grid-column:3; grid-row:2; }
+    .native-phase-fields .phase-actions { grid-column:4; grid-row:2; }
+}
 
 /* Internal native Editor Workspace; it is mounted only by the browser harness until cutover. */
 .native-editor-workspace { width:100%; max-width:58rem; margin:0 auto; container-type:inline-size; }

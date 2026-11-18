@@ -6,6 +6,15 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 / UX-001 compact phase-row slice:** the native Editor keeps its
+  title and duration inputs directly editable in both collapsed and expanded
+  phase rows, moves category selection into a dedicated five-icon DE/EN popover,
+  and reserves the final chevron exclusively for phase details. Category
+  selection, disclosure and existing position controls remain draft-only until
+  global Save, preserve keyboard focus and use responsive 44-pixel controls
+  without a duplicate details selector. The inert drag affordance remains
+  deferred to its feasibility slice. The unreleased shell advances to PWA v78.
+
 - **EDITOR-001 / UX-001 phase repositioning slice:** every native phase now
   exposes its computed two-digit position as an accessible DE/EN button. Its
   compact selector lists every current phase by position and title, requires

@@ -87,15 +87,34 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
                 new URL(sheet.href || 'about:blank').pathname === '/css/styles.css');
             const rules = [...sheet.cssRules].filter(rule => rule.selectorText?.includes('native-phase'));
             const select = rules.find(rule => rule.selectorText === '.native-phase-details select');
-            const hidden = rules.find(rule => rule.selectorText.endsWith('[hidden]'));
+            const hidden = [...sheet.cssRules].find(rule => rule.selectorText === '.phase-category-popover[hidden]');
             const label = rules.find(rule => rule.selectorText.endsWith('label > span'));
-            return [rules.length, select.style.minHeight, hidden.style.display, label.style.clipPath];
-        })()`), [6, '44px', 'none', 'none'], 'all native phase rules parse in the central stylesheet');
+            const row = rules.find(rule => rule.selectorText === '.native-phase-fields');
+            return [Boolean(row), select.style.minHeight, hidden.style.display, label.style.clipPath];
+        })()`), [true, '44px', 'none', 'none'], 'all native phase rules parse in the central stylesheet');
 
         await field('phase-a', 'title', 'Edited <safe>');
         await field('phase-a', 'duration', '17');
         await click(`${row('phase-a')} [data-action="details"]`);
-        await field('phase-a', 'category', 'breakout', 'change');
+        await click(`${row('phase-a')} [data-action="category"]`);
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativePhaseFixture, row = f.fields[0].element;
+            const options = [...row.querySelectorAll('[data-category]')];
+            return [row.querySelector('[data-action="details"]').getAttribute('aria-expanded'),
+                row.querySelector('[data-action="category"]').getAttribute('aria-expanded'),
+                options.map(option => option.textContent), options.map(option => option.getAttribute('aria-pressed')),
+                document.activeElement === row.querySelector('[data-category="presentation"]'), f.writes];
+        })()`), ['true', 'true', ['Uncategorized', 'Presentation', 'Discussion', 'Breakout', 'Break'],
+            ['false', 'true', 'false', 'false', 'false'], true, 1],
+        'category popover opens independently with localized options and selected state');
+        await click(`${row('phase-a')} [data-action="cancel-category"]`);
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativePhaseFixture, row = f.fields[0].element;
+            return [f.draft.template.phases[0].category,
+                document.activeElement === row.querySelector('[data-action="category"]'), f.writes];
+        })()`), ['presentation', true, 1], 'category Cancel restores focus without editing or writing');
+        await click(`${row('phase-a')} [data-action="category"]`);
+        await click(`${row('phase-a')} [data-category="breakout"]`);
         assert.deepEqual(await evaluate(`(() => {
             const f = nativePhaseFixture, a = f.draft.template.phases[0];
             return [a.title, a.durationSeconds, a.category, a.notes, a.resources,
@@ -130,7 +149,7 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             return [document.activeElement === input, input.value, input.selectionStart, input.selectionEnd,
                 row.querySelector('[data-action="details"]').getAttribute('aria-label'),
                 row.querySelector('[role="status"]').textContent];
-        })()`), [true, '1.5', 1, 2, 'Phasendetails', 'Eine ganze Zahl von 1 bis 6.000 Minuten eingeben.']);
+        })()`), [true, '1.5', 1, 2, 'Phasendetails ausblenden', 'Eine ganze Zahl von 1 bis 6.000 Minuten eingeben.']);
         await field('phase-a', 'duration', '999999999999999999999999999999999999');
         await evaluate(`nativePhaseFixture.fields[0].refresh()`);
         assert.deepEqual(await evaluate(`(() => {
@@ -140,16 +159,22 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
         })()`), ['999999999999999999999999999999999999', '999999999999999999999999999999999999'],
         'unsafe numeric input remains exact through a refresh');
         await field('phase-a', 'duration', '18');
-        await evaluate(`document.querySelector(${JSON.stringify(`${row('phase-a')} [data-field="category"]`)}).focus()`);
+        await click(`${row('phase-a')} [data-action="category"]`);
+        await key('Escape', 'Escape', 27);
+        assert.equal(await evaluate(`document.activeElement === nativePhaseFixture.fields[0].element.querySelector('[data-action="category"]')`), true,
+            'category Escape cancels and restores trigger focus');
         await key('Escape', 'Escape', 27);
         assert.equal(await evaluate(`(() => {
             const button = nativePhaseFixture.fields[0].element.querySelector('[data-action="details"]');
             return document.activeElement === button && button.getAttribute('aria-expanded') === 'false';
         })()`), true, 'Escape collapses details and restores focus');
         await key('Enter', 'Enter', 13);
-        assert.equal(await evaluate(`nativePhaseFixture.fields[0].element.querySelector('[data-action="details"]').getAttribute('aria-expanded')`), 'true');
-        await key('Tab', 'Tab', 9);
-        assert.equal(await evaluate(`document.activeElement === nativePhaseFixture.fields[0].element.querySelector('[data-field="category"]')`), true);
+        assert.deepEqual(await evaluate(`(() => {
+            const button = nativePhaseFixture.fields[0].element.querySelector('[data-action="details"]');
+            return [button.getAttribute('aria-expanded'), button.getAttribute('aria-label'),
+                getComputedStyle(button.querySelector('svg')).transform !== 'none'];
+        })()`), ['true', 'Phasendetails ausblenden', true], 'details chevron and accessible state agree');
+        await evaluate(`nativePhaseFixture.fields[0].element.querySelector('[data-action="category"]').focus()`);
         assert.equal(await evaluate(`getComputedStyle(document.activeElement).outlineStyle !== 'none'
             && parseFloat(getComputedStyle(document.activeElement).outlineWidth) > 0`), true,
         'keyboard focus remains visible with the consolidated CSS');
@@ -211,7 +236,7 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             assert.equal(await evaluate(`document.body.dataset.device === 'smartphone' && matchMedia('(pointer:coarse)').matches`), true);
             assert.equal(await evaluate(`(() => {
                 const row = nativePhaseFixture.fields[0].element;
-                const targets = [...row.querySelectorAll('input, button, select')];
+                const targets = [...row.querySelectorAll('input, button, select')].filter(target => target.getClientRects().length);
                 const popover = row.querySelector('.phase-reposition-popover').getBoundingClientRect();
                 return document.documentElement.scrollWidth <= innerWidth
                     && popover.left >= 0 && popover.right <= innerWidth
@@ -221,6 +246,12 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
                     });
             })()`), true, `320px targets fit in ${language}/${theme}`);
             await click(`${row('phase-a')} [data-action="cancel-position"]`);
+            await click(`${row('phase-a')} [data-action="category"]`);
+            assert.equal(await evaluate(`(() => {
+                const panel = nativePhaseFixture.fields[0].element.querySelector('.phase-category-popover').getBoundingClientRect();
+                return document.documentElement.scrollWidth <= innerWidth && panel.left >= 0 && panel.right <= innerWidth;
+            })()`), true, `320px category popover fits in ${language}/${theme}`);
+            await click(`${row('phase-a')} [data-action="cancel-category"]`);
         }
 
         const confirmed = await evaluate(`(async () => {

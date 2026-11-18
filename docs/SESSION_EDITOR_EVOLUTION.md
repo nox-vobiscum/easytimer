@@ -144,6 +144,16 @@ stable IDs, disclosures, unsaved fields and useful focus/scroll context. Store
 persistence still occurs only through global Save. Drag-and-drop, category
 popover and the remaining compact-row redesign remain separate slices.
 
+**UX-001 compact phase-row slice (unreleased):** Native phase title and planned
+minutes remain the single editable controls in the compact row whether details
+are collapsed or expanded. Category selection now uses one accessible icon
+button and a localized five-option popover in that row; no duplicate category
+selector remains in details. The final chevron alone controls disclosure and
+keeps its direction, accessible name and `aria-expanded` state aligned. These
+interactions update only the caller-owned draft until global Save. The proposed
+six-dot handle is deliberately absent until a functional, accessible drag
+feasibility slice is separately approved.
+
 **Internal PLANNED Execution plan editing (unreleased):**
 `createNativePlannedExecutionService({ writer })` in `editor-planner-service.mjs`
 loads one existing PLANNED Execution with `loadDraft(executionId)`. Its isolated

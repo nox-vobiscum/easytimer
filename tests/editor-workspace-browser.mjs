@@ -218,6 +218,24 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         await field('[data-native-phase-id="phase-1"] [data-field="duration"]', '15');
         await field('[data-native-phase-id="phase-2"] [data-field="title"]', 'Second phase');
         await field('[data-native-phase-id="phase-2"] [data-field="duration"]', '20');
+        await click('[data-native-phase-id="phase-1"] [data-action="category"]');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, row = f.root.querySelector('[data-native-phase-id="phase-1"]');
+            return [row.querySelector('[data-action="details"]').getAttribute('aria-expanded'),
+                row.querySelector('[data-action="category"]').getAttribute('aria-expanded'),
+                [...row.querySelectorAll('[data-category]')].map(button => button.textContent),
+                row.querySelector('[data-category="uncategorized"]').getAttribute('aria-pressed'), f.writes];
+        })()`), ['false', 'true', ['Uncategorized', 'Presentation', 'Discussion', 'Breakout', 'Break'], 'true', 0],
+        'collapsed inline category popover is complete, selected and write-free');
+        await click('[data-native-phase-id="phase-1"] [data-category="discussion"]');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, row = f.root.querySelector('[data-native-phase-id="phase-1"]');
+            const trigger = row.querySelector('[data-action="category"]');
+            return [trigger.getAttribute('aria-label'), trigger.getAttribute('aria-expanded'),
+                document.activeElement === trigger,
+                row.querySelector('[data-action="details"]').getAttribute('aria-expanded'), f.writes];
+        })()`), ['Phase category: Discussion', 'false', true, 'false', 0],
+        'category selection updates only the local draft, closes independently and restores focus');
         await click('[data-native-phase-id="phase-1"] [data-action="details"]');
         await click('[data-native-phase-id="phase-2"] [data-action="details"]');
         await field('[data-native-phase-id="phase-1"] [data-field="notes"]', 'Facilitator notes');
