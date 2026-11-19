@@ -407,6 +407,23 @@ No public Session Picker or Direct Launch path uses this service yet.
 - **Known authorized direct-GitHub documentation updates on this feature branch are not unexpected drift:** `5ab01e78`, `1b80f634`, `ed941516`, `1ecbeefa` (earlier UX decisions), `7c32830a` (`I18N-001` backlog) and the commit that adds this consolidation. On a local clone, preflight with `fetch`, compare the real remote HEAD, preserve untracked OverType spike and any review ZIP, and **safe fast-forward only where possible**. Do not halt merely because these known authorized docs are ahead locally; do stop for actual unexpected commits/conflicts/dirty tracked files. No `reset --hard`, destructive cleanup, forced push, overwrite or unapproved merge. Sol's next task must explicitly be told about the authorized documentation delta.
 - **Before any implementation:** inspect current `docs/BRIEFING.md`, `SESSION_EDITOR_EVOLUTION.md`, the 2026-11-16 decision register, this backlog, existing native Workspace/Planner/Store/Runtime files and test gates. Deliver a small **IST → gap → Pareto implementation-slice proposal** with exact file/test scope; **no source edits before explicit GO**. This documentation commit grants no rollout approval.
 
+#### G. Post-action navigation and success feedback for reset-and-save (owner decision 2026-11-19)
+
+**Status:** Accepted future Session Editor / library navigation UX; documentation only, **not part of BUG-002** and no authorization for an immediate implementation. BUG-002's Session-action false-conflict fix is functionally accepted by the Product Owner after real Firefox private-mode NEXT → READY → START, pause/resume, reload and deliberate finish tests; keep that fix separate.
+
+**Observed problem:** When a facilitator deliberately chooses the existing **end/reset-and-save Rundown** outcome (not Delete, Archive, Suspend or a different completion action), the app currently returns to the general landing page without a visible confirmation. This leaves the facilitator unsure whether the reset and Rundown save succeeded and where to find the Rundown next.
+
+**Accepted target behavior:**
+- After **authoritatively confirmed successful completion** of the specific *reset and save Rundown* action, navigate to the **Session Editor's execution/Rundown list**, in the relevant Session context, **not** silently to the generic home/landing page.
+- Bring the affected Rundown/Execution into view or make it readily identifiable in the existing lifecycle group, respecting the actual persisted status and existing library organization.
+- Display a **clearly visible but unobtrusive positive confirmation with a green checkmark** and localized, action-specific text explaining **exactly what succeeded: the Rundown was saved and reset**. Candidate German copy: **“Rundown gespeichert und zurückgesetzt.”** If useful, include the Rundown name. English equivalent required.
+- The checkmark is **success feedback**, not a new saved-state flag, new lifecycle state, archive action or mandatory blocking dialog. Prefer an accessible status announcement (screen readers) that does not steal focus. Do not show success until persistence has been confirmed, and never claim that discarded timer progress was saved.
+- The confirmation for other actions (**Unterbrechen**, **Archivieren**, **Löschen**, **Abschließen** without reset, etc.) must describe their **actual distinct outcomes**. Do not use a generic “Saved” message where it is inaccurate.
+- Preserve the one authoritative Timer/Runtime/Store, recovery/ownership protection, current lifecycle rules and reload behavior. Determine the existing end/reset action's exact persistence and lifecycle semantics from code/contracts **before** specifying the final copy, group placement or navigation trigger. Do not change those semantics as a side effect of UX polish.
+- A future implementation slice should cover desktop/mobile, DE/EN, keyboard/focus, the single-success-message lifecycle, existing filtered/hidden library entries, error/uncertain-write cases and no false success on failure.
+
+**Out of scope here:** Any code change, new runtime state, redesign of confirmation dialogues, BUG-002 change or immediate navigation implementation. This records a Product Owner decision so it is not lost.
+
 ### EDITOR-002 — Unsaved Workshop-Notizen draft recovery („Für lange Winternächte“)
 
 **Priority:** Someday / low — intentionally deferred. **Status:** Open idea, not approved for implementation; optional small feasibility spike only after separate approval.
