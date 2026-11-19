@@ -205,6 +205,10 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         assert.equal(persisted.executions[0].execution.attempt.id, firstAttemptId,
             'subsequent actions preserve the first Attempt identity');
         assert.equal(persisted.activeRuntime.attemptId, firstAttemptId);
+        assert.equal(await text('#status'), 'Paused');
+        assert.equal(await evaluate(`document.querySelector('#runtime-recovery').hidden
+            && !document.querySelector('#primary').disabled`), true,
+        'confirmed PAUSE installs locally without blocking the Timer');
         const pausedRaw = JSON.stringify(persisted);
         await evaluate(`document.dispatchEvent(new Event('visibilitychange'))`);
         assert.equal(await raw(), pausedRaw, 'Display ticks do not persist native runtime');
@@ -312,17 +316,115 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp }) {
         assert.equal(await text('#status'), 'Phase time elapsed');
         assert.equal(await raw(), JSON.stringify(running), 'FINISHED reconciliation remains in memory');
 
+        await evaluate(`(()=>{
+            const set=Storage.prototype.setItem;
+            window.bug002WriteProbe={set,writes:0};
+            Storage.prototype.setItem=function(key,value){
+                if(key===${JSON.stringify(EDITOR_STORAGE_KEY)}) bug002WriteProbe.writes++;
+                return set.call(this,key,value);
+            };
+        })()`);
+
         await click('#next');
-        await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='READY'`);
+        await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.run.currentIndex===1`);
+        assert.deepEqual(await evaluate(`[bug002WriteProbe.writes,
+            JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision,
+            document.querySelector('#runtime-recovery').hidden,
+            document.querySelector('#primary').disabled]`), [1, 5, true, false],
+        'NEXT performs one write and installs phase 2 READY without a blocker');
+        assert.equal(await text('#current-phase'), 'Native second');
+        assert.equal(await text('#status'), 'Ready');
+        await evaluate(`Storage.prototype.setItem=bug002WriteProbe.set;delete window.bug002WriteProbe`);
+        await reload('session', 73_000);
+        assert.equal(await text('#current-phase'), 'Native second', 'reload adopts the committed phase 2');
+        assert.equal(await text('#status'), 'Ready');
+        await evaluate(`(()=>{
+            const set=Storage.prototype.setItem;
+            window.bug002WriteProbe={set,writes:0};
+            Storage.prototype.setItem=function(key,value){
+                if(key===${JSON.stringify(EDITOR_STORAGE_KEY)}) bug002WriteProbe.writes++;
+                return set.call(this,key,value);
+            };
+        })()`);
         await click('#primary');
         await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='RUNNING'`);
+        assert.deepEqual(await evaluate(`[bug002WriteProbe.writes,
+            JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision,
+            document.querySelector('#runtime-recovery').hidden,
+            document.querySelector('#primary').disabled]`), [1, 6, true, false],
+        'later-phase START performs one write and installs RUNNING without a blocker');
+        await click('#primary');
+        await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='PAUSED'`);
+        assert.deepEqual(await evaluate(`[bug002WriteProbe.writes,
+            JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision,
+            document.querySelector('#runtime-recovery').hidden]`), [2, 7, true],
+        'later-phase PAUSE installs after exactly one write');
+        await click('#primary');
+        await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='RUNNING'`);
+        assert.deepEqual(await evaluate(`[bug002WriteProbe.writes,
+            JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision,
+            document.querySelector('#runtime-recovery').hidden]`), [3, 8, true],
+        'later-phase RESUME installs after exactly one write');
         await click('#next');
         await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.run.stage==='COMPLETED'`);
         const completed = JSON.parse(await raw());
+        assert.deepEqual(await evaluate(`[bug002WriteProbe.writes,
+            JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision,
+            document.querySelector('#runtime-recovery').hidden]`), [4, 9, true],
+        'COMPLETE installs after exactly one write');
         await click('#stop-overtime');
         await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='OVERTIME_STOPPED'`);
+        assert.deepEqual(await evaluate(`[bug002WriteProbe.writes,
+            JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision,
+            document.querySelector('#runtime-recovery').hidden]`), [5, 10, true],
+        'STOP_OVERTIME installs after exactly one write');
+        assert.deepEqual(await evaluate(`(()=>{const record=JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)}));
+            return [record.executions[0].execution.attempt.id,record.activeRuntime.attemptId,
+                record.executions[0].execution.attempt.runtimeRunId,record.activeRuntime.run.runId]})()`),
+        ['browser-attempt', 'browser-attempt', 'browser-run', 'browser-run'],
+        'every confirmed action preserves Attempt and Run identity');
+        assert.equal(await evaluate(`navigator.locks.request('easyTimerEditor.v1.active-runtime',
+            {mode:'exclusive',ifAvailable:true},lock=>lock===null)`), true,
+        'confirmed session actions retain the Active Lock');
         assert.equal(await evaluate(`document.activeElement===document.querySelector('#fullscreen')&&!document.activeElement.disabled`), true,
             'Stopping native overtime moves focus to an enabled control');
+        await evaluate(`Storage.prototype.setItem=bug002WriteProbe.set;delete window.bug002WriteProbe`);
+
+        await install(startedRecord());
+        await reload('session', 5000);
+        assert.equal(await evaluate(`(async()=>{
+            const app=await import('./js/app.js');
+            try{app.installNativeRecord(${JSON.stringify(pausedRecord())});return null}
+            catch(error){return error.message}
+        })()`), 'nativeRecordConflict',
+        'an arbitrary same-binding Runtime replacement remains rejected');
+        await evaluate(`(()=>{
+            const locks=navigator.locks, original=locks.request.bind(locks);
+            window.sessionInstallProbe={original,armed:true,writes:0};
+            locks.request=async function(name,options,callback){
+                const result=await original(name,options,callback), probe=window.sessionInstallProbe;
+                if(name!=='easyTimerEditor.v1.write'||!probe.armed) return result;
+                probe.armed=false;probe.writes+=1;
+                const invalid=structuredClone(result);invalid.revision+=1;return invalid;
+            };
+        })()`);
+        await click('#primary');
+        await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime.clock.status==='PAUSED'
+            && !document.querySelector('#runtime-recovery').hidden`);
+        const persistedAfterSessionInstallFailure = await raw();
+        assert.deepEqual(await evaluate(`[sessionInstallProbe.writes,
+            document.querySelector('#primary').disabled,
+            JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).revision]`),
+        [1, true, 5], 'local installation failure blocks after one confirmed session-action write');
+        await evaluate(`document.querySelector('#primary').click()`); await delay(50);
+        assert.equal(await evaluate(`sessionInstallProbe.writes`), 1,
+            'blocked Runtime cannot repeat a confirmed session action');
+        assert.equal(await raw(), persistedAfterSessionInstallFailure);
+        await evaluate(`navigator.locks.request=sessionInstallProbe.original;delete window.sessionInstallProbe`);
+        await reload('session', 6000);
+        assert.equal(await text('#status'), 'Paused',
+            'reload adopts the already committed action after local installation failure');
+        assert.equal(await evaluate(`document.querySelector('#runtime-recovery').hidden`), true);
 
         await install(completed);
         await cdp('Emulation.setTouchEmulationEnabled', { enabled: true });

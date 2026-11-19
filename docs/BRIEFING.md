@@ -280,7 +280,11 @@ available across failed or uncertain writes. Partially completed and invalid
 HTTP(S) resources are identified at their fields before any Store write. These
 presentation rules do not change native domain validation, Store records,
 Runtime, Recovery, Active Lock or lifecycle semantics. The corresponding
-unreleased application shell is PWA v78. The first UX-001 phase-row slice adds
+unreleased application shell is PWA v79. PWA v79 fixes BUG-002 at the App-side
+installation boundary: only the exact result of the immediately confirmed
+authoritative Session action may update a same-binding local Runtime. Ordinary
+record installation remains strict, and no failed installation retries a Store
+write. The first UX-001 phase-row slice adds
 an explicit two-digit position button and select-then-Move popover to the native
 Workspace. It reuses the stable-ID draft reposition operation, preserves open
 phase details and unsaved draft values, and remains write-free until global

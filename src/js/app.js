@@ -6,7 +6,11 @@ import { createRecovery } from './recovery.mjs?v=55';
 import { createEditorActiveTimerLock } from './editor-active-lock.mjs';
 import { createEditorRuntimeBridge } from './editor-runtime-bridge.mjs';
 import { createEditorStoreWriter } from './editor-storage-lock.mjs';
-import { isFirstStartTransitionInRecord, validateEditorStoreRecord } from './editor-storage.mjs';
+import {
+    applyStartedSessionActionInRecord,
+    isFirstStartTransitionInRecord,
+    validateEditorStoreRecord,
+} from './editor-storage.mjs';
 import { createNativeEditorTemplateIntegration } from './editor-template-integration.mjs';
 import {
     createNativePlannerService,
@@ -532,7 +536,7 @@ function blockNativeRuntime() {
     if (nativeRuntime) nativeRuntime.blocked = true;
     recoveryFeedback = 'NATIVE_RUNTIME_ERROR';
 }
-export function installNativeRecord(record) {
+function installNativeRecordWithAuthority(record, confirmedSessionAction = false) {
     if (nativeExit) throw new Error('nativeExitPending');
     if (!nativeRuntime || !editorActiveLock.held) throw new Error('invalidActiveRuntimeBinding');
     const next = activeBinding(record);
@@ -553,10 +557,13 @@ export function installNativeRecord(record) {
     if (next.execution.revision < current.execution.revision
         || next.runtime.runtimeRevision < current.runtime.runtimeRevision) throw new Error('nativeRecordConflict');
     if (next.runtime.runtimeRevision === current.runtime.runtimeRevision) {
-        if (JSON.stringify(next.runtime) !== JSON.stringify(current.runtime)) throw new Error('nativeRecordConflict');
-        nativeRuntime.record = structuredClone(next.record);
-        mode = 'session'; pickerOpen = false;
-        return { status: 'record' };
+        if (JSON.stringify(next.runtime) !== JSON.stringify(current.runtime)) {
+            if (!confirmedSessionAction) throw new Error('nativeRecordConflict');
+        } else {
+            nativeRuntime.record = structuredClone(next.record);
+            mode = 'session'; pickerOpen = false;
+            return { status: 'record' };
+        }
     }
     if (next.runtime.savedAt < current.runtime.savedAt) throw new Error('nativeRecordConflict');
     nativeRuntime.record = structuredClone(next.record);
@@ -564,6 +571,16 @@ export function installNativeRecord(record) {
     timer = structuredClone(next.runtime.clock);
     mode = 'session'; pickerOpen = false;
     return { status: 'runtime' };
+}
+
+export function installNativeRecord(record) {
+    return installNativeRecordWithAuthority(record);
+}
+
+function installConfirmedSessionAction(record, sourceRecord, options) {
+    const expected = applyStartedSessionActionInRecord(sourceRecord, options);
+    if (JSON.stringify(record) !== JSON.stringify(expected)) throw new Error('nativeRecordConflict');
+    return installNativeRecordWithAuthority(record, true);
 }
 
 export async function enterNativeRecord(record) {
@@ -748,15 +765,18 @@ async function persistNativeAction(action, occurredAt) {
                 actionType = current.clock.status === 'READY' ? 'START'
                     : ['RUNNING', 'FINISHED'].includes(current.clock.status) ? 'PAUSE' : 'RESUME';
             }
-            record = await editorBridge.applySessionAction({
+            const sessionAction = {
                 ...common,
                 expectedAttemptId: execution.attempt.id,
                 expectedRunId: execution.attempt.runtimeRunId,
                 actionType,
                 occurredAt,
-            });
+            };
+            const sourceRecord = structuredClone(nativeRuntime.record);
+            record = await editorBridge.applySessionAction(sessionAction);
+            installConfirmedSessionAction(record, sourceRecord, sessionAction);
         }
-        installNativeRecord(record);
+        if (action.type === 'PRIMARY' && execution.attempt === null) installNativeRecord(record);
         recoveryFeedback = '';
     } catch {
         blockNativeRuntime();

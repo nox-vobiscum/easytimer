@@ -6,6 +6,14 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **BUG-002 native Session action installation:** confirmed Session actions now
+  install their exact Store-authoritative result into the local Timer without a
+  false same-binding conflict. NEXT, later-phase START, PAUSE, RESUME, COMPLETE
+  and STOP_OVERTIME retain their Execution, Attempt, Run, revision and Active
+  Lock contracts; arbitrary, stale, foreign and unconfirmed records remain
+  rejected, and local installation failure never retries the write. The
+  unreleased shell advances to PWA v79.
+
 - **EDITOR-001 / UX-001 compact phase-row slice:** the native Editor keeps its
   title and duration inputs directly editable in both collapsed and expanded
   phase rows, moves category selection into a dedicated five-icon DE/EN popover,
@@ -13,7 +21,7 @@ commit, staging and production deployment are distinct events.
   selection, disclosure and existing position controls remain draft-only until
   global Save, preserve keyboard focus and use responsive 44-pixel controls
   without a duplicate details selector. The inert drag affordance remains
-  deferred to its feasibility slice. The unreleased shell advances to PWA v78.
+  deferred to its feasibility slice. This slice advanced the shell to PWA v78.
 
 - **EDITOR-001 / UX-001 phase repositioning slice:** every native phase now
   exposes its computed two-digit position as an accessible DE/EN button. Its

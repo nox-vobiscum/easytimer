@@ -39,7 +39,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | UX-019 | Subtle Start/Resume and Stop Button Accents | Released in PWA v64 | Owner-accepted semantic Start/Resume and Stop accents |
 | UX-015 | Timer View Typography & Information Hierarchy | Session hierarchy released in PWA v66; remaining work open | Quick Timer typography and compact-landscape menu remain open |
 | BUG-001 | Fullscreen-safe Workshop Stop confirmation | Released in PWA v67 | Document-modal confirmation replaces the browser-native prompt |
-| BUG-002 | Session next-phase transition unexpectedly enters recovery lockout | High / Investigate before next runtime release | Owner Firefox observation on local PWA v77 after first Next Phase; root cause unknown; preserve runtime/Store safety |
+| BUG-002 | Session next-phase transition unexpectedly enters recovery lockout | Fix implemented in unreleased PWA v79; Firefox acceptance open | Exact confirmed-action installation fixes the false local conflict without weakening Store/runtime safeguards |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
 | ST-004 | Hybrid countdown and unlimited Session phases | Later / Future idea | Evaluate alongside or after SW-001; one authoritative Session timer |
@@ -669,7 +669,26 @@ UX-008 endgame highlighting is implemented locally and always enabled in both ti
 
 ### BUG-002 — Session next-phase transition enters recovery lockout (owner report 2026-11-18)
 
-**Priority:** High — investigate promptly before treating the currently unreleased native Session flow as release-ready. **Status:** Reproduction reported by Product Owner; root cause, exact reproducibility, storage/runtime state and regression scope not yet diagnosed. **Not** authorized to change Runtime, Recovery, Store, ownership or clock semantics without a separately scoped investigation and GO.
+**Implementation update (2026-11-19):** Root cause confirmed and the narrowly
+approved App-side fix is implemented in unreleased PWA v79; automated regression
+and manual Firefox acceptance remain required before release readiness. The
+authoritative Store successfully committed ordinary native Session actions
+without changing their Runtime binding revision, as designed. The App then
+treated the changed Runtime payload under that stable binding as an arbitrary
+conflict and blocked local controls while leaving the confirmed target in
+storage.
+
+The App now captures the exact source and action options, reconstructs the target
+with the existing authoritative Store transformation, and permits local Runtime
+installation only when the returned confirmed record is byte-for-byte equal to
+that target. Arbitrary, stale, foreign and unconfirmed records retain the
+ordinary strict installer; local installation failure remains blocking and never
+retries the write. No Runtime Bridge, Store, ownership, Recovery, lifecycle or
+timer-engine contract changed.
+
+**Priority:** High. **Status:** Fix implemented locally under the separately
+approved BUG-002 scope; independent review and real Firefox acceptance remain
+open. Runtime, Recovery, Store, ownership and clock semantics are unchanged.
 
 **Observed steps (Firefox screenshot; exact origin/build beyond current testing context to verify):**
 
