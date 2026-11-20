@@ -176,3 +176,12 @@
 - When preflighting `feature/editor-001-data-contract`, known Product Owner-authorized direct GitHub documentation commits are **not mysterious drift**. The previous three are `5ab01e78` (consolidated decisions), `1b80f634` (concept link), and `ed941516` (BRIEFING link). This section was added as a **fourth, explicitly authorized documentation change**; verify the current remote HEAD and reconcile the local clone via a safe fast-forward only after preserving any untracked OverType spike and review ZIP.
 - The local clone may legitimately be behind the remote branch. This alone is **not** a reason to stop or classify the documents as unauthorized modifications. Still stop on **actual conflicts, unexpected commits or dirty tracked files**; never reset, stash, delete, force-push or overwrite to make history fit.
 - Productive code, timer, Schema-2, release packaging and service worker remain outside the authority of this documentation-only change.
+
+# R7 drag interaction update (2026-11-20)
+
+R6 is retained only as a rejected historical UX experiment. The corrected
+framework-free `@dnd-kit/dom@0.5.3` R7 spike passed Product Owner acceptance on
+desktop and real iPhone Safari. Native Schema-2 Editor integration is pending
+independent review and subsequent acceptance. It must keep the numeric position
+chooser, draft-only reorder boundary, stable phase identities and all existing
+Store, Runtime, Recovery and lifecycle contracts.

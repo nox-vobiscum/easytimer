@@ -60,7 +60,7 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             fixture.original = structuredClone(fixture.draft);
             fixture.originalRaw = fixture.raw;
             fixture.root = document.createElement('section'); fixture.root.id = 'native-phase-fixture';
-            fixture.root.className = 'planner';
+            fixture.root.className = 'planner native-editor-workspace';
             fixture.list = document.createElement('ol'); fixture.list.className = 'phase-list';
             fixture.root.append(fixture.list); document.querySelector('main').append(fixture.root);
             document.body.classList.add('planner-open');
@@ -89,9 +89,18 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             const select = rules.find(rule => rule.selectorText === '.native-phase-details select');
             const hidden = [...sheet.cssRules].find(rule => rule.selectorText === '.phase-category-popover[hidden]');
             const label = rules.find(rule => rule.selectorText.endsWith('label > span'));
-            const row = rules.find(rule => rule.selectorText === '.native-phase-fields');
+            const row = rules.find(rule => rule.selectorText === '.phase-list > li.native-phase-fields');
             return [Boolean(row), select.style.minHeight, hidden.style.display, label.style.clipPath];
-        })()`), [true, '44px', 'none', 'none'], 'all native phase rules parse in the central stylesheet');
+        })()`), [true, '44px', 'none', 'none'], 'the native phase grid overrides the shared Planner row with sufficient specificity');
+
+        assert.deepEqual(await evaluate(`(() => {
+            const row = nativePhaseFixture.fields[0].element;
+            const controls = ['drag', 'position', 'title', 'duration', 'category', 'details']
+                .map(name => row.querySelector('[data-action="' + name + '"], [data-field="' + name + '"]'));
+            const columns = getComputedStyle(row).gridTemplateColumns.split(' ').filter(Boolean);
+            const left = controls.map(control => control.getBoundingClientRect().left);
+            return [columns.length, controls.every(Boolean), left.every((value, index) => index === 0 || value > left[index - 1])];
+        })()`), [6, true, true], 'desktop computed grid exposes six controls in visual DOM order');
 
         await field('phase-a', 'title', 'Edited <safe>');
         await field('phase-a', 'duration', '17');
@@ -179,6 +188,11 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
             && parseFloat(getComputedStyle(document.activeElement).outlineWidth) > 0`), true,
         'keyboard focus remains visible with the consolidated CSS');
 
+        await evaluate(`nativePhaseFixture.fields[0].element.querySelector('[data-action="drag"]').focus()`);
+        await key('Enter', 'Enter', 13);
+        assert.equal(await evaluate(`document.activeElement === nativePhaseFixture.fields[0].element.querySelector('[data-field="position"]')`), true,
+            'drag handle Enter opens the existing keyboard position chooser');
+        await key('Escape', 'Escape', 27);
         await click(`${row('phase-a')} [data-action="position"]`);
         assert.deepEqual(await evaluate(`(() => {
             const f = nativePhaseFixture, row = f.fields[0].element;
@@ -219,10 +233,10 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
         assert.deepEqual(await evaluate(`nativePhaseFixture.draft.template.phases.map(phase => phase.resources[0].url)`),
             ['https://example.com/phase-b', 'https://example.com/phase-a']);
 
-        for (const language of ['de', 'en']) for (const theme of ['light', 'dark']) {
+        for (const width of [320, 375, 390, 430]) for (const language of ['de', 'en']) for (const theme of ['light', 'dark']) {
             await cdp('Emulation.setTouchEmulationEnabled', { enabled: true });
             await cdp('Emulation.setDeviceMetricsOverride', {
-                width: 320, height: 640, screenWidth: 320, screenHeight: 640, mobile: true, deviceScaleFactor: 1,
+                width, height: 640, screenWidth: width, screenHeight: 640, mobile: true, deviceScaleFactor: 1,
             });
             for (let attempt = 0; attempt < 100; attempt++) {
                 if (await evaluate(`document.body.dataset.device === 'smartphone' && matchMedia('(pointer:coarse)').matches`)) break;
@@ -238,19 +252,20 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
                 const row = nativePhaseFixture.fields[0].element;
                 const targets = [...row.querySelectorAll('input, button, select')].filter(target => target.getClientRects().length);
                 const popover = row.querySelector('.phase-reposition-popover').getBoundingClientRect();
-                return document.documentElement.scrollWidth <= innerWidth
+                return getComputedStyle(row).gridTemplateColumns.split(' ').filter(Boolean).length === 5
+                    && document.documentElement.scrollWidth <= innerWidth
                     && popover.left >= 0 && popover.right <= innerWidth
                     && targets.every(target => {
                         const rect = target.getBoundingClientRect();
                         return rect.width >= 44 && rect.height >= 44 && rect.left >= 0 && rect.right <= innerWidth;
                     });
-            })()`), true, `320px targets fit in ${language}/${theme}`);
+            })()`), true, `${width}px uses the compact two-line grid in ${language}/${theme}`);
             await click(`${row('phase-a')} [data-action="cancel-position"]`);
             await click(`${row('phase-a')} [data-action="category"]`);
             assert.equal(await evaluate(`(() => {
                 const panel = nativePhaseFixture.fields[0].element.querySelector('.phase-category-popover').getBoundingClientRect();
                 return document.documentElement.scrollWidth <= innerWidth && panel.left >= 0 && panel.right <= innerWidth;
-            })()`), true, `320px category popover fits in ${language}/${theme}`);
+            })()`), true, `${width}px category popover fits in ${language}/${theme}`);
             await click(`${row('phase-a')} [data-action="cancel-category"]`);
         }
 

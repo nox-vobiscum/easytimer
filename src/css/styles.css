@@ -569,7 +569,14 @@ body.clock-only.presentation main { padding-top:env(safe-area-inset-top); paddin
 .runtime-recovery button { min-height: 44px; margin-block: .25rem; }
 
 /* Internal native phase fields; keep after the shared Planner rules. */
-.native-phase-fields { grid-template-columns:44px minmax(0,1fr) 4.5rem 44px 44px; }
+.phase-list > li.native-phase-fields { grid-template-columns:44px 44px minmax(0,1fr) 4.5rem 44px 44px; }
+.phase-list > li.native-phase-fields[data-dnd-dragging] { z-index:20; opacity:1; border:1px solid var(--accent); border-radius:.65rem; background:var(--surface); box-shadow:0 14px 32px color-mix(in srgb,var(--text) 34%,transparent); }
+.phase-list > li.native-phase-fields[data-dnd-placeholder="clone"] { opacity:1; border-color:var(--accent); border-style:dashed; background:color-mix(in srgb,var(--accent) 8%,var(--surface)); box-shadow:none; }
+.phase-list > li.native-phase-fields[data-dnd-placeholder="clone"] > * { visibility:hidden; }
+.phase-drag-handle { display:grid; place-items:center; width:44px; min-width:44px; height:44px; padding:0; border-color:transparent; background:transparent; color:var(--muted); font-size:1.35rem; line-height:1; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+.phase-drag-handle:hover, .phase-drag-handle:focus-visible { border-color:transparent; background:var(--selected); color:var(--text); }
+.phase-drag-handle:active { cursor:grabbing; }
+.native-phase-drag-status { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .phase-category-control { position:relative; min-width:44px; }
 .phase-category-button { display:grid; place-items:center; width:44px; min-width:44px; height:44px; padding:0; border-color:transparent; background:transparent; color:var(--muted); }
 .phase-category-button:hover, .phase-category-button[aria-expanded="true"] { border-color:transparent; background:var(--selected); color:var(--text); }
@@ -595,13 +602,15 @@ body.clock-only.presentation main { padding-top:env(safe-area-inset-top); paddin
 .native-phase-fields select[aria-invalid="true"] { border-color:var(--error); }
 .native-phase-fields button[aria-invalid="true"] { border-color:var(--error); }
 
-@container (max-width:20rem) {
-    .native-phase-fields { grid-template-columns:44px minmax(0,1fr) 44px 44px; }
-    .native-phase-fields .phase-number { grid-column:1; grid-row:1; }
-    .native-phase-fields .phase-title { grid-column:2 / -1; grid-row:1; }
-    .native-phase-fields .phase-duration { grid-column:2; grid-row:2; }
-    .native-phase-fields .phase-category-control { grid-column:3; grid-row:2; }
-    .native-phase-fields .phase-actions { grid-column:4; grid-row:2; }
+/* 4 x 44px actions + 4.5rem duration + a useful title width + grid gaps. */
+@container (max-width:25rem) {
+    .phase-list > li.native-phase-fields { grid-template-columns:44px 44px minmax(0,1fr) 44px 44px; }
+    .native-phase-fields .phase-drag-handle { grid-column:1; grid-row:1; }
+    .native-phase-fields .phase-number { grid-column:2; grid-row:1; }
+    .native-phase-fields .phase-title { grid-column:3 / -1; grid-row:1; }
+    .native-phase-fields .phase-duration { grid-column:3; grid-row:2; }
+    .native-phase-fields .phase-category-control { grid-column:4; grid-row:2; }
+    .native-phase-fields .phase-actions { grid-column:5; grid-row:2; }
 }
 
 /* Internal native Editor Workspace; it is mounted only by the browser harness until cutover. */

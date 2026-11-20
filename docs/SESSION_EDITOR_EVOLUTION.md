@@ -780,6 +780,13 @@ Requirements and boundaries:
 
 These increments may be split or reordered after the detailed UX review. Nothing here authorizes implementation.
 
+The R6 custom Pointer Events drag presentation remains a rejected historical
+experiment. The corrected R7 framework-free dnd-kit spike was accepted by the
+Product Owner on desktop and iPhone Safari. Its native Schema-2 Editor
+integration is now pending independent review and subsequent acceptance; the
+position chooser remains the accessible fallback and global Save remains the
+only persistence boundary.
+
 ## 6. Questions for the later design review
 
 - For the decided expandable-phase layout, which fields remain visible when collapsed, and how should expanded details behave on mobile?

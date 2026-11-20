@@ -23,7 +23,7 @@ test('internal Workspace uses reviewed native editing and portability boundaries
     assert.match(workspace, /createNativePhaseFields/);
     assert.match(workspace, /editNativeTemplateDraft/);
     assert.match(workspace, /repositionNativeDraftPhase/);
-    assert.match(workspace, /function repositionPhase\(phaseId, position\)/);
+    assert.match(workspace, /function repositionPhase\(phaseId, position, focus = 'position', announcement = ''\)/);
     assert.match(workspace, /onReposition: repositionPhase/);
     assert.match(workspace, /bounds\.top < 0 \|\| bounds\.bottom > viewportHeight/);
     assert.match(workspace, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest' \}\)/);
@@ -101,11 +101,11 @@ test('central styles isolate hidden primary views and the app shell advances tog
     ]);
     assert.match(css, /\.native-editor-workspace/);
     assert.match(css, /\.timer\[hidden\]\s*{\s*display:\s*none;/);
-    assert.match(html, /css\/styles\.css\?v=79/);
-    assert.match(html, /js\/app\.js\?v=79/);
-    assert.match(worker, /easytimer-shell-v79/);
-    assert.match(worker, /css\/styles\.css\?v=79/);
-    assert.match(worker, /js\/app\.js\?v=79/);
+    assert.match(html, /css\/styles\.css\?v=80/);
+    assert.match(html, /js\/app\.js\?v=80/);
+    assert.match(worker, /easytimer-shell-v80/);
+    assert.match(worker, /css\/styles\.css\?v=80/);
+    assert.match(worker, /js\/app\.js\?v=80/);
     assert.match(worker, /js\/editor-workspace\.mjs/);
     assert.doesNotMatch(worker, /planner-v1|planner\.js|portability\.mjs\?v=37/);
 });

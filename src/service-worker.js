@@ -1,4 +1,4 @@
-const CACHE_NAME = 'easytimer-shell-v79';
+const CACHE_NAME = 'easytimer-shell-v80';
 const APP_SHELL = [
     './',
     './index.html',
@@ -8,12 +8,14 @@ const APP_SHELL = [
     './privacy.html',
     './js/info.js?v=59',
     './js/header.mjs?v=59',
-    './css/styles.css?v=79',
-    './js/app.js?v=79',
+    './css/styles.css?v=80',
+    './js/app.js?v=80',
     './js/editor-active-lock.mjs',
     './js/editor-domain.mjs',
     './js/editor-launch-service.mjs',
     './js/editor-phase-fields.mjs',
+    './js/editor-phase-drag.mjs',
+    './js/editor-phase-dndkit-vendor.mjs',
     './js/editor-planner-service.mjs',
     './js/editor-portability.mjs',
     './js/editor-runtime-bridge.mjs',
@@ -32,6 +34,7 @@ const APP_SHELL = [
     './js/session.mjs',
     './js/time-visuals.mjs?v=54',
     './manifest.webmanifest',
+    './THIRD_PARTY_NOTICES.txt',
     './assets/branding/favicon.ico',
     './assets/branding/apple-touch-icon.png',
     './assets/branding/android-chrome-192x192.png',

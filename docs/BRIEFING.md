@@ -290,8 +290,13 @@ Workspace. It reuses the stable-ID draft reposition operation, preserves open
 phase details and unsaved draft values, and remains write-free until global
 Save. The second slice keeps inline title/duration editing in the compact row,
 moves the five existing categories into an accessible icon popover, and makes
-the final chevron the sole details disclosure. Functional drag-and-drop and the
-remaining Editor redesign are still pending.
+the final chevron the sole details disclosure. PWA v80 adds the Product Owner
+accepted framework-free dnd-kit interaction behind a dedicated six-dot handle.
+It lazy-loads a locally bundled offline asset only for an editable Workspace,
+uses the same stable-ID draft reposition operation exactly once per confirmed
+drop, and retains the position chooser as its keyboard/precision fallback.
+R6 remains a rejected historical experiment; this native integration is
+pending independent review and browser acceptance.
 
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.

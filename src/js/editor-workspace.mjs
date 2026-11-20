@@ -140,6 +140,8 @@ export function createNativeEditorWorkspace({
     let importCandidate = null; let deleteTarget = null; let deleteTrigger = null;
     let lifecycleRequest = null; let archiveId = null; let closeAfterMutation = null;
     let fileReadId = 0; let resourceErrors = new Map();
+    let phaseDragCleanup = null; let phaseDragToken = 0;
+    let phaseDragAnnouncement = '';
     const t = () => copy[language];
     const library = () => ({ revision: workspace.revision, templates: workspace.templates });
     const currentPlan = (source = draft) => { const { id, ...plan } = source.template; return plan; };
@@ -163,11 +165,13 @@ export function createNativeEditorWorkspace({
     }
     const mutationBlocked = () => mutationBusy || pending !== null;
     function clearEditor({ clearPending = false } = {}) {
+        destroyPhaseDragging();
         draft = null; editorKind = null; baseline = null; resourceErrors = new Map();
         if (clearPending) pending = null;
     }
     function lockRenderedControls() {
         if (!mutationBlocked()) return;
+        destroyPhaseDragging();
         root.querySelectorAll('button, input, select, textarea').forEach(control => { control.disabled = true; });
         if (!mutationBusy) {
             const recheck = root.querySelector('[data-native-recheck]');
@@ -191,6 +195,7 @@ export function createNativeEditorWorkspace({
     }
 
     function deactivate() {
+        destroyPhaseDragging();
         active = false; fileReadId += 1; window.removeEventListener('beforeunload', beforeUnload);
         clearEditor(); workspace = null; importCandidate = null; deleteTarget = null; lifecycleRequest = null; archiveId = null;
         root.replaceChildren(); root.classList.remove('planner', 'native-editor-workspace'); delete root.dataset.nativeEditorWorkspace;
@@ -596,12 +601,18 @@ export function createNativeEditorWorkspace({
             details.hidden = false; disclosure.setAttribute('aria-expanded', 'true');
         }
     }
-    function repositionPhase(phaseId, position) {
+    function destroyPhaseDragging() {
+        phaseDragToken += 1;
+        phaseDragCleanup?.(); phaseDragCleanup = null;
+    }
+    function repositionPhase(phaseId, position, focus = 'position', announcement = '') {
         const expanded = expandedPhaseIds();
         const scroll = { x: window.scrollX, y: window.scrollY };
         draft = repositionNativeDraftPhase(draft, phaseId, position);
+        phaseDragAnnouncement = announcement;
         render(); restorePhaseDisclosures(expanded);
-        const trigger = root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"] [data-action="position"]`);
+        const action = focus === 'drag' ? 'drag' : 'position';
+        const trigger = root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"] [data-action="${action}"]`);
         trigger?.focus({ preventScroll: true });
         window.scrollTo(scroll.x, scroll.y);
         if (trigger) {
@@ -698,6 +709,7 @@ export function createNativeEditorWorkspace({
         details.append(actions); list.append(fields.element);
     }
     function renderEditor() {
+        destroyPhaseDragging();
         const section = el('section'); heading(section);
         const form = el('form'); form.addEventListener('submit', event => { event.preventDefault(); save(); });
         const title = editorKind === 'template' ? (draft.mode === 'create' ? t().newTemplate : t().templateEditor)
@@ -722,7 +734,11 @@ export function createNativeEditorWorkspace({
         const prepared = el('textarea'); prepared.rows = 5; prepared.value = draft.template.preparedInformation;
         prepared.dataset.field = 'prepared'; prepared.addEventListener('input', () => editTemplate({ preparedInformation: prepared.value }));
         form.append(controlLabel(t().prepared, prepared), el('h2', t().phases));
-        const list = el('ol', undefined, 'phase-list'); draft.template.phases.forEach((phase, index) => renderPhase(phase, index, list)); form.append(list);
+        const dragStatus = el('p', phaseDragAnnouncement, 'visually-hidden native-phase-drag-status');
+        phaseDragAnnouncement = '';
+        dragStatus.setAttribute('role', 'status'); dragStatus.setAttribute('aria-live', 'polite');
+        const list = el('ol', undefined, 'phase-list'); draft.template.phases.forEach((phase, index) => renderPhase(phase, index, list));
+        form.append(dragStatus, list);
         form.append(button(t().addPhase, () => {
             const phaseId = createPhaseId(); draft = insertNativeDraftPhase(draft, { phaseId }); render();
             root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"] [data-field="title"]`)?.focus({ preventScroll: true });
@@ -736,6 +752,16 @@ export function createNativeEditorWorkspace({
             clearEditor(); setFeedback('cancelled', false); render(); focusHeading();
         }));
         form.append(actions); section.append(form); root.replaceChildren(section); renderDeleteDialog();
+        if (!mutationBlocked()) {
+            const token = ++phaseDragToken;
+            import('./editor-phase-drag.mjs').then(({ createNativePhaseDragging }) => {
+                if (!active || token !== phaseDragToken || !list.isConnected || mutationBlocked()) return;
+                phaseDragCleanup = createNativePhaseDragging({
+                    list, getDraft: () => draft, onReposition: repositionPhase, language,
+                    announce: message => { if (dragStatus.isConnected) dragStatus.textContent = message; },
+                });
+            }).catch(() => { if (dragStatus.isConnected) dragStatus.textContent = ''; });
+        }
     }
     function renderDeleteDialog() {
         root.querySelector('[data-native-dialog]')?.remove();

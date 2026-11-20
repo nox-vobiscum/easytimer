@@ -10,6 +10,7 @@ const copy = {
         phaseTitle: 'Each phase needs a title containing 1–120 characters.',
         durationError: 'Enter a whole number from 1 to 6,000 minutes.',
         invalidCategory: 'Choose a supported phase category.',
+        drag: title => `Drag ${title}. Press Enter or Space to choose a position.`,
         changePosition: position => `Phase ${position} – Change position`,
         positionFor: (position, title) => `Change position for phase ${position}: ${title}`,
         position: 'Position', move: 'Move', cancel: 'Cancel', untitled: 'Untitled phase',
@@ -24,6 +25,7 @@ const copy = {
         phaseTitle: 'Jede Phase benötigt einen Titel mit 1–120 Zeichen.',
         durationError: 'Eine ganze Zahl von 1 bis 6.000 Minuten eingeben.',
         invalidCategory: 'Eine unterstützte Phasenkategorie auswählen.',
+        drag: title => `${title} verschieben. Mit Eingabe oder Leertaste eine Position auswählen.`,
         changePosition: position => `Phase ${position} – Position ändern`,
         positionFor: (position, title) => `Position für Phase ${position} ändern: ${title}`,
         position: 'Position', move: 'Verschieben', cancel: 'Abbrechen', untitled: 'Unbenannte Phase',
@@ -58,6 +60,9 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
     row.className = 'native-phase-fields';
     row.dataset.nativePhaseId = phaseId;
     const prefix = `native-phase-${crypto.randomUUID()}`;
+    const dragHandle = document.createElement('button');
+    dragHandle.type = 'button'; dragHandle.className = 'phase-drag-handle';
+    dragHandle.dataset.action = 'drag'; dragHandle.textContent = '⠿';
     const number = document.createElement('button');
     number.type = 'button'; number.className = 'phase-number phase-position-button';
     number.dataset.action = 'position';
@@ -119,7 +124,8 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
     const feedback = document.createElement('p');
     feedback.id = `${prefix}-feedback`; feedback.className = 'planner-feedback native-phase-feedback';
     feedback.dataset.error = 'true'; feedback.setAttribute('role', 'status');
-    row.append(number, titleLabel, durationLabel, categoryControl, actions, details, feedback, positionPanel);
+    row.append(dragHandle, number, titleLabel, durationLabel, categoryControl, actions, details, feedback, positionPanel);
+    row._nativePhase = { dragHandle };
     let errorCode = null;
 
     function showValidationError(code = null) {
@@ -195,6 +201,10 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
     number.addEventListener('click', () => {
         if (positionPanel.hidden) openPosition(); else closePosition(true);
     });
+    dragHandle.addEventListener('keydown', event => {
+        if (!['Enter', ' '].includes(event.key)) return;
+        event.preventDefault(); openPosition();
+    });
     positionSelect.addEventListener('change', () => {
         const index = getDraft().template.phases.findIndex(phase => phase.id === phaseId);
         move.disabled = Number(positionSelect.value) === index + 1;
@@ -253,6 +263,8 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
         if (index < 0) { showValidationError('phaseNotFound'); return; }
         const phase = phases[index];
         const position = String(index + 1).padStart(2, '0');
+        dragHandle.setAttribute('aria-label', copy[language].drag(phase.title.trim() || copy[language].untitled));
+        dragHandle.title = dragHandle.getAttribute('aria-label');
         number.textContent = position; number.setAttribute('aria-label', copy[language].changePosition(position));
         positionPanel.setAttribute('aria-label', copy[language].positionFor(position, phase.title.trim() || copy[language].untitled));
         title.value = phase.title;

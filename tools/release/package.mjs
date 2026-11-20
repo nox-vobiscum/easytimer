@@ -7,9 +7,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const sourceRoot = fileURLToPath(new URL('../../src/', import.meta.url));
 export const productionFiles = Object.freeze([
     'about.html', 'faq.html', 'imprint.html', 'privacy.html', 'js/info.js', 'js/header.mjs',
-    'index.html', 'css/styles.css', 'js/app.js',
+    'index.html', 'css/styles.css', 'js/app.js', 'THIRD_PARTY_NOTICES.txt',
     'js/editor-active-lock.mjs', 'js/editor-domain.mjs', 'js/editor-launch-service.mjs',
-    'js/editor-phase-fields.mjs', 'js/editor-planner-service.mjs', 'js/editor-portability.mjs',
+    'js/editor-phase-fields.mjs', 'js/editor-phase-drag.mjs', 'js/editor-phase-dndkit-vendor.mjs',
+    'js/editor-planner-service.mjs', 'js/editor-portability.mjs',
     'js/editor-runtime-bridge.mjs', 'js/editor-storage-lock.mjs', 'js/editor-storage.mjs',
     'js/editor-template-draft.mjs', 'js/editor-template-import.mjs',
     'js/editor-template-integration.mjs', 'js/editor-workspace.mjs', 'js/execution-runtime.mjs',
@@ -45,9 +46,12 @@ export async function validateProduction(root = sourceRoot) {
         const text = contents.get(file).toString();
         if (/\.(?:mjs|js)$/.test(file) && file !== 'service-worker.js') {
             const imports = [...text.matchAll(/^import\s+[\s\S]*?\sfrom\s+['"]([^'"]+)['"]/gm)];
-            check(imports.length === [...text.matchAll(/^\s*import\b/gm)].length, `UNREVIEWED_IMPORT_SYNTAX: ${file}`);
+            const dynamicImports = [...text.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)];
+            check(imports.length + dynamicImports.length === [...text.matchAll(/^\s*import\b/gm)].length,
+                `UNREVIEWED_IMPORT_SYNTAX: ${file}`);
             for (const match of imports) add(file, match[1]);
-            check(!/\bimport\s*\(|\bexport\s+.*?\bfrom\s|^import\s*['"]|\b(?:fetch|importScripts|Worker|WebSocket|XMLHttpRequest)\s*\(/m.test(text), `UNREVIEWED_RUNTIME_LOADING: ${file}`);
+            for (const match of dynamicImports) add(file, match[1]);
+            check(!/\bexport\s+.*?\bfrom\s|^import\s*['"]|\b(?:fetch|importScripts|Worker|WebSocket|XMLHttpRequest)\s*\(/m.test(text), `UNREVIEWED_RUNTIME_LOADING: ${file}`);
             check(!/accounts\.google\.com|www\.googleapis\.com|googleusercontent\.com/.test(text), `GOOGLE_RUNTIME_DEPENDENCY: ${file}`);
         }
         if (file.endsWith('.html') || file === 'js/header.mjs') {

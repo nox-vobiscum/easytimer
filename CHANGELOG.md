@@ -6,6 +6,15 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **EDITOR-001 / UX-001 native phase drag-and-drop:** the accepted framework-free
+  dnd-kit interaction is integrated into the Schema-2 Editor with a dedicated
+  six-dot handle, full-card feedback, neighboring-row displacement and the
+  existing position chooser as its keyboard and precision fallback. A confirmed
+  drop invokes the stable-ID draft reposition operation exactly once; cancel and
+  unchanged drops remain mutation-free. The dependency is locally bundled,
+  offline-cached and documented without changing Store, Runtime or Recovery.
+  The unreleased shell advances to PWA v80 pending independent review.
+
 - **BUG-002 native Session action installation:** confirmed Session actions now
   install their exact Store-authoritative result into the local Timer without a
   false same-binding conflict. NEXT, later-phase START, PAUSE, RESUME, COMPLETE
