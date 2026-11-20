@@ -235,6 +235,28 @@ export async function createRecovery({ storage, tabs, locks, now = () => Date.no
                 throw cause;
             } finally { recovering = false; }
         },
+        async discard(candidateId, accept = () => true) {
+            if (!healthy || recovering || !candidates.some(record => record.contextId === candidateId)) throw new Error('RECOVERY_UNAVAILABLE');
+            recovering = true;
+            const oldRelease = release;
+            let acquired = false;
+            try {
+                acquired = await claim(candidateId);
+                if (!acquired) { activity.set(candidateId, true); throw new Error('CONTEXT_ACTIVE'); }
+                const saved = read(candidateId);
+                if (!healthy || !accept(structuredClone(saved))) throw new Error('STALE_RECOVERY');
+                storage.removeItem(PREFIX + candidateId);
+                candidates = candidates.filter(record => record.contextId !== candidateId);
+                pending = candidates.length > 0;
+                lastSemantic = null;
+                release(); release = oldRelease; acquired = false;
+                return true;
+            } catch (cause) {
+                if (acquired) { release(); release = oldRelease; }
+                lastSemantic = null;
+                throw cause;
+            } finally { recovering = false; }
+        },
         dismiss() { candidates = []; pending = false; },
         close() { release?.(); healthy = false; },
     };

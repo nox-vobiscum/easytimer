@@ -1,0 +1,627 @@
+import {
+    DEFAULT_RUNDOWN_CATEGORY,
+    EDITOR_KINDS,
+    EDITOR_SCHEMA_VERSION,
+    validatePlannedExecution,
+    validateTemplate,
+} from './editor-domain.mjs';
+import {
+    EDITOR_STORE_SCHEMA_VERSION,
+    deleteTemplateInRecord,
+    insertTemplateInRecord,
+    validateEditorStoreRecord,
+    updateTemplateInRecord,
+    updateExecutionPreparedInformationInRecord,
+    updateExecutionWorkshopNotesInRecord,
+    updatePlannedExecutionPlanInRecord,
+} from './editor-storage.mjs';
+
+const fail = code => { throw new Error(code); };
+const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const validationErrors = new Set([
+    'invalidData', 'invalidRevision', 'invalidStoreRevision', 'name', 'phaseTitle',
+    'duration', 'totalLimit', 'phasesRequired', 'invalidCategory', 'invalidNotes',
+    'invalidResource', 'invalidStore', 'invalidLifecycle', 'invalidRuntimeRevision',
+]);
+const storageErrors = new Set([
+    'storageRead', 'storageWrite', 'storageQuota', 'storageUnconfirmed',
+    'storageReadback', 'storageValidation', 'storageBlocked',
+]);
+const lockErrors = new Set(['lockUnavailable', 'lockBusy', 'lockRequest']);
+
+function exactFields(value, fields) {
+    if (!isObject(value)
+        || Object.keys(value).length !== fields.length
+        || fields.some(field => !Object.hasOwn(value, field))) fail('invalidData');
+}
+
+function librarySnapshot(value) {
+    exactFields(value, ['revision', 'templates']);
+    const valid = validateEditorStoreRecord({
+        schemaVersion: EDITOR_STORE_SCHEMA_VERSION,
+        revision: value.revision,
+        templates: value.templates,
+        executions: [],
+        activeRuntime: null,
+    });
+    return { revision: valid.revision, templates: valid.templates };
+}
+
+function libraryFromRecord(record) {
+    return librarySnapshot({ revision: record.revision, templates: record.templates });
+}
+
+function templateFromDraft(draft, revision) {
+    const { id, ...plan } = draft.template;
+    return validateTemplate({
+        schemaVersion: EDITOR_SCHEMA_VERSION,
+        kind: EDITOR_KINDS.TEMPLATE,
+        id,
+        revision,
+        plan,
+    });
+}
+
+function saveOperation(draft) {
+    const valid = validateDraft(draft);
+    if (valid.mode === 'create') {
+        return {
+            kind: 'create',
+            template: templateFromDraft(valid, 1),
+            expectedAggregateRevision: valid.expectedAggregateRevision,
+        };
+    }
+    return {
+        kind: 'update',
+        template: templateFromDraft(valid, valid.expectedTemplateRevision),
+        expectedAggregateRevision: valid.expectedAggregateRevision,
+        expectedTemplateRevision: valid.expectedTemplateRevision,
+    };
+}
+
+function deleteOperation(options) {
+    exactFields(options, ['templateId', 'expectedAggregateRevision', 'expectedTemplateRevision']);
+    return structuredClone({ kind: 'delete', ...options });
+}
+
+function applyTemplateOperation(record, operation) {
+    if (!isObject(operation) || !['create', 'update', 'delete'].includes(operation.kind)) fail('invalidData');
+    if (operation.kind === 'create') {
+        exactFields(operation, ['kind', 'template', 'expectedAggregateRevision']);
+        return insertTemplateInRecord(record, operation);
+    }
+    if (operation.kind === 'update') {
+        exactFields(operation, ['kind', 'template', 'expectedAggregateRevision', 'expectedTemplateRevision']);
+        return updateTemplateInRecord(record, operation);
+    }
+    exactFields(operation, ['kind', 'templateId', 'expectedAggregateRevision', 'expectedTemplateRevision']);
+    return deleteTemplateInRecord(record, operation);
+}
+
+function validateTemplateReconciliation(ticket, expectedOperation, includeDraft) {
+    exactFields(ticket, includeDraft
+        ? ['draft', 'operation', 'source', 'target']
+        : ['operation', 'source', 'target']);
+    const operation = structuredClone(ticket.operation);
+    const source = validateEditorStoreRecord(ticket.source);
+    const target = validateEditorStoreRecord(ticket.target);
+    if (JSON.stringify(operation) !== JSON.stringify(expectedOperation)
+        || JSON.stringify(target) !== JSON.stringify(applyTemplateOperation(source, operation))) fail('invalidData');
+    return {
+        ...(includeDraft ? { draft: validateDraft(ticket.draft) } : {}),
+        operation,
+        source,
+        target,
+    };
+}
+
+function errorOutcome(error, draft) {
+    const code = typeof error?.message === 'string' ? error.message : 'unexpectedError';
+    let type = 'unexpected';
+    if (validationErrors.has(code)) type = 'validation';
+    else if (['conflict', 'duplicateId', 'invalidAttemptBinding',
+        'invalidActiveRuntimeBinding'].includes(code)) type = 'conflict';
+    else if (code === 'templateNotFound' || code === 'executionNotFound' || code === 'phaseNotFound') type = 'missing';
+    else if (storageErrors.has(code)) type = 'storage';
+    else if (lockErrors.has(code)) type = 'lock';
+    return {
+        status: 'error',
+        error: { type, code },
+        ...(draft === undefined ? {} : { draft: structuredClone(draft) }),
+    };
+}
+
+function validateDraft(draft) {
+    exactFields(draft, [
+        'mode', 'expectedAggregateRevision', 'expectedTemplateRevision', 'template',
+    ]);
+    if (!['create', 'update'].includes(draft.mode)
+        || !Number.isSafeInteger(draft.expectedAggregateRevision)
+        || draft.expectedAggregateRevision < 0
+        || !isObject(draft.template)
+        || typeof draft.template.id !== 'string'
+        || !draft.template.id.trim()) fail('invalidData');
+    if (draft.mode === 'create' && draft.expectedTemplateRevision !== null) fail('invalidData');
+    if (draft.mode === 'update'
+        && (!Number.isSafeInteger(draft.expectedTemplateRevision)
+            || draft.expectedTemplateRevision < 1)) fail('invalidRevision');
+    return structuredClone(draft);
+}
+
+export function createNativePlannerService({ integration, createId = () => crypto.randomUUID() } = {}) {
+    if (!integration
+        || ['readWorkspace', 'readLibrary', 'createTemplate', 'updateTemplate', 'deleteTemplate']
+            .some(method => typeof integration[method] !== 'function')
+        || typeof createId !== 'function') fail('invalidPlannerService');
+
+    async function reconcile(ticket, expectedOperation, includeDraft) {
+        const valid = validateTemplateReconciliation(ticket, expectedOperation, includeDraft);
+        const record = validateEditorStoreRecord(await integration.readWorkspace());
+        const raw = JSON.stringify(record);
+        const status = raw === JSON.stringify(valid.target) ? 'confirmed'
+            : raw === JSON.stringify(valid.source) ? 'absent' : 'unresolved';
+        return {
+            status,
+            record,
+            ...(includeDraft ? { draft: valid.draft } : {}),
+            ...(status === 'unresolved'
+                ? { reconciliation: structuredClone(valid) }
+                : { library: libraryFromRecord(record) }),
+        };
+    }
+
+    return Object.freeze({
+        async loadWorkspace() {
+            try {
+                return {
+                    status: 'success',
+                    workspace: validateEditorStoreRecord(await integration.readWorkspace()),
+                };
+            } catch (error) {
+                return errorOutcome(error);
+            }
+        },
+
+        async loadLibrary() {
+            try {
+                return { status: 'success', library: librarySnapshot(await integration.readLibrary()) };
+            } catch (error) {
+                return errorOutcome(error);
+            }
+        },
+
+        prepareNewDraft(library, templateId) {
+            try {
+                const valid = librarySnapshot(library);
+                const id = templateId === undefined ? createId() : templateId;
+                if (typeof id !== 'string' || !id.trim()) fail('invalidData');
+                return {
+                    status: 'success',
+                    draft: {
+                        mode: 'create',
+                        expectedAggregateRevision: valid.revision,
+                        expectedTemplateRevision: null,
+                        template: {
+                            id,
+                            name: '',
+                            category: DEFAULT_RUNDOWN_CATEGORY,
+                            transitionMode: 'manual',
+                            preparedInformation: '',
+                            phases: [],
+                        },
+                    },
+                };
+            } catch (error) {
+                return errorOutcome(error);
+            }
+        },
+
+        prepareEditDraft(library, templateId) {
+            try {
+                const valid = librarySnapshot(library);
+                if (typeof templateId !== 'string' || !templateId.trim()) fail('invalidData');
+                const selected = valid.templates.find(template => template.id === templateId);
+                if (!selected) fail('templateNotFound');
+                return {
+                    status: 'success',
+                    draft: {
+                        mode: 'update',
+                        expectedAggregateRevision: valid.revision,
+                        expectedTemplateRevision: selected.revision,
+                        template: { id: selected.id, ...structuredClone(selected.plan) },
+                    },
+                };
+            } catch (error) {
+                return errorOutcome(error);
+            }
+        },
+
+        async saveDraft(draft) {
+            let valid;
+            try {
+                valid = validateDraft(draft);
+                const record = valid.mode === 'create'
+                    ? await integration.createTemplate(valid.template, {
+                        expectedAggregateRevision: valid.expectedAggregateRevision,
+                    })
+                    : await integration.updateTemplate(valid.template, {
+                        expectedAggregateRevision: valid.expectedAggregateRevision,
+                        expectedTemplateRevision: valid.expectedTemplateRevision,
+                    });
+                return { status: 'success', library: libraryFromRecord(record) };
+            } catch (error) {
+                const result = errorOutcome(error, valid ?? draft);
+                if (valid && error?.reconciliation) {
+                    return {
+                        ...result,
+                        status: 'uncertain',
+                        reconciliation: structuredClone({ draft: valid, ...error.reconciliation }),
+                    };
+                }
+                return result;
+            }
+        },
+
+        async reconcileSave(ticket) {
+            let valid;
+            try {
+                const draft = validateDraft(ticket?.draft);
+                valid = validateTemplateReconciliation(ticket, saveOperation(draft), true);
+                return await reconcile(valid, valid.operation, true);
+            } catch (error) {
+                return {
+                    ...errorOutcome(error, valid?.draft),
+                    status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}),
+                };
+            }
+        },
+
+        async deleteTemplate(options = {}) {
+            let operation;
+            try {
+                operation = deleteOperation(options);
+                const { templateId, expectedAggregateRevision, expectedTemplateRevision } = operation;
+                const record = await integration.deleteTemplate(templateId, {
+                    expectedAggregateRevision,
+                    expectedTemplateRevision,
+                });
+                return { status: 'success', library: libraryFromRecord(record) };
+            } catch (error) {
+                const result = errorOutcome(error);
+                if (operation && error?.reconciliation) {
+                    return {
+                        ...result,
+                        status: 'uncertain',
+                        reconciliation: structuredClone(error.reconciliation),
+                    };
+                }
+                return result;
+            }
+        },
+
+        async reconcileDelete(ticket) {
+            let valid;
+            try {
+                if (!isObject(ticket?.operation) || ticket.operation.kind !== 'delete') fail('invalidData');
+                const { kind, ...options } = ticket.operation;
+                const operation = deleteOperation(options);
+                valid = validateTemplateReconciliation(ticket, operation, false);
+                return await reconcile(valid, valid.operation, false);
+            } catch (error) {
+                return {
+                    ...errorOutcome(error),
+                    status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}),
+                };
+            }
+        },
+    });
+}
+
+// Reuse the existing draft operations' `template` slot for an editable plan.
+// It is not a Template entity: only this explicit mapping may persist it to an
+// existing Execution, with Execution identity/revisions and no Template CRUD.
+function executionDraftOptions(draft) {
+    exactFields(draft, ['executionId', 'expectedAggregateRevision', 'expectedExecutionRevision', 'template']);
+    if (typeof draft.executionId !== 'string' || !draft.executionId.trim()
+        || !isObject(draft.template) || draft.template.id !== draft.executionId) fail('invalidData');
+    const { id, ...currentPlan } = draft.template;
+    return {
+        executionId: id,
+        expectedAggregateRevision: draft.expectedAggregateRevision,
+        expectedExecutionRevision: draft.expectedExecutionRevision,
+        currentPlan,
+    };
+}
+
+export function createNativePlannedExecutionService({ writer } = {}) {
+    if (!writer || typeof writer.read !== 'function' || typeof writer.write !== 'function') fail('invalidPlannerService');
+    const selected = (record, executionId) => {
+        const entry = record.executions.find(entry => entry.execution.id === executionId);
+        if (!entry) fail('executionNotFound');
+        if (entry.execution.lifecycle !== 'planned') fail('invalidLifecycle');
+        return validatePlannedExecution(entry.execution);
+    };
+    return Object.freeze({
+        async loadDraft(executionId) {
+            try {
+                if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+                const record = await writer.read();
+                const execution = selected(record, executionId);
+                return { status: 'success', draft: {
+                    executionId,
+                    expectedAggregateRevision: record.revision,
+                    expectedExecutionRevision: execution.revision,
+                    template: { id: executionId, ...structuredClone(execution.currentPlan) },
+                } };
+            } catch (error) { return errorOutcome(error); }
+        },
+        async saveDraft(draft) {
+            let snapshot;
+            try { snapshot = structuredClone(draft); }
+            catch { return { status: 'error', error: { type: 'validation', code: 'invalidData' } }; }
+            let source = null;
+            let target = null;
+            try {
+                const options = executionDraftOptions(snapshot);
+                const record = await writer.write(current => {
+                    source = structuredClone(current);
+                    target = updatePlannedExecutionPlanInRecord(current, options);
+                    return target;
+                });
+                return { status: 'success', record, execution: selected(record, options.executionId) };
+            } catch (error) {
+                const result = errorOutcome(error, snapshot ?? draft);
+                if (target !== null && ['storageUnconfirmed', 'storageReadback', 'lockRequest'].includes(error?.message)) {
+                    return { ...result, status: 'uncertain', reconciliation: structuredClone({ draft: snapshot, source, target }) };
+                }
+                return result;
+            }
+        },
+        async reconcileSave(ticket) {
+            let valid;
+            try {
+                exactFields(ticket, ['draft', 'source', 'target']);
+                const draft = structuredClone(ticket.draft);
+                const options = executionDraftOptions(draft);
+                const source = validateEditorStoreRecord(ticket.source);
+                const target = validateEditorStoreRecord(ticket.target);
+                if (JSON.stringify(target) !== JSON.stringify(updatePlannedExecutionPlanInRecord(source, options))) fail('invalidData');
+                valid = { draft, source, target };
+                const record = await writer.read();
+                const raw = JSON.stringify(record);
+                const status = raw === JSON.stringify(target) ? 'confirmed'
+                    : raw === JSON.stringify(source) ? 'absent' : 'unresolved';
+                return { status, record, draft, ...(status === 'unresolved'
+                    ? { reconciliation: structuredClone(valid) }
+                    : { execution: selected(record, options.executionId) }) };
+            } catch (error) {
+                return { ...errorOutcome(error, valid?.draft), status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}) };
+            }
+        },
+    });
+}
+
+function preparedInformationDraftOptions(draft) {
+    exactFields(draft, [
+        'executionId', 'expectedLifecycle', 'expectedAggregateRevision',
+        'expectedExecutionRevision', 'expectedRuntimeRevision', 'expectedAttemptId',
+        'expectedRunId', 'preparedInformation', 'phases',
+    ]);
+    return structuredClone(draft);
+}
+
+export function createNativeExecutionInformationService({ writer } = {}) {
+    if (!writer || typeof writer.read !== 'function' || typeof writer.write !== 'function') fail('invalidPlannerService');
+
+    function selected(record, executionId) {
+        const entry = record.executions.find(entry => entry.execution.id === executionId);
+        if (!entry) fail('executionNotFound');
+        if (!['active', 'suspended'].includes(entry.execution.lifecycle)) fail('invalidLifecycle');
+        return entry;
+    }
+
+    function draftFromRecord(record, executionId) {
+        const entry = selected(record, executionId);
+        const { execution, suspendedCheckpoint } = entry;
+        const expectedRunId = execution.lifecycle === 'active'
+            ? record.activeRuntime.run.runId
+            : suspendedCheckpoint?.run.runId ?? null;
+        return {
+            executionId,
+            expectedLifecycle: execution.lifecycle,
+            expectedAggregateRevision: record.revision,
+            expectedExecutionRevision: execution.revision,
+            expectedRuntimeRevision: execution.runtimeRevision,
+            expectedAttemptId: execution.attempt?.id ?? null,
+            expectedRunId,
+            preparedInformation: execution.currentPlan.preparedInformation,
+            phases: execution.currentPlan.phases.map(phase => ({
+                phaseId: phase.id,
+                notes: phase.notes,
+                resources: structuredClone(phase.resources),
+            })),
+        };
+    }
+
+    return Object.freeze({
+        async loadDraft(executionId) {
+            try {
+                if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+                const record = await writer.read();
+                return { status: 'success', draft: draftFromRecord(record, executionId) };
+            } catch (error) { return errorOutcome(error); }
+        },
+
+        async saveDraft(draft) {
+            let snapshot;
+            try { snapshot = structuredClone(draft); }
+            catch { return { status: 'error', error: { type: 'validation', code: 'invalidData' } }; }
+            let source = null;
+            let target = null;
+            try {
+                const options = preparedInformationDraftOptions(snapshot);
+                const record = await writer.write(current => {
+                    source = structuredClone(current);
+                    target = updateExecutionPreparedInformationInRecord(current, options);
+                    return target;
+                });
+                return {
+                    status: 'success',
+                    record,
+                    execution: structuredClone(selected(record, options.executionId).execution),
+                };
+            } catch (error) {
+                const result = errorOutcome(error, snapshot ?? draft);
+                if (target !== null && ['storageUnconfirmed', 'storageReadback', 'lockRequest'].includes(error?.message)) {
+                    return { ...result, status: 'uncertain', reconciliation: structuredClone({
+                        draft: snapshot, source, target,
+                    }) };
+                }
+                return result;
+            }
+        },
+
+        async reconcileSave(ticket) {
+            let valid;
+            try {
+                exactFields(ticket, ['draft', 'source', 'target']);
+                const draft = preparedInformationDraftOptions(ticket.draft);
+                const source = validateEditorStoreRecord(ticket.source);
+                const target = validateEditorStoreRecord(ticket.target);
+                if (JSON.stringify(target)
+                    !== JSON.stringify(updateExecutionPreparedInformationInRecord(source, draft))) fail('invalidData');
+                valid = { draft, source, target };
+                const record = await writer.read();
+                const raw = JSON.stringify(record);
+                const status = raw === JSON.stringify(target) ? 'confirmed'
+                    : raw === JSON.stringify(source) ? 'absent' : 'unresolved';
+                return {
+                    status,
+                    record,
+                    draft,
+                    ...(status === 'unresolved'
+                        ? { reconciliation: structuredClone(valid) }
+                        : { execution: structuredClone(selected(record, draft.executionId).execution) }),
+                };
+            } catch (error) {
+                return {
+                    ...errorOutcome(error, valid?.draft),
+                    status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}),
+                };
+            }
+        },
+    });
+}
+
+function workshopNotesDraftOptions(draft) {
+    exactFields(draft, [
+        'executionId', 'expectedLifecycle', 'expectedAggregateRevision',
+        'expectedExecutionRevision', 'expectedRuntimeRevision', 'expectedAttemptId',
+        'expectedRunId', 'workshopNotes',
+    ]);
+    return structuredClone(draft);
+}
+
+export function createNativeExecutionWorkshopNotesService({ writer } = {}) {
+    if (!writer || typeof writer.read !== 'function' || typeof writer.write !== 'function') fail('invalidPlannerService');
+
+    function selected(record, executionId) {
+        const entry = record.executions.find(entry => entry.execution.id === executionId);
+        if (!entry) fail('executionNotFound');
+        if (!['active', 'suspended'].includes(entry.execution.lifecycle)) fail('invalidLifecycle');
+        return entry;
+    }
+
+    function draftFromRecord(record, executionId) {
+        const entry = selected(record, executionId);
+        const { execution, suspendedCheckpoint } = entry;
+        const expectedRunId = execution.lifecycle === 'active'
+            ? record.activeRuntime.run.runId
+            : suspendedCheckpoint?.run.runId ?? null;
+        return {
+            executionId,
+            expectedLifecycle: execution.lifecycle,
+            expectedAggregateRevision: record.revision,
+            expectedExecutionRevision: execution.revision,
+            expectedRuntimeRevision: execution.runtimeRevision,
+            expectedAttemptId: execution.attempt?.id ?? null,
+            expectedRunId,
+            workshopNotes: structuredClone(execution.workshopNotes),
+        };
+    }
+
+    return Object.freeze({
+        async loadDraft(executionId) {
+            try {
+                if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+                const record = await writer.read();
+                return { status: 'success', draft: draftFromRecord(record, executionId) };
+            } catch (error) { return errorOutcome(error); }
+        },
+
+        async saveDraft(draft) {
+            let snapshot;
+            try { snapshot = structuredClone(draft); }
+            catch { return { status: 'error', error: { type: 'validation', code: 'invalidData' } }; }
+            let source = null;
+            let target = null;
+            try {
+                const options = workshopNotesDraftOptions(snapshot);
+                const record = await writer.write(current => {
+                    source = structuredClone(current);
+                    target = updateExecutionWorkshopNotesInRecord(current, options);
+                    return target;
+                });
+                return {
+                    status: 'success',
+                    record,
+                    execution: structuredClone(selected(record, options.executionId).execution),
+                };
+            } catch (error) {
+                const result = errorOutcome(error, snapshot ?? draft);
+                if (target !== null && ['storageUnconfirmed', 'storageReadback', 'lockRequest'].includes(error?.message)) {
+                    return { ...result, status: 'uncertain', reconciliation: structuredClone({
+                        draft: snapshot, source, target,
+                    }) };
+                }
+                return result;
+            }
+        },
+
+        async reconcileSave(ticket) {
+            let valid;
+            try {
+                exactFields(ticket, ['draft', 'source', 'target']);
+                const draft = workshopNotesDraftOptions(ticket.draft);
+                const source = validateEditorStoreRecord(ticket.source);
+                const target = validateEditorStoreRecord(ticket.target);
+                if (JSON.stringify(target)
+                    !== JSON.stringify(updateExecutionWorkshopNotesInRecord(source, draft))) fail('invalidData');
+                valid = { draft, source, target };
+                const record = await writer.read();
+                const raw = JSON.stringify(record);
+                const status = raw === JSON.stringify(target) ? 'confirmed'
+                    : raw === JSON.stringify(source) ? 'absent' : 'unresolved';
+                return {
+                    status,
+                    record,
+                    draft,
+                    ...(status === 'unresolved'
+                        ? { reconciliation: structuredClone(valid) }
+                        : { execution: structuredClone(selected(record, draft.executionId).execution) }),
+                };
+            } catch (error) {
+                return {
+                    ...errorOutcome(error, valid?.draft),
+                    status: valid ? 'unresolved' : 'error',
+                    ...(valid ? { reconciliation: structuredClone(valid) } : {}),
+                };
+            }
+        },
+    });
+}

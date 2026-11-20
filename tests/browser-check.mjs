@@ -5,22 +5,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { checkPlanner } from './planner-browser.mjs';
-import { checkSession } from './session-browser.mjs';
-import { checkTimeVisuals } from './time-visuals-browser.mjs';
-import { checkClockView } from './clock-view-browser.mjs';
-import { checkAutomaticSession } from './automatic-session-browser.mjs';
+import { checkNativePhaseFields } from './editor-phase-fields-browser.mjs';
+import { checkNativeEditorWorkspace } from './editor-workspace-browser.mjs';
 import { checkMenuPolish } from './menu-browser.mjs';
-import { checkRundownEntry } from './rundown-entry-browser.mjs';
-import { checkDirectLaunch } from './direct-launch-browser.mjs';
 import { checkRecovery, checkRecoveryCorrections } from './recovery-browser.mjs';
-import { checkSessionRecovery } from './session-recovery-browser.mjs';
-import { checkNavigation } from './navigation-browser.mjs';
+import { checkEditorRuntimeApp } from './editor-runtime-app-browser.mjs';
+import { checkPublicEditorCutover } from './public-editor-cutover-browser.mjs';
 import { checkSubtraction } from './subtraction-browser.mjs';
 import { configureQuickTimebox } from './quick-timebox.mjs';
-import { checkTimeboxControls } from './timebox-browser.mjs';
-import { checkSessionNavigation } from './session-navigation-browser.mjs';
-import { checkPortability } from './portability-browser.mjs';
 import { parseTimeTravelOptions, runTimeTravel, timeTravelHelp } from './time-travel.mjs';
 
 const timeTravelOptions=parseTimeTravelOptions(process.argv.slice(2));
@@ -103,6 +95,19 @@ try {
     async function configure(h, m, s) {
         await configureQuickTimebox(evaluate, (h * 3600 + m * 60 + s) * 1000);
     }
+    async function assertPrimaryView(expected, label) {
+        const state = await evaluate(`(() => {
+            const views={home:'#home-view',quick:'#timer-view',picker:'#session-picker',editor:'#planner'};
+            const entries=Object.entries(views).map(([name,selector])=>{
+                const node=document.querySelector(selector);
+                return [name,{hidden:node.hidden,display:getComputedStyle(node).display,focused:node.contains(document.activeElement)}];
+            });
+            return Object.fromEntries(entries);
+        })()`);
+        assert.deepEqual(Object.entries(state).filter(([, value]) => value.display !== 'none').map(([name]) => name), [expected], label);
+        assert.equal(Object.entries(state).some(([name, value]) => name !== expected && value.focused), false,
+            `${label}: hidden primary views retain no focus`);
+    }
     async function checkMenu(state) {
         const before=await evaluate(`({status:document.querySelector('#status').textContent,time:document.querySelector('#time').textContent,budget:document.querySelector('#time-budget').textContent,presentation:document.body.classList.contains('presentation')})`);
         assert.equal(await evaluate(`document.querySelectorAll('#menu-toggle').length===1&&document.querySelectorAll('#preferences').length===1&&document.querySelectorAll('button[data-language]').length===2&&document.querySelectorAll('button[data-theme]').length===3`),true,'One shared menu and preferences');
@@ -131,10 +136,13 @@ try {
         await evaluate(`document.querySelector('#menu-toggle').focus()`);
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-quick')`),true,'Tab reaches Quick Timer mode choice first');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-home')`),true,'Tab reaches Home first');
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-session')`),true,'Tab reaches Session Timer mode choice next');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-quick')`),true,'Tab reaches Quick Timer mode choice next');
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-session')`),true,'Tab reaches Session Timer mode choice after Quick Timer');
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
         assert.equal(await evaluate(`document.activeElement===document.querySelector('#open-planner')&&getComputedStyle(document.activeElement).outlineStyle!=='none'`),true,'Planner follows modes with visible keyboard focus');
@@ -156,19 +164,75 @@ try {
         if (await evaluate(`document.querySelector('#primary')?.title?.length > 0`)) break;
         await delay(50);
     }
+    assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.querySelector('#home-view').hidden&&document.querySelector('#timer-view').hidden`),true,'Fresh ordinary visit opens Home');
+    await assertPrimaryView('home', 'Fresh ordinary visit exposes only Home');
+    assert.equal(await evaluate(`document.querySelector('#home-stopwatch').disabled&&document.querySelector('#home-stopwatch').getAttribute('aria-describedby')==='home-stopwatch-note'`),true,'Stopwatch is visible and accessibly unavailable');
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('.home-action .navigation-icon')).length===4`),true,'Landing actions reuse the established menu icon artwork');
+    await click('[data-language="de"]');
+    assert.equal(await text('#home-heading'),'Willkommen bei easyTimer');
+    await click('[data-language="en"]');
+    assert.equal(await text('#home-heading'),'Welcome to easyTimer');
+    for (const [width,height] of [[1280,720],[320,568]]) {
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
+        assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('.home-action')).every(button=>button.getBoundingClientRect().height>=44)`),true,'Home stays responsive with accessible action targets');
+    }
+    await cdp('Emulation.clearDeviceMetricsOverride');
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:720,deviceScaleFactor:1,mobile:false});
+    await click('#home-session');
+    assert.equal(await evaluate(`document.body.dataset.mode==='session'&&!document.querySelector('#session-picker').hidden`),true,'Home opens the native Session Picker');
+    await assertPrimaryView('picker', 'Session navigation exposes only the Picker');
+    await click('#open-home');
+    assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.querySelector('#home-view').hidden`),true,'Menu returns safely to Home');
+    await assertPrimaryView('home', 'Picker to Home hides the Picker and Timer');
+    await click('#home-editor');
+    assert.equal(await evaluate(`document.body.classList.contains('planner-open')&&!document.querySelector('#planner').hidden`),true,'Home opens the native Editor Workspace');
+    await assertPrimaryView('editor', 'Editor navigation exposes only the Workspace');
+    await click('.planner-back');
+    assert.equal(await evaluate(`document.body.dataset.mode==='home'`),true,'Editor Back returns to its Home origin');
+    await assertPrimaryView('home', 'Editor Back restores only Home');
+    await evaluate(`document.querySelector('#home-quick').focus()`);
+    assert.notEqual(await evaluate(`getComputedStyle(document.activeElement).outlineStyle`),'none','Home action has visible keyboard focus');
+    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    assert.equal(await evaluate(`document.body.dataset.mode==='quick'&&!document.querySelector('#timer-view').hidden`),true,'Home opens Quick Timer');
+    await assertPrimaryView('quick', 'Home to Quick exposes only the Timer');
+    for (const [width,height] of [[1280,720],[320,568]]) {
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
+        await assertPrimaryView('quick', `Quick remains isolated at ${width}x${height}`);
+    }
+    await cdp('Emulation.clearDeviceMetricsOverride');
+    for (let index=0;index<2;index++) {
+        await click('#menu-toggle');
+        await evaluate(`document.querySelector('#open-home').click()`);
+        await assertPrimaryView('home', `Quick READY to Home transition ${index+1}`);
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#home-heading')`),true,
+            'Home navigation focuses its heading');
+        await click('#home-quick');
+        await assertPrimaryView('quick', `Repeated Home to Quick transition ${index+1}`);
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('#primary')`),true,
+            'Quick navigation focuses its primary action');
+    }
     if(timeTravelOptions.names.length) {
         await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
         assert.equal(errors.length,0,JSON.stringify(errors));
-    } else if (process.env.EASYTIMER_UX011_ONLY === '1') {
-        await checkSessionNavigation({evaluate,click,text,cdp,configure});
+    } else if (process.env.EASYTIMER_NATIVE_PHASE_FIELDS_ONLY === '1') {
+        await checkNativePhaseFields({evaluate,click,cdp});
+        assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_NATIVE_WORKSPACE_ONLY === '1') {
+        await checkNativeEditorWorkspace({evaluate,click,cdp});
+        assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_EDITOR_RUNTIME_ONLY === '1') {
+        await checkEditorRuntimeApp({evaluate,click,text,cdp});
+        assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_PUBLIC_CUTOVER_ONLY === '1' || process.env.EASYTIMER_UX011_ONLY === '1') {
+        await checkPublicEditorCutover({evaluate,click,text,cdp});
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else {
     assert.equal(await text('#time'), '00:00');
-    await checkTimeboxControls({ evaluate, click, text, cdp, configure });
+    await checkNativePhaseFields({evaluate,click,cdp});
+    await checkNativeEditorWorkspace({evaluate,click,cdp});
     await checkRecovery({ evaluate, click, text, cdp, configure });
     await checkRecoveryCorrections({ evaluate, click, text, cdp, configure });
-    await checkSessionRecovery({ evaluate, click, text, cdp });
-    await checkNavigation({ evaluate, click, text, cdp });
     await checkSubtraction({ evaluate, click, text, cdp, configure });
     await checkTitle('READY');
     assert.equal(await evaluate("document.getElementById('account-toggle')"), null, 'Normal application has no Google account control');
@@ -176,8 +240,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=67'&&js==='js/app.js?v=67'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'67','app.js':'67','info.js':'59','header.mjs':'59','recovery.mjs':'54','planner.js':'65','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54','portability.mjs':'37'}).every(([file,version])=>source.includes(file+'?v='+version)))`),true,'Worker precaches matching versioned resources including information pages, recovery, the engine, Session and shared visual helper');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=80'&&js==='js/app.js?v=80'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'80','app.js':'80','info.js':'59','header.mjs':'59','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs','editor-phase-drag.mjs','editor-phase-dndkit-vendor.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -189,9 +253,6 @@ try {
     await click('.planner-back'); await click('#menu-toggle'); await click('#open-quick');
     assert.equal(await text('#time'),'05:00'); await checkTitle('READY');
     await checkMenuPolish({evaluate,click,text,cdp});
-    await checkRundownEntry({evaluate,click,text,cdp});
-    await checkDirectLaunch({evaluate,click,text,cdp});
-    await checkSessionNavigation({evaluate,click,text,cdp,configure});
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
     assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
     assert.equal(await evaluate(`document.querySelector('link[rel="manifest"]').getAttribute('href')`), 'manifest.webmanifest');
@@ -846,35 +907,41 @@ try {
     assert.equal(await evaluate(`(()=>{const b=document.querySelector('#time-budget').getBoundingClientRect();const a=document.querySelector('.duration-adjustments').getBoundingClientRect();const p=document.querySelector('#progress').getBoundingClientRect();return b.top>=a.bottom&&b.bottom<=p.top+1&&p.bottom<=innerHeight})()`),true,'Extended budget fits short landscape');
     await click('#stop');
     assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),true);
-    await checkPlanner({ evaluate, click, text, cdp, configure });
-    await checkSession({ evaluate, click, text, cdp, configure });
-    await checkAutomaticSession({ evaluate, click, text, cdp });
-    await checkPortability({ evaluate, click, text, cdp, configure });
-    await checkTimeVisuals({ evaluate, click, text, cdp, configure });
-    await checkClockView({ evaluate, click, text, cdp, configure });
-    await evaluate(`(()=>{const data=JSON.parse(localStorage.getItem('easyTimerTemplates'));data.templates.push({id:'offline-session',name:'Offline workshop',transitionMode:'manual',phases:[{id:'offline-phase',title:'Offline phase',durationSeconds:60}]});localStorage.setItem('easyTimerTemplates',JSON.stringify(data));})()`);
+    await checkPublicEditorCutover({ evaluate, click, text, cdp });
+    await click('[data-language="en"]');
+    await configure(0, 5, 0);
+    await click('#menu-toggle'); await click('#open-planner');
+    await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Create template').click()`);
+    await evaluate(`(()=>{const input=document.querySelector('#planner [data-field="name"]');input.value='Offline workshop';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Add phase').click()`);
+    await evaluate(`(()=>{const title=document.querySelector('#planner [data-field="title"]');title.value='Offline phase';title.dispatchEvent(new Event('input',{bubbles:true}));const duration=document.querySelector('#planner [data-field="duration"]');duration.value='1';duration.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate(`document.querySelector('#planner form').requestSubmit()`);
+    for (let i=0;i<100&&!await evaluate(`document.querySelector('#planner').textContent.includes('Saved.')`);i++) await delay(20);
+    const offlineTemplateId = await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).templates.find(item=>item.plan.name==='Offline workshop').id`);
+    await click('.planner-back');
     await cdp('Network.enable');
     await cdp('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
     await reloadReady();
     assert.equal(await text('#time'), '05:00');
     assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
     await click('#menu-toggle'); await click('#open-planner');
-    assert.match(await text('.template-library'), /Changed elsewhere/, 'Templates and planner modules survive an offline reload');
+    assert.match(await text('.template-library'), /Offline workshop/, 'Native Templates and Workspace modules survive an offline reload');
     await reloadReady();
     assert.equal(await evaluate("document.body.classList.contains('planner-open')"), true, 'Offline refresh restores the Editor view');
-    assert.match(await text('.template-library'), /Changed elsewhere/);
+    assert.match(await text('.template-library'), /Offline workshop/);
     await click('.planner-back');
     await click('#menu-toggle'); await click('#open-session');
-    await evaluate(`(()=>{const select=document.querySelector('#session-template');select.value=Array.from(select.options).find(option=>option.value&&!option.disabled).value;select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await evaluate(`(()=>{const select=document.querySelector('#session-template');select.value='template:'+${JSON.stringify(offlineTemplateId)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await click('#prepare-session');
     assert.equal(await text('#status'), 'Ready', 'A saved Session template prepares offline using cached engine/modules');
     await click('#primary');
-    const offlineRunId = await evaluate(`JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1'))).run.runId`);
+    const offlineRunId = await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).activeRuntime.run.runId`);
     await reloadReady('session');
     assert.equal(await evaluate('document.body.dataset.mode'), 'session', 'Session runtime is restored during offline PWA reload');
-    assert.equal(await evaluate(`JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1'))).run.runId`), offlineRunId);
+    assert.equal(await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).activeRuntime.run.runId`), offlineRunId);
     assert.equal(await text('#status'), 'Running');
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
+    await checkEditorRuntimeApp({ evaluate, click, text, cdp });
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');
     }

@@ -1,7 +1,7 @@
 // One presentation-only header shared by the app and standalone information pages.
 const labels = {
-    en: { mode:'Mode', quick:'Quick Timer', session:'Session Timer', planner:'Session Editor', editorSubtitle:'Create & manage rundowns', exportRundown:'Export Rundown', language:'Language', theme:'Appearance', de:'German', en:'English', light:'Light', dark:'Dark', system:'System', about:'About', faq:'FAQ', imprint:'Imprint', privacy:'Privacy', information:'Information', openMenu:'Open preferences', closeMenu:'Close preferences' },
-    de: { mode:'Modus', quick:'Quick-Timer', session:'Session-Timer', planner:'Session-Editor', editorSubtitle:'Rundowns erstellen & verwalten', exportRundown:'Rundown exportieren', language:'Sprache', theme:'Darstellung', de:'Deutsch', en:'Englisch', light:'Hell', dark:'Dunkel', system:'System', about:'Über easyTimer', faq:'FAQ', imprint:'Impressum', privacy:'Datenschutz', information:'Informationen', openMenu:'Einstellungen öffnen', closeMenu:'Einstellungen schließen' },
+    en: { home:'Home', mode:'Mode', quick:'Quick Timer', session:'Session Timer', planner:'Session Editor', editorSubtitle:'Create & manage rundowns', exportRundown:'Export Rundown', language:'Language', theme:'Appearance', de:'German', en:'English', light:'Light', dark:'Dark', system:'System', about:'About', faq:'FAQ', imprint:'Imprint', privacy:'Privacy', information:'Information', openMenu:'Open preferences', closeMenu:'Close preferences' },
+    de: { home:'Startseite', mode:'Modus', quick:'Quick-Timer', session:'Session-Timer', planner:'Session-Editor', editorSubtitle:'Rundowns erstellen & verwalten', exportRundown:'Rundown exportieren', language:'Sprache', theme:'Darstellung', de:'Deutsch', en:'Englisch', light:'Hell', dark:'Dunkel', system:'System', about:'Über easyTimer', faq:'FAQ', imprint:'Impressum', privacy:'Datenschutz', information:'Informationen', openMenu:'Einstellungen öffnen', closeMenu:'Einstellungen schließen' },
 };
 let instance;
 export function mountApplicationHeader() {
@@ -69,6 +69,7 @@ const headerMarkup = `
       </svg>
     </button>
     <div id="preferences" class="preferences" hidden>
+      <button id="open-home" class="menu-home" type="button" data-copy="home">Home</button>
       <span id="mode-heading" class="preference-heading" data-copy="mode">Mode</span>
       <div class="mode-choices" role="group" aria-labelledby="mode-heading">
         <button id="open-quick" class="mode-choice" type="button" aria-pressed="true">

@@ -33,6 +33,11 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
     ]};
     const clock = createVirtualClock(evaluate);
     const tick = ms => clock.advance(ms);
+    const runtimeSnapshot = () => evaluate(`(()=>{const record=JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1')));return {runId:record.run.runId,currentIndex:record.run.currentIndex,stage:record.run.stage,phaseOvertime:record.run.phaseOvertime,clock:record.clock};})()`);
+    const wait = async expression => {
+        for (let i = 0; i < 100; i++) { if (await evaluate(expression)) return; await delay(50); }
+        assert.fail('Session browser timeout: ' + expression);
+    };
     const menu = async id => { await click('#menu-toggle'); await click(id); };
     const picker = async () => { if (await evaluate(`document.body.dataset.mode==='session'`)) await menu('#open-quick'); await menu('#open-session'); };
     const choose = async id => {
@@ -158,9 +163,11 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         assert.equal(await evaluate(`document.querySelector('#stop-workshop-dialog').open&&document.activeElement.id==='stop-workshop-cancel'`),true);
         assert.equal(await text('#stop-workshop-dialog-message'),'Stop this workshop and reset all phases and overtime to phase 1?');
         await click('#stop-workshop-cancel');
+        await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.activeElement.id==='stop'`);
         assert.match(await text('#status'),/Overtime stopped/);
         assert.equal(await evaluate(`!document.querySelector('#stop-workshop-dialog').open&&document.activeElement.id==='stop'`),true);
         await click('#stop'); await click('#stop-workshop-confirm');
+        await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.querySelector('#phase-number').textContent==='Phase 1 of 2'&&document.querySelector('#time').textContent==='01:00'&&document.querySelector('#status').textContent==='Ready'`);
         assert.equal(await text('#phase-number'),'Phase 1 of 2'); assert.equal(await text('#time'),'01:00');
         assert.equal(await text('#status'),'Ready');
         assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`),storedDuringRun,'Session actions never save runtime state into templates');
@@ -200,7 +207,9 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
             await tick(125000);
             assert.equal(await text('#time'),'+00:05');
             assert.equal(await evaluate(`(()=>{const time=document.querySelector('#time').getBoundingClientRect();const overtime=document.querySelector('#time').getBoundingClientRect();const status=document.querySelector('#status').getBoundingClientRect();const next=document.querySelector('#next').getBoundingClientRect();const controls=document.querySelector('.control-bar').getBoundingClientRect();return time.bottom<=status.top+1&&status.bottom<=controls.top+1&&controls.bottom<=next.top+1&&time.left>=0&&time.right<=innerWidth;})()`),true, `Overtime does not overlap at ${width}x${height}`);
-            await click('#stop'); await click('#stop-workshop-confirm'); await click('#primary');
+            await click('#stop'); await click('#stop-workshop-confirm');
+            await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.querySelector('#phase-number').textContent==='Phase 1 of 2'&&document.querySelector('#time').textContent==='02:00'&&document.querySelector('#status').textContent==='Ready'`);
+            await click('#primary');
         }
         await setDesktop();
         await evaluate(`window.sessionNative=false;Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>window.sessionNative?document.documentElement:null});Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});document.documentElement.requestFullscreen=async()=>{window.sessionNative=true;document.dispatchEvent(new Event('fullscreenchange'));};document.exitFullscreen=async()=>{window.sessionNative=false;document.dispatchEvent(new Event('fullscreenchange'));};`);
@@ -209,18 +218,34 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         const before = await text('#time'); await tick(130000);
         assert.equal(await text('#time'),'+00:10','Background gap updates the active Session only');
         await click('[data-language="de"]');
+        const beforeEscapeCancel = await runtimeSnapshot();
         await click('#stop');
         assert.equal(await evaluate(`document.querySelector('#stop-workshop-dialog').open&&Boolean(document.fullscreenElement)&&document.activeElement.id==='stop-workshop-cancel'`),true,'Stop dialog remains visible and focused in fullscreen');
         assert.equal(await text('#stop-workshop-dialog-message'),'Workshop stoppen und alle Phasen und Überzeiten auf Phase 1 zurücksetzen?');
-        await key('Escape','Escape',27); await delay(50);
+        await key('Escape','Escape',27);
+        await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.activeElement.id==='stop'`);
         assert.equal(await evaluate(`!document.querySelector('#stop-workshop-dialog').open&&Boolean(document.fullscreenElement)&&document.activeElement.id==='stop'`),true,'Escape cancels without leaving fullscreen');
         assert.equal(await text('#time'),'+00:10','Escape leaves the active Session unchanged');
+        assert.deepEqual(await runtimeSnapshot(),beforeEscapeCancel,'Dialog Escape preserves run identity, phase, overtime and clock');
+        const beforeCancelButton = await runtimeSnapshot();
         await click('#stop'); await click('#stop-workshop-cancel');
+        await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.activeElement.id==='stop'`);
         assert.equal(await evaluate(`Boolean(document.fullscreenElement)&&document.activeElement.id==='stop'`),true,'Cancel preserves fullscreen and restores focus');
         assert.equal(await text('#time'),'+00:10','Cancel leaves the active Session unchanged');
+        assert.deepEqual(await runtimeSnapshot(),beforeCancelButton,'Cancel preserves run identity, phase, overtime and clock');
+        const runIdBeforeConfirm = (await runtimeSnapshot()).runId;
         await click('#stop'); await click('#stop-workshop-confirm');
+        await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.querySelector('#phase-number').textContent==='Phase 1 von 2'&&document.querySelector('#time').textContent==='02:00'&&document.querySelector('#status').textContent==='Bereit'`);
         assert.equal(await evaluate(`Boolean(document.fullscreenElement)&&document.activeElement.id==='primary'`),true,'Confirm preserves fullscreen and focuses Start');
         assert.equal(await text('#time'),'02:00'); assert.equal(await text('#status'),'Bereit');
+        const confirmedReset = await runtimeSnapshot();
+        assert.equal(confirmedReset.runId,runIdBeforeConfirm,'Confirmed Stop preserves the existing run identity');
+        assert.equal(confirmedReset.currentIndex,0); assert.equal(confirmedReset.stage,'PHASE'); assert.deepEqual(confirmedReset.phaseOvertime,{});
+        assert.equal(confirmedReset.clock.status,'READY');
+        const beforeOrdinaryEscape = await runtimeSnapshot();
+        await key('Escape','Escape',27);
+        await wait(`!document.fullscreenElement`);
+        assert.deepEqual(await runtimeSnapshot(),beforeOrdinaryEscape,'Ordinary fullscreen Escape preserves the reset Session state');
         await click('[data-language="en"]');
         await menu('#open-planner'); await action('Back to timer');
         assert.equal(await evaluate('Boolean(document.fullscreenElement)||document.body.classList.contains("presentation")'),false);
@@ -228,8 +253,10 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         await evaluate(`delete document.fullscreenElement;delete document.fullscreenEnabled;delete document.exitFullscreen;delete document.documentElement.requestFullscreen;`);
         await evaluate(`Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false})`);
         await click('#fullscreen'); assert.equal(await evaluate(`document.body.classList.contains('presentation')`),true,'Session supports expanded fallback');
-        assert.equal(await text('#time'),'+00:10');
-        await click('#fullscreen'); assert.equal(await evaluate(`document.body.classList.contains('presentation')`),false);
+        assert.equal(await text('#time'),'02:00');
+        const beforeExpandedEscape = await runtimeSnapshot();
+        await key('Escape','Escape',27); await wait(`!document.body.classList.contains('presentation')`);
+        assert.deepEqual(await runtimeSnapshot(),beforeExpandedEscape,'Expanded fallback Escape preserves the Session state');
         await evaluate(`delete document.fullscreenEnabled`);
         await picker(); await choose('manual-run'); await click('#primary'); await tick(1000);
         await cdp('Emulation.setTouchEmulationEnabled',{enabled:true});

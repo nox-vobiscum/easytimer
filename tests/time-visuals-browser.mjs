@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const palettes = {
     light: { amber:'rgb(154, 87, 0)', red:'rgb(180, 35, 56)' },
@@ -22,6 +23,10 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
     const baseline=await evaluate(`localStorage.getItem('easyTimerTemplates')`);
     const tick=ms=>evaluate(`window.visualNow+=${ms};document.dispatchEvent(new Event('visibilitychange'))`);
     const menu=async selector=>{await click('#menu-toggle');await click(selector);};
+    const wait=async expression=>{
+        for(let i=0;i<100;i++){if(await evaluate(expression))return;await delay(50);}
+        assert.fail('Time visuals timeout: '+expression);
+    };
     let variant='light';
     async function check(expected) {
         const result=await evaluate(`(()=>{const time=document.querySelector('#time');const overtime=document.querySelector('#time');const root=getComputedStyle(document.documentElement);return {state:time.dataset.visualState,main:getComputedStyle(time).color,counter:getComputedStyle(overtime).color,normal:getComputedStyle(document.body).color,background:getComputedStyle(document.body).backgroundColor,shown:!(document.querySelector('#time').dataset.visualState !== 'EXPIRED'),mainAnimation:getComputedStyle(time).animationName,counterAnimation:getComputedStyle(overtime).animationName,transition:getComputedStyle(time).transitionDuration,live:time.getAttribute('aria-live'),statusRole:document.querySelector('#status').getAttribute('role'),green:root.getPropertyValue('--progress-elapsed-color').trim()||getComputedStyle(document.querySelector('#progress')).getPropertyValue('--progress-elapsed-color').trim(),pink:getComputedStyle(document.querySelector('#progress')).getPropertyValue('--progress-remaining-color').trim(),height:document.querySelector('#progress').getBoundingClientRect().height};})()`);
@@ -109,7 +114,11 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
         assert.equal(await text('#time'),'+00:06');
         await click('#primary');await tick(1000);await click('#stop-overtime');await check('EXPIRED');
         await tick(999999);await check('EXPIRED');assert.equal(await text('#time'),'+00:07');
-        await checkViews('EXPIRED');await click('#stop');await check('NORMAL');
+        await checkViews('EXPIRED');await click('#stop');
+        assert.equal(await evaluate(`document.querySelector('#stop-workshop-dialog').open`),true);
+        await click('#stop-workshop-confirm');
+        await wait(`!document.querySelector('#stop-workshop-dialog').open&&document.querySelector('#phase-number').textContent==='Phase 1 of 2'&&document.querySelector('#status').textContent==='Ready'`);
+        await check('NORMAL');
         await menu('#open-quick');await configure(0,5,0);await check('NORMAL');
     } finally {
         await evaluate(`Date.now=window.visualRealNow;window.confirm=window.visualRealConfirm;${baseline===null?"localStorage.removeItem('easyTimerTemplates')":`localStorage.setItem('easyTimerTemplates',${JSON.stringify(baseline)})`};`);

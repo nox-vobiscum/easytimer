@@ -6,7 +6,284 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
-No unreleased changes.
+- **EDITOR-001 / UX-001 native phase drag-and-drop:** the accepted framework-free
+  dnd-kit interaction is integrated into the Schema-2 Editor with a dedicated
+  six-dot handle, full-card feedback, neighboring-row displacement and the
+  existing position chooser as its keyboard and precision fallback. A confirmed
+  drop invokes the stable-ID draft reposition operation exactly once; cancel and
+  unchanged drops remain mutation-free. The dependency is locally bundled,
+  offline-cached and documented without changing Store, Runtime or Recovery.
+  The unreleased shell advances to PWA v80 pending independent review.
+
+- **BUG-002 native Session action installation:** confirmed Session actions now
+  install their exact Store-authoritative result into the local Timer without a
+  false same-binding conflict. NEXT, later-phase START, PAUSE, RESUME, COMPLETE
+  and STOP_OVERTIME retain their Execution, Attempt, Run, revision and Active
+  Lock contracts; arbitrary, stale, foreign and unconfirmed records remain
+  rejected, and local installation failure never retries the write. The
+  unreleased shell advances to PWA v79.
+
+- **EDITOR-001 / UX-001 compact phase-row slice:** the native Editor keeps its
+  title and duration inputs directly editable in both collapsed and expanded
+  phase rows, moves category selection into a dedicated five-icon DE/EN popover,
+  and reserves the final chevron exclusively for phase details. Category
+  selection, disclosure and existing position controls remain draft-only until
+  global Save, preserve keyboard focus and use responsive 44-pixel controls
+  without a duplicate details selector. The inert drag affordance remains
+  deferred to its feasibility slice. This slice advanced the shell to PWA v78.
+
+- **EDITOR-001 / UX-001 phase repositioning slice:** every native phase now
+  exposes its computed two-digit position as an accessible DE/EN button. Its
+  compact selector lists every current phase by position and title, requires
+  explicit Move, and leaves the draft unchanged on selection, Cancel or Escape.
+  Direct and earlier/later moves share the existing stable-ID draft operation
+  while preserving phase disclosures, unsaved fields, focus and scroll context;
+  only the global Save can persist the result. The unreleased shell advances to
+  PWA v77 without changing Store, Runtime, Recovery or lifecycle contracts.
+
+- **EDITOR-001 / UX-002 public view isolation:** the existing `hidden`
+  orchestration now reliably removes the Timer container from layout and
+  keyboard interaction while Home, the Session Picker or the Session Editor is
+  active. Focused computed-style coverage verifies isolated Home, Quick Timer,
+  Picker, Editor and ACTIVE Session views across repeated navigation and desktop
+  and narrow viewports. Timer, Runtime, Recovery, Store and navigation state are
+  unchanged. The unreleased application shell advances consistently to PWA v76.
+
+- **EDITOR-001 native Editor interaction fixes:** Workspace Back now uses the
+  same dirty-draft and pending-mutation close guard as host navigation and
+  restores the originating Home, Quick or Session view without changing Timer,
+  Recovery or ownership state. Adding and removing resource rows preserves open
+  phase disclosures and moves keyboard focus to the new or nearest surviving
+  control. Explicit Save omits only completely empty resource placeholders from
+  its isolated write snapshot; partially completed or unsupported links remain
+  in the editable draft, receive localized field-level errors and are focused
+  before any Store write. Failed and uncertain writes retain the caller's
+  original draft and complete reconciliation ticket. The application shell
+  advances consistently to unreleased PWA v75.
+
+- **EDITOR-001 Landing Page scaffold (implemented, not deployed):** a fresh
+  ordinary visit now opens a small DE/EN Home view with Quick Timer, Session
+  Timer and Session Editor entry points plus a clearly disabled Stopwatch
+  placeholder. Existing menu artwork and central styles are reused. Active
+  Runtime and Recovery restoration continue to take precedence. Confirmed
+  ACTIVE exits and confirmed terminal actions on SUSPENDED executions return to
+  Home only after persistence and safe handoff; failed or uncertain writes keep
+  their existing draft/ticket and reconciliation path. Quick Stop remains a
+  Timebox reset. When the Editor was opened over a progressed independent Quick
+  Timer, terminal SUSPENDED actions now require the existing departure
+  confirmation before their irreversible write; rejection changes neither
+  timer nor Execution. Information-page origin continuity includes Home, and the
+  application shell advanced consistently to unreleased PWA v74; the Editor
+  interaction fixes now supersede that checkpoint with v75.
+
+- **EDITOR-001 first-START hotfix:** installing a confirmed native
+  ACTIVE/READY-to-STARTED write now accepts its one valid `null`-to-first-Attempt
+  identity transition. The App proves the complete target by replaying the
+  existing pure Store transformation against the authoritative READY source;
+  every other Attempt replacement remains rejected. Store revisions, Run
+  identity, first-start baseline, Active Lock ownership and reload adoption are
+  unchanged, and a blocked local handoff never repeats the persisted START.
+
+- **EDITOR-001 coordinated public Schema-2 cutover (implemented, not deployed):**
+  the native Workspace is now the single public Session Editor and its native
+  aggregate is the single public Template/Execution library. The Picker groups
+  Templates and PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions; direct
+  launch, activation, ownership-safe ACTIVE entry, checkpoint-preserving resume,
+  Suspend, Retain Plan/reset, discard, completion and a minimal read-only archive
+  reuse the existing Store Writer, Runtime Bridge, Active Lock and Timer/Session
+  engine. Exact aggregate/entity/runtime/Attempt/Run identities guard every
+  mutation. Confirmed records are installed before further timer actions;
+  uncertain writes retain their original ticket for read-only reconciliation and
+  are never retried or rebased. Unsaved Workspace drafts now guard closing and
+  navigation. Old V1 Session Recovery is not resumed, converted or silently
+  deleted: DE/EN confirmation is required before discard, and candidate discard
+  preserves the current Quick Recovery. Single-Template import/export remains;
+  a complete local-data export is explicitly labelled as not restorable. Public
+  V1 Planner, V1 Template Store and V1 JSON modules leave the production graph.
+  Packaging and cache references advanced together to unreleased PWA v73; the
+  Landing Page shell now supersedes that checkpoint with v74. The
+  Facilitator Panel, full restore, migration, merge and deployment remain out of
+  scope; real-browser acceptance remains a mandatory open gate until Chromium
+  can initialize successfully in the test environment.
+  Targeted integration hardening keeps asynchronous Picker results scoped to the
+  navigation that requested them, avoids rerendering the Workspace on unchanged
+  language ticks, retains late Activation/Resume lock failures for source/target
+  reconciliation, and prevents stale or same-revision-divergent Workspace reads
+  from replacing a newer owned Runtime or rewinding its in-memory clock.
+
+- **EDITOR-001 internal CSS consolidation:** native phase-field styles now live
+  in the central application stylesheet; their declarations and UI behavior are
+  unchanged. Tests use that stylesheet directly. The briefing records the file
+  architecture convention, and CSS/App shell references advance together to
+  unreleased PWA v72 at that checkpoint; the coordinated cutover supersedes it
+  with v73.
+
+- **BUG-001 follow-up:** Escape now cancels the document-modal Session Stop
+  confirmation without invoking the global fullscreen or expanded-view exit.
+  The active Session and fullscreen presentation remain unchanged; ordinary
+  Escape outside the dialog retains its existing presentation-exit behavior.
+
+### Added
+
+- **EDITOR-001 internal native Editor Workspace:** one directly mountable,
+  localized Schema-2 workspace now presents Templates and Executions by
+  lifecycle, complete Template editing, independent PLANNED Execution creation
+  and editing, prepared rundown/phase information, labeled resource links and
+  single-Template JSON portability. It reuses the authoritative Store Writer,
+  Planner, draft, launch and import services. Edits remain local until explicit
+  Save; Cancel is write-free, stale revisions retain the complete draft, and
+  uncertain writes expose read-only reconciliation without retry or duplicate
+  creation. ACTIVE, SUSPENDED and COMPLETED entries remain informational. The
+  module is mounted only by the internal browser harness: public navigation,
+  the V1 Editor/Picker, Timer/Runtime ownership and lifecycle controls are
+  unchanged. Central style additions advance the unreleased PWA shell to v72.
+
+- **EDITOR-001 internal Template CRUD reconciliation and workspace read:**
+  native Template Create, Update and Delete now retain their exact operation and
+  complete Store source/target snapshots when write confirmation or a late lock
+  acknowledgement is uncertain. Caller-held tickets reconcile confirmed,
+  absent or divergent state read-only without retry, identity regeneration,
+  merge or overwrite; create/update drafts remain available. The Planner service
+  also exposes one validated, copy-isolated native aggregate snapshot containing
+  Templates, Executions, lifecycle metadata and active runtime state for the
+  upcoming workspace. No cache, V1 access, public UI, lifecycle controller or
+  PWA change is included.
+
+- **EDITOR-001 internal Workshop-Notizen persistence:** complete rundown and
+  sparse stable-phase note snapshots can now be explicitly loaded, saved,
+  updated and cleared on an existing ACTIVE or SUSPENDED native Execution.
+  Exact revision and identity checks reject concurrent Timer, note,
+  plan/information and lifecycle changes; failed drafts remain available and
+  uncertain writes reconcile complete source/target records read-only without
+  retry. Runtime/Clock, checkpoints, prepared plans, first-START history,
+  outcomes, Templates and unrelated Executions remain unchanged. Existing
+  Suspend and Completion caller snapshots remain compatible, while stale callers
+  cannot replace a newer note save. This is distinct from prepared information
+  and COMPLETED reflection and adds no public Facilitator Panel or autosave.
+
+- **EDITOR-001 internal ACTIVE/SUSPENDED information correction:** prepared
+  rundown information and stable-ID phase notes/resources can now be corrected
+  on one existing native Execution through the locked Store writer. Exact
+  revision, lifecycle, Attempt and Run preconditions protect concurrent Timer
+  persistence; stale saves fail without merge or retry. Runtime/Clock,
+  checkpoints, structure/timing, first-START baseline, outcomes, Workshop-
+  Notizen, source Templates and unrelated records remain unchanged. Uncertain
+  writes retain complete source/target snapshots for read-only reconciliation.
+  This operation remains separate from Workshop-Notizen persistence and adds no
+  public Editor or Facilitator Panel UI.
+
+- **EDITOR-001 internal PLANNED editing:** an isolated Execution draft reuses the
+  existing native planning-field/phase operations and explicitly saves its full
+  current plan to the same PLANNED Execution through the locked Store writer.
+  Aggregate and Execution revisions advance once; source Template, runtime
+  revision, separate workshop notes and unrelated records remain unchanged.
+  Uncertain writes return a caller-held source/target ticket for read-only
+  reconciliation without retry. No public Editor or ACTIVE/SUSPENDED editing is
+  included.
+
+- **EDITOR-001 internal App handoff:** confirmed native suspend, retain-plan,
+  discard and completion now have an application-side exit boundary. It guards
+  local identities and navigation, detaches before releasing ownership, and
+  restores ordinary Quick Timer recovery in a fresh context without deleting
+  unrelated recoverable timers. Uncertain writes reconcile read-only; confirmed
+  persistence with failed cleanup is distinct and never repeats the write.
+  The boundary is browser-tested directly; no public lifecycle controls or native
+  Editor/Library cutover are included. Unreleased shell references advance to v71.
+
+- **EDITOR-001 internal completion and archive:** explicit archival completion
+  captures final authoritative phase results, caller-supplied Workshop-Notizen
+  and separate workshop overtime, retains the original baseline and final plan,
+  and removes the matching runtime/checkpoint in one confirmed Store write.
+  Started suspended executions archive without activation or suspended-time
+  accrual. Existing archived history is protected at write time; only the single
+  reflection and its permitted revisions may change. COMPLETED backups and
+  individual exports now round-trip passively. Conduct and removal remain
+  independent historical facts. No public completion/archive UI, local timer
+  detachment, ownership release, archive deletion or cloning is included.
+
+- **EDITOR-001 internal actual phase outcomes:** started native executions now
+  require compact per-phase conducted/active-duration/overtime records. Native
+  Store transitions sample the existing authoritative clock before manual phase
+  changes and preserve engine-confirmed automatic catch-up, pauses and suspended
+  checkpoints. Final workshop overtime stays separate from settled phase results.
+  Read-only reload adoption exposes current derived results without writing;
+  retain/discard clears the selected history. Incomplete previously started
+  native development records are intentionally rejected without repair, overwrite
+  or migration. Unstarted native records and released V1 data remain unchanged.
+  No archive/COMPLETED support or public Editor cutover is included.
+
+- **EDITOR-001 internal non-archiving lifecycle exits:** explicit retain-plan and
+  discard operations now persist ACTIVE or SUSPENDED executions through the
+  existing Store writer and Runtime Bridge. Retain keeps the same execution and
+  latest configured plan as PLANNED while clearing attempt, checkpoint and
+  Workshop-Notizen; discard removes only the selected execution. Matching ACTIVE
+  runtime is removed atomically, while unrelated active runtime is preserved.
+  Revisions and identity bindings are checked; uncertain writes are reconciled
+  read-only without retry. No operation releases ownership, detaches the local
+  timer or navigates. Public UI, archival and actual phase results remain pending.
+
+- **EDITOR-001 internal native Template import:** a UI-neutral service strictly
+  parses a single Schema-2 Template document into an isolated review candidate
+  with a fresh Template ID and revision 1, retaining phase identities and all
+  planning content. Explicit confirmation inserts once through the existing
+  locked Store writer with the reviewed aggregate revision. Uncertain write
+  acknowledgements retain full source/target snapshots and the stable candidate
+  for read-only reconciliation; there is no automatic retry or overwrite.
+  Existing Templates, Executions and ACTIVE runtime remain unchanged. Execution
+  import and backup restore remain unsupported; the public V1 Editor is unchanged.
+
+- **EDITOR-001 internal phase presentation:** a reusable native phase field group
+  edits title, minute duration and category through the existing native draft
+  operations, with expandable category details, DE/EN labels, host-supplied
+  validation feedback and keyboard/focus behavior. Incomplete numeric input is
+  retained without persistence. The field group is internal preparation only;
+  its styles live in the central stylesheet. The public V1 Planner does not
+  import the native component.
+
+- **EDITOR-001 native draft editing foundation:** pure operations edit complete
+  native Planner Service drafts, including categories, prepared information,
+  phase notes and labeled resources, and insert/remove/reposition phases by
+  stable identity. Each edit returns an isolated copy with unchanged Template
+  identity and revision bases. Incomplete inputs remain in the draft; validation
+  and persistence still occur only through an explicit existing Planner Service
+  Save. This is unreleased internal preparation without public UI integration.
+
+- **EDITOR-001 internal Planner separation:** the public V1 Planner delegates
+  draft preparation/materialization and Save/Delete/import aggregate preparation
+  to a pure V1-specific module. Existing storage snapshots, asynchronous guards,
+  navigation, backup and launch behavior remain in the existing Planner. The
+  new production dependency is allowlisted and precached with PWA v69 asset
+  references. This is unreleased refactoring; no native Editor cutover is included.
+
+- **EDITOR-001 internal foundation:** the native Schema-2 Editor Store can
+  validate, persist and conflict-safely update templates, and create independent
+  PLANNED executions from stored templates. A UI-neutral integration boundary
+  now maps prepared Editor data into native Templates, exposes a validated
+  copy-isolated library snapshot, and saves creation, edits or deletion through
+  the existing lock-protected writer. A stateless Planner-facing service now
+  prepares complete isolated native drafts, carries their optimistic revision
+  bases through save/delete operations, refreshes confirmed library snapshots
+  after writes and preserves rejected unsaved drafts for later UI feedback.
+  A separate UI-neutral launch service can create one independent PLANNED
+  Execution from a Template and activate an explicitly selected PLANNED
+  Execution into a confirmed READY runtime through the existing Runtime Bridge.
+  Planning success remains durable if activation fails; ambiguous planning or
+  activation writes are reported as uncertain and are never retried implicitly.
+  Activation does not create an Attempt or start the countdown.
+  Deleting a Template leaves every independent
+  Execution, historical source reference and ACTIVE runtime unchanged. The Runtime
+  Bridge can also claim ownership and adopt a
+  persisted ACTIVE runtime after a validated post-claim re-read, reconciling only
+  the returned in-memory running view. These are unreleased internal capabilities
+  only; no Editor UI integration, unified visible library or production recovery
+  availability is included.
+- **EDITOR-001 native portability foundation:** versioned Schema-2 JSON contracts
+  can serialize and strictly parse complete Template/Execution backups and
+  individual Template or Execution snapshots. ACTIVE exports require their
+  matching validated runtime, while suspended checkpoints remain attached to
+  their Execution. These passive documents grant no ownership and parsing never
+  restores, activates or persists data. Public import/export UI, restore policy,
+  COMPLETED support and V1 conversion are not included.
 
 ## PWA v67 — 2026-11-01
 

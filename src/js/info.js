@@ -2,8 +2,8 @@ import { mountApplicationHeader } from './header.mjs?v=59';
 // Information pages do not initialize timers, recovery or development services.
 const applicationHeader = mountApplicationHeader();
 const labels = {
-    en: { about: 'About', faq: 'FAQ', imprint: 'Imprint', privacy: 'Privacy Policy', back: { quick:'Back to Timer', session:'Back to Session', editor:'Back to Session Editor', stopwatch:'Back to Stopwatch', default:'Go to Timer' }, navigation: 'Information' },
-    de: { about: 'Über easyTimer', faq: 'FAQ', imprint: 'Impressum', privacy: 'Datenschutz', back: { quick:'Zurück zum Timer', session:'Zurück zur Session', editor:'Zurück zum Session-Editor', stopwatch:'Zurück zur Stoppuhr', default:'Zum Timer' }, navigation: 'Informationen' },
+    en: { about: 'About', faq: 'FAQ', imprint: 'Imprint', privacy: 'Privacy Policy', back: { home:'Back to Home', quick:'Back to Timer', session:'Back to Session', editor:'Back to Session Editor', stopwatch:'Back to Stopwatch', default:'Go to Home' }, navigation: 'Information' },
+    de: { about: 'Über easyTimer', faq: 'FAQ', imprint:'Impressum', privacy:'Datenschutz', back: { home:'Zurück zur Startseite', quick:'Zurück zum Timer', session:'Zurück zur Session', editor:'Zurück zum Session-Editor', stopwatch:'Zurück zur Stoppuhr', default:'Zur Startseite' }, navigation:'Informationen' },
 };
 const preference = (key, fallback, allowed) => {
     try { const value = localStorage.getItem(key); return allowed.includes(value) ? value : fallback; }
@@ -18,7 +18,7 @@ let returnToOrigin = false;
 let originatingView;
 try {
     const origin = JSON.parse(sessionStorage.getItem('easyTimerInformationOrigin.v1'));
-    returnToOrigin = ['quick', 'session', 'editor'].includes(origin?.view);
+    returnToOrigin = ['home', 'quick', 'session', 'editor'].includes(origin?.view);
     if (returnToOrigin) originatingView = origin.view;
 } catch { /* Direct visits and unavailable storage use the normal app entry. */ }
 function render() {
@@ -59,7 +59,7 @@ applicationHeader.bindPreferences(next => {
     try { localStorage.setItem('easyTimerTheme', theme); } catch { /* Keep this page usable without storage. */ }
     render();
 });
-for (const [id, view] of [['open-quick', 'quick'], ['open-session', 'session'], ['open-planner', 'editor']]) {
+for (const [id, view] of [['open-home', 'home'], ['open-quick', 'quick'], ['open-session', 'session'], ['open-planner', 'editor']]) {
     document.getElementById(id).addEventListener('click', () => {
         // Only a navigation request; protected application actions run after recovery.
         location.assign(`./?from=information&open=${view}`);

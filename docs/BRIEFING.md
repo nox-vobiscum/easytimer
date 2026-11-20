@@ -76,6 +76,23 @@ Use `Unreleased` until production is verified. A later release-status update may
 be a separately authorized documentation commit; it does not require an
 application/PWA version bump by itself.
 
+### Definition of Done — Test Maintenance
+
+Every implementation slice must review and maintain all tests affected by its
+changes, including existing regression tests whose assumptions become obsolete
+due to intentional changes in behavior, UI, formatting, timing, or interaction.
+
+- Update affected tests within the same implementation slice.
+- Preserve meaningful assertions; never weaken tests merely to obtain a passing
+  result.
+- Execute relevant focused tests and report their actual results.
+- Run the complete regression suite before merging; document any unresolved
+  failures or execution blockers explicitly.
+- Keep test maintenance and relevant documentation updates within the same slice
+  and commit.
+- Do not declare a slice fully verified while relevant tests remain failing or
+  unexecuted without a documented exception.
+
 ## Communication and language
 
 - Communicate with the Product Owner in German.
@@ -163,24 +180,145 @@ silently reinterpret them here.
 easyTimer is a static HTML/CSS/JavaScript PWA. There is no production build
 framework or application backend.
 
+**File architecture convention:** Prefer existing files and established project
+structures. Create new source files only when separation provides a concrete
+architectural, maintainability or testability benefit. Keep application styles
+in `src/css/styles.css` by default. Separate stylesheets require a demonstrated
+technical or maintenance need; introducing a JavaScript component alone does not
+justify a new CSS file. Avoid inline styles. This is a project convention, not an
+absolute prohibition against new files.
+
+**Binding EDITOR-001 data decision:** The coordinated public cutover is now
+implemented locally for review: the native Schema-2 aggregate is the one public
+Template/Execution library and the native Workspace is the one public Editor.
+The repository may retain V1 source and historical tests, but V1 Planner,
+Template Store and JSON modules are no longer reachable from the production
+startup graph or package. There is no historical user Rundown data that requires
+migration. Do not add V1-to-V2 conversion, compatibility import, a second public
+library/Editor or a migration wizard unless the Product Owner explicitly changes
+this decision. This implementation is not a deployment authorization.
+
+**Approved native development-data boundary:** A native Execution with an Attempt
+must carry the strictly validated `phaseOutcomes` contract described in
+`SESSION_EDITOR_EVOLUTION.md`. Incomplete previously started native development
+records may be rejected; do not infer history, supply default outcomes, migrate,
+repair, delete or overwrite them automatically. A rejected Store never becomes an
+empty replacement. Unstarted PLANNED/READY records remain valid without outcomes.
+This deliberately incompatible internal contract does not affect released V1 data.
+
+Native COMPLETED executions now retain one immutable start baseline, their final
+`currentPlan`, actual phase outcomes, Workshop-Notizen and completion metadata.
+The locked Store write path rejects history replacement, reactivation or archive
+removal; only reflection updates with the required revisions are permitted.
+Reflection uses the existing basic String contract, storage quota and native JSON
+size boundary, without a separate character limit. Completion and archive reading
+are public through the native lifecycle/Workspace; reflection editing and the
+Facilitator Panel remain outside the current public slice.
+
+The App provides `exitNativeExecution()` and
+`continueNativeExecutionExit()` entry points for confirmed native exits. They
+gate actions/navigation, retain Bridge reconciliation as the only pending-write
+authority, recheck local and persisted identity, detach the local Session, await
+Active-Lock release and initialize the existing Quick Recovery in a fresh context.
+Confirmed persistence followed by failed cleanup is reported separately and may
+retry cleanup only. Public lifecycle controls call this same boundary. Legacy V1
+Session recovery is never resumed or converted and requires explicit DE/EN
+confirmation before discard; candidate discard preserves the current Quick
+Recovery and ownership. The App handoff is tested through the browser runner.
+
+The public App also has a presentation-only Home state. It is the default for a
+fresh ordinary visit, but never overrides an adopted ACTIVE Runtime, Quick
+Recovery, unresolved recovery choice or explicit restored view. Home creates no
+Store, Timer state or recovery format. Confirmed ACTIVE exits and confirmed
+terminal operations on SUSPENDED executions may return there only after their
+authoritative write and required cleanup; uncertain operations retain their
+original reconciliation ticket. If a progressed independent Quick Timer is
+behind the Workspace, its existing departure confirmation must be accepted
+before a terminal SUSPENDED write begins. Rejection is write-free; reconciliation
+never repeats the confirmation or mutation. Quick Stop remains a reset within
+Quick Timer.
+
+Primary public views are mutually isolated by their existing `hidden`
+attributes. In particular, the central Timer container has an explicit hidden
+style so its flex layout cannot override browser hiding while Home, the native
+Session Picker or the Session Editor is active. Hidden primary views are absent
+from layout and keyboard navigation; this is presentation-only and does not add
+a router or change the existing view-state, Timer, Runtime or Recovery
+orchestration.
+
+Native Template Create, Update and Delete now retain their stable operation plus
+complete Store source/target snapshots when readback or a late Store-lock
+acknowledgement is uncertain. The Planner service validates caller-held tickets
+against the exact original transformation and reconciles by reading only:
+target is confirmed, source is absent and every divergent or unreadable state is
+unresolved. No retry, merge, identity regeneration or pending registry is used.
+The same boundary supplies one validated, copy-isolated full native aggregate to
+`editor-workspace.mjs`. The public native UI groups
+Templates and Executions by lifecycle and reuses the existing native Template,
+PLANNED Execution, launch, import/export and draft contracts. Unsaved edits stay
+in caller-owned drafts; ambiguous writes expose only the established read-only
+reconciliation paths. The App mounts exactly one instance in the existing
+`#planner` root and delegates lifecycle requests to the existing native services;
+there is no second public route or Store.
+
+Public integration must keep asynchronous Picker results bound to the navigation
+revision that requested them and must not rerender the Workspace when its
+language value is unchanged. Activation and Resume retain a Bridge ticket when
+a Store-lock request rejects after the writer callback produced the exact source
+and target; Recheck is read-only and never retries the mutation. While an ACTIVE
+Runtime is owned locally, Workspace records may be installed only with exact
+Execution/Attempt/Run identity and monotonic aggregate, Execution and runtime
+revisions. Equal Store revisions must be identical, aggregate-only advances must
+not rewind the in-memory clock, and conflicting or unreadable reads fail closed.
+
+Workspace Back and host-driven close share one guard: dirty drafts require
+explicit confirmation and pending or uncertain mutations remain mounted for
+read-only reconciliation. Resource-row structural edits preserve phase
+disclosures and keyboard focus. Completely empty resource placeholders are
+removed only from an explicit Save snapshot; the caller's editable draft remains
+available across failed or uncertain writes. Partially completed and invalid
+HTTP(S) resources are identified at their fields before any Store write. These
+presentation rules do not change native domain validation, Store records,
+Runtime, Recovery, Active Lock or lifecycle semantics. The corresponding
+unreleased application shell is PWA v79. PWA v79 fixes BUG-002 at the App-side
+installation boundary: only the exact result of the immediately confirmed
+authoritative Session action may update a same-binding local Runtime. Ordinary
+record installation remains strict, and no failed installation retries a Store
+write. The first UX-001 phase-row slice adds
+an explicit two-digit position button and select-then-Move popover to the native
+Workspace. It reuses the stable-ID draft reposition operation, preserves open
+phase details and unsaved draft values, and remains write-free until global
+Save. The second slice keeps inline title/duration editing in the compact row,
+moves the five existing categories into an accessible icon popover, and makes
+the final chevron the sole details disclosure. PWA v80 adds the Product Owner
+accepted framework-free dnd-kit interaction behind a dedicated six-dot handle.
+It lazy-loads a locally bundled offline asset only for an editable Workspace,
+uses the same stable-ID draft reposition operation exactly once per confirmed
+drop, and retains the position chooser as its keyboard/precision fallback.
+R6 remains a rejected historical experiment; this native integration is
+pending independent review and browser acceptance.
+
 - `src/index.html` and `src/js/app.js` coordinate application views, localized
   presentation and protected navigation.
 - `src/js/timer.mjs` owns Quick Timer transitions and authoritative deadlines.
 - `src/js/session.mjs` creates immutable Session Runs from saved Rundowns and
   handles manual/automatic phase progression and overtime.
-- `src/js/planner.js` and `src/js/templates.mjs` implement the Session Editor and
-  validated browser-local Rundown library.
+- `src/js/editor-workspace.mjs` is the public Schema-2 Workspace presentation and
+  reuses the native Planner, launch, import and persistence services. Legacy
+  `planner.js`, `planner-v1.mjs` and `portability.mjs` remain repository history
+  but are excluded from production startup, precache and packaging.
 - `src/js/recovery.mjs` validates durable runtime records and coordinates
   tab/context ownership. `sessionStorage` associates a tab with its context;
   durable records remain in `localStorage`.
-- `src/js/portability.mjs` implements DATA-001 JSON import/export with strict
-  validation and fresh IDs for imported copies.
+- `src/js/editor-portability.mjs` validates native single-Template documents and
+  passive complete local-data exports. Only single-Template import is public;
+  full backup restore and Execution import are unsupported.
 - `src/js/header.mjs` and shared CSS provide the application and information-page
   header, language, theme and navigation behavior.
 - `src/service-worker.js` precaches the explicit application shell for offline
   cold starts. Asset query versions and the shell version must remain aligned.
 
-Quick Timer, Session Timer, Session Editor, local persistence, recovery,
+Home, Quick Timer, Session Timer, Session Editor, local persistence, recovery,
 DATA-001, information pages and offline PWA behavior are production features.
 The Google Drive work under `tools/app-sync/` and `tools/sync-*` is isolated,
 development-only experimental evidence. Production packaging must not expose or
@@ -217,7 +355,7 @@ node tests/artifact-offline-browser.mjs
 # Development-only synchronization regression
 node tools/app-sync/browser-check.mjs
 
-# Packaging safeguards and deterministic 24-file artifact
+# Packaging safeguards and deterministic 36-file artifact
 node --test tests/packaging.test.mjs
 node tools/release/package.mjs
 
@@ -282,6 +420,7 @@ Operational detail belongs in
 Keep the documentation root small and current:
 
 - [`backlog.md`](backlog.md) — future work and unresolved decisions.
+- [`EDITOR-001_UX-001_DECISIONS_2026-11-16.md`](EDITOR-001_UX-001_DECISIONS_2026-11-16.md) — accepted UX-001 library/editor/notes/resources decisions and remaining integration checks.
 - [`EASYTIMER_UX_KONZEPT_v2.md`](EASYTIMER_UX_KONZEPT_v2.md) — detailed binding
   UX/product decisions.
 - [`DATA-001_RUNDOWN_PORTABILITY.md`](DATA-001_RUNDOWN_PORTABILITY.md) — current

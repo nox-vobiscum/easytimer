@@ -1,6 +1,510 @@
 # Session Editor Evolution & Facilitator Panel
 
-**Status:** Strategic direction agreed; concept and implementation details pending. **Priority:** High / Near-term. **Implementation authorized:** No.
+> **UX-001 decision update (2026-11-16):** The binding, consolidated library/editor/phase/notes/resources interaction decisions are recorded in [`EDITOR-001_UX-001_DECISIONS_2026-11-16.md`](EDITOR-001_UX-001_DECISIONS_2026-11-16.md). For this UX-001 scope, that later decision record supersedes contradictory exploratory UX wording below (including underline, preview length, link-row editing and save boundaries). It does **not** supersede the existing timer, Schema-2, ACTIVE/recovery, archival or Facilitator Panel contracts. The note-editor library is a preferred candidate only, not a released feature.
+
+**Status:** Strategic direction agreed. The coordinated public Schema-2 cutover
+is implemented locally for independent review but is not committed, merged or
+deployed. One native Workspace now serves as the public Editor, and one native
+aggregate serves the Template/Execution library, Picker, Direct Launch,
+ownership-safe ACTIVE entry, lifecycle operations and minimal completed archive.
+The existing Timer/Session engine, Runtime Bridge, Store Writer, Active Lock,
+Web Locks and Quick Recovery remain authoritative. The Facilitator Panel and
+reflection editing remain pending.
+**Priority:** High / Near-term. Every subsequent implementation slice requires
+separate explicit Product Owner approval.
+
+**Public cutover boundary:** `app.js` mounts one
+`createNativeEditorWorkspace()` instance in the existing Planner root and uses
+the native Planner, launch, import and Runtime Bridge services. V1 Planner,
+Template Store and JSON modules are not part of the production import graph,
+precache or package. No V1 migration or second public Editor exists. Legacy V1
+Session recovery remains stored until explicit DE/EN discard confirmation and is
+never resumed or converted; discarding a candidate preserves the current Quick
+Recovery.
+
+**Native Editor Workspace (implemented locally, unreleased):**
+`createNativeEditorWorkspace()` mounts one coherent Schema-2 Library and Editor
+into a caller-supplied root. It reads the complete native Workspace snapshot and
+groups Templates plus PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions with
+stable IDs, revisions and explicit lifecycle copy. Templates support Create,
+Update, confirmed Delete, all native rundown/phase fields, expandable notes and
+labeled HTTP(S) resources. PLANNED Executions can be created from a Template and
+then edit their independent current plan without changing the source Template.
+ACTIVE records open the owned timer, SUSPENDED records support safe resume and
+explicit retain/discard/complete actions, and COMPLETED records have a minimal
+read-only archive. ACTIVE/SUSPENDED structural and timing edits remain read-only.
+
+New Execution editing stays entirely local before the first explicit Save. That
+Save uses the existing stable Template-to-PLANNED launch operation and then the
+PLANNED plan service. Once creation is confirmed, the editor adopts the actual
+Execution identity before any plan update, so a failed second stage cannot
+create a duplicate. If creation acknowledgement is uncertain, the full local
+plan is retained and only `observeExecution()` is offered; observation never
+resubmits the write. Template, Execution, Delete and single-Template import
+uncertainty similarly use their existing caller-held reconciliation tickets.
+Stale writes never merge or rebase.
+
+The Workspace also exports one validated native Template document, reviews one
+imported Template copy before explicit persistence and provides a clearly
+labelled complete local-data export through `serializeEditorBackup()`. Full
+backup restore, Execution import and bulk Template import remain unsupported.
+DE/EN copy, semantic
+forms, expandable phases, safe external links, 44 px controls, accessible
+Delete confirmation with Escape/focus restoration and responsive portrait/
+landscape rules reuse the existing Planner design. The public App owns surrounding
+navigation and lifecycle callbacks; the Workspace remains UI-neutral about Timer
+implementation. The Facilitator Panel is still pending.
+
+**Runtime and lifecycle safety:** entering an ACTIVE Execution requires the
+matching Active Lock and exact Execution, Attempt, Run and runtime-revision
+binding. Confirmed complete Store records are installed before subsequent timer
+actions. Suspend preserves progress and its checkpoint; Resume preserves started
+Attempt/Run identity; Retain Plan resets progress to PLANNED and discards
+execution-only Workshop-Notizen. Uncertain writes retain their original Bridge or
+Workspace ticket for read-only reconciliation and never trigger automatic retry,
+merge or rebase. A local handoff failure never repeats an already confirmed
+lifecycle write. A Store-lock request that rejects after Activation or Resume has
+already produced a source and target is treated as uncertain, retains ownership
+and the original Bridge ticket, and exposes only source/target/conflict Recheck.
+Workspace reads may update an owned Runtime only with the same exact identities
+and monotonic aggregate, Execution and runtime revisions. Older delayed reads are
+ignored, equal revisions must be byte-equivalent at the Store-record boundary,
+and aggregate-only updates preserve the newer in-memory running clock. A
+conflicting or unreadable record blocks further Runtime mutation safely.
+
+Picker reads are single-shot and navigation-scoped: delayed success, empty and
+failure states render when still current, while a response from an abandoned
+view cannot reopen or overwrite newer navigation. Repeated App ticks pass the
+same language to the Workspace without rebuilding its DOM; a real language
+change still rerenders localized controls while retaining the complete draft.
+
+Workspace Back now shares the same internal close guard as App navigation, so
+Library and cancelled-draft exits work while dirty drafts still require consent
+and pending reconciliation remains protected. Resource Add/Remove rerenders
+restore all currently open phase disclosures and place focus on the created or
+nearest surviving control. Fully empty or whitespace-only resource placeholders
+are omitted only from the isolated explicit-Save snapshot. Partial rows and
+unsupported URLs remain in the caller's draft, receive localized field-level
+ARIA errors, expand their phase and focus the first invalid field before any
+write. Failed and uncertain writes retain the original editable draft and exact
+source/target ticket. The native HTTP(S) domain validator remains authoritative;
+no Store, Runtime, Recovery, Active Lock or lifecycle contract changes.
+
+**Historical increment record:** The detailed foundation sections below retain
+the scope boundaries at the time each internal slice was reviewed. References to
+a still-pending public cutover or absent public lifecycle UI are historical and
+are superseded by the coordinated 0AV-T status above; the underlying data,
+identity and reconciliation contracts remain current.
+
+**Internal Template CRUD reconciliation and workspace read (unreleased):**
+`createNativePlannerService()` now treats ambiguous Template Create, Update and
+Delete acknowledgements consistently with the other native editing services.
+The existing Template integration captures the exact validated operation and
+complete Store source/target snapshots inside the authoritative Writer callback.
+An uncertain readback, mismatched readback or late lock acknowledgement returns
+a caller-held ticket; Create retains its one already allocated Template ID,
+Update retains its expected aggregate and Template revisions, and Delete retains
+the exact selected identity and revisions. Create and Update also return the
+complete isolated editable draft.
+
+`reconcileSave(ticket)` and `reconcileDelete(ticket)` validate the operation,
+draft where applicable, source and intended target against the original pure
+Store transformation before reading. Exact target is `confirmed`, exact source
+is `absent`, and every divergent aggregate or read failure is `unresolved` with
+the ticket retained. Reconciliation never writes, retries, refreshes revisions,
+generates another identity, merges or rebases. Template deletion continues to
+leave independent PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions and their
+historical source reference unchanged.
+
+For the upcoming combined workspace, `loadWorkspace()` returns one validated,
+copy-isolated native Store aggregate from the same locked Writer read. Templates
+and Executions retain their entity kind, stable identities and revisions;
+Executions include their lifecycle and the aggregate retains its active runtime
+binding. There is no V1 access, cache, index, second Store, lifecycle facade or
+public UI. The existing narrower Template-only `loadLibrary()` remains available.
+
+**Native Template draft editing foundation:** `editor-template-draft.mjs` edits
+the existing native Planner Service draft envelope without V1 materialization.
+It provides isolated field edits and phase insertion/removal/final-position
+reordering while retaining Template/phase identities, revision bases and all
+unrelated planning fields. New phases use explicit caller-provided IDs, empty
+titles, ten-minute duration and neutral categories. Invalid field contents stay
+in the draft until an explicit Planner Service Save validates them through the
+native domain. Discarding a draft has no persistence effect. This module has no
+UI, storage or lifecycle operations and is not imported by the public Planner;
+native presentation and the public cutover remain pending.
+
+**UX-001 phase repositioning slice (unreleased):** The public native Workspace
+now exposes each computed two-digit phase position as an accessible DE/EN
+button. Its compact selector shows every current position and phase title,
+preselects the current phase, and changes the draft only after explicit Move.
+Cancel, Escape and target selection are mutation-free. Direct moves and the
+existing earlier/later actions reuse `repositionNativeDraftPhase()` and preserve
+stable IDs, disclosures, unsaved fields and useful focus/scroll context. Store
+persistence still occurs only through global Save. Drag-and-drop, category
+popover and the remaining compact-row redesign remain separate slices.
+
+**UX-001 compact phase-row slice (unreleased):** Native phase title and planned
+minutes remain the single editable controls in the compact row whether details
+are collapsed or expanded. Category selection now uses one accessible icon
+button and a localized five-option popover in that row; no duplicate category
+selector remains in details. The final chevron alone controls disclosure and
+keeps its direction, accessible name and `aria-expanded` state aligned. These
+interactions update only the caller-owned draft until global Save. The proposed
+six-dot handle is deliberately absent until a functional, accessible drag
+feasibility slice is separately approved.
+
+**Internal PLANNED Execution plan editing (unreleased):**
+`createNativePlannedExecutionService({ writer })` in `editor-planner-service.mjs`
+loads one existing PLANNED Execution with `loadDraft(executionId)`. Its isolated
+draft contains `executionId`, `expectedAggregateRevision`,
+`expectedExecutionRevision` and `template: { id: executionId, ...currentPlan }`.
+The `template` slot is only the existing draft-operation carrier, not a Template
+entity: all native field edits and stable-ID phase insertion/removal/reordering
+reuse `editor-template-draft.mjs` directly. No Template revision is used and no
+Template CRUD operation is called.
+
+`saveDraft(draft)` explicitly maps that carrier to `currentPlan` of the same
+Execution through `updatePlannedExecutionPlanInRecord()` and the existing locked
+Store writer. It returns `success` with the confirmed full `record` and isolated
+updated `execution`. Aggregate and Execution revisions increase once;
+`runtimeRevision`, source, PLANNED lifecycle, null Attempt/checkpoint and separate
+Workshop-Notizen are preserved. All unrelated Templates, Executions and ACTIVE
+runtime remain unchanged. Unknown fields and invalid plans fail native validation;
+removing a phase still referenced by separate notes is rejected rather than
+silently changing those notes. ACTIVE, SUSPENDED and COMPLETED edits are rejected.
+
+Rejected saves return structured error information and a complete isolated copy
+of the serializable draft without mutating caller input. An uncertain readback or
+late Store-lock acknowledgement returns `uncertain` and a caller-held
+`reconciliation: { draft, source, target }` ticket, not another pending registry.
+`reconcileSave(ticket)` validates the ticket against the pure transformation and
+reads only: exact target is `confirmed`, exact source is `absent`, any other record
+or read failure is `unresolved`. Unresolved results retain the ticket; no write,
+merge, automatic retry or revision refresh occurs. Absence is a current source
+observation, not proof that a write never happened. Tickets do not survive crashes
+automatically. No new Execution, public UI, Workshop-note persistence,
+ACTIVE/SUSPENDED editing or runtime integration is included.
+
+**Internal ACTIVE/SUSPENDED prepared-information correction (unreleased):**
+`createNativeExecutionInformationService({ writer })` loads a copy-isolated,
+information-only draft for one existing ACTIVE or SUSPENDED Execution. The draft
+contains the rundown `preparedInformation` and one exact `{ phaseId, notes,
+resources }` entry for every phase currently present in the configured plan,
+plus the observed aggregate, Execution, runtime, lifecycle, Attempt and Run
+preconditions. Stable phase IDs bind every correction; positions are never used.
+
+`saveDraft(draft)` delegates to
+`updateExecutionPreparedInformationInRecord()` through the existing locked Store
+writer. The Store applies only those prepared-information fields to the selected
+Execution and strictly validates the resulting complete record. Aggregate and
+Execution revisions advance once. Execution/Attempt/source identities,
+`runtimeRevision`, lifecycle, all plan structure and timing, the immutable first-
+START snapshot, actual phase outcomes, Workshop-Notizen, ACTIVE Runtime/Clock and
+SUSPENDED checkpoint remain unchanged. Source Templates and every unrelated
+Execution remain independent. No Active Lock or Runtime Bridge involvement is
+required because the operation neither owns nor changes timekeeping state.
+
+Every save requires the exact observed aggregate and Execution/runtime revisions,
+lifecycle, Attempt identity and Run identity. Therefore a persisted Timer
+transition, concurrent informational save or any other newer Store write rejects
+the stale draft as a conflict; there is no merge, rebase or automatic retry. This
+strict aggregate boundary can require the later UI to reload and deliberately
+reapply a correction after concurrent Timer persistence. Invalid or incomplete
+information, unknown phase IDs, structural fields and unsupported lifecycles fail
+closed while the caller's complete draft remains available.
+
+Unconfirmed readback, mismatched readback and late Store-lock acknowledgement
+return the same caller-held `{ draft, source, target }` reconciliation contract as
+PLANNED editing. Reconciliation validates the exact field-scoped transformation
+and reads only: target is confirmed, source is absent and every other state is
+unresolved. It never repeats the write. This internal information capability does
+not add public Session Editor or Facilitator Panel UI, structural/timing editing,
+Runtime synchronization or a new Store. It does not persist Workshop-Notizen;
+the separate explicit contract follows below.
+
+**Internal ACTIVE/SUSPENDED Workshop-Notizen persistence (unreleased):**
+`createNativeExecutionWorkshopNotesService({ writer })` loads one existing ACTIVE
+or SUSPENDED Execution's complete native Workshop-Notizen snapshot into an
+isolated draft. The existing shape remains `{ rundown, phases }`: `rundown` is a
+String including the empty String, while `phases` is a sparse array of exact
+`{ phaseId, text }` entries. Phase IDs are unique and must still exist in the
+current configured plan. A phase note is cleared by removing its entry; an empty
+phase entry remains invalid. There is no additional note-length limit beyond the
+existing String, Store quota and JSON boundaries.
+
+Explicit `saveDraft(draft)` delegates to
+`updateExecutionWorkshopNotesInRecord()` through the existing locked Store
+writer. Only `execution.workshopNotes` changes. Aggregate and selected Execution
+revisions advance once; `runtimeRevision`, lifecycle, Execution/Attempt/source
+identities, `currentPlan` and all prepared information, first-START snapshot,
+phase outcomes, ACTIVE Runtime/Run/Clock and SUSPENDED checkpoint remain
+unchanged. Source Templates and unrelated Executions remain independent. Draft
+preparation and editing perform no write. No Active Lock or Runtime Bridge is
+needed because Workshop-Notizen persistence does not own or alter timekeeping.
+
+The exact aggregate, Execution/runtime, lifecycle, Attempt and Run preconditions
+reject concurrent Timer persistence, another note save, information/plan changes
+and lifecycle transitions without merge, rebase or retry. Suspend and Completion
+retain their existing complete caller-snapshot behavior. Because a successful
+independent note save advances aggregate and Execution revisions, an older staged
+Suspend/Completion caller fails before its older notes can replace the newer
+snapshot; a caller using the current revisions may deliberately supply the latest
+applicable complete snapshot.
+
+Validation, structured errors, failed-draft retention and uncertain-write
+handling reuse the Planner Service conventions. Unconfirmed or mismatched
+readback and late Store-lock acknowledgement retain complete `{ draft, source,
+target }` snapshots. Reconciliation validates the exact transformation and reads
+only: target is `confirmed`, source is `absent`, and every other state is
+`unresolved`. This capability is distinct from prepared-information corrections
+and the separate editable reflection on a COMPLETED archive. It adds no public
+Facilitator Panel, autosave or EDITOR-002 crash-draft recovery.
+
+**Internal native phase field group:** `editor-phase-fields.mjs` provides title,
+minute-duration and category inputs for one stable phase ID, using the existing
+`editor-template-draft.mjs` operations. The host supplies its current native
+Planner Service draft through `getDraft`, adopts edits synchronously through
+`onDraftChange`, and may call `refresh`, `setLanguage` and
+`showValidationError` after explicit native validation. No draft or library is
+cached, and the component never saves. Its phase-row and expandable category
+detail styles are part of the central `css/styles.css` stylesheet. Escape
+collapses details and restores focus. Language changes retain the active input
+and selection; invalid minute text stays in the draft for the native Save
+validator. This is an internal presentation boundary only, not the final phase
+details design. Name/transition and Rundown metadata controls, Notes/Resources
+overlays and insertion/removal/reorder UI remain pending. No public Planner
+import, packaging or Service Worker cutover is included.
+
+**Internal COMPLETED/archive contract (unreleased):**
+The App-side internal exit boundary now coordinates these existing persistent
+operations; public lifecycle controls remain absent. `exitNativeExecution()`
+accepts explicit `intent` (`suspend`, `retainPlan`, `discard`, `complete`),
+`executionId`, `attemptId` (null before START), `runtimeRunId` and the complete
+`workshopNotes` snapshot for suspend/archive. It captures revisions from the
+current native App binding and delegates all lifecycle writes to the Bridge.
+`installNativeRecord()` rejects installation while an exit is outstanding.
+Concurrent semantic actions, Editor/mode navigation and information links are
+blocked; display-only ticks may continue while persistence is unresolved.
+
+Successful persistence is followed by a locked Store read and a local identity
+recheck. Only the confirmed, still-matching exit may detach the local Run/Clock,
+await Active-Lock release and enable Quick Timer with real recovery. A fresh
+ordinary Recovery context preserves unrelated old records and offers them through
+the existing chooser. Native Session data never enters legacy Recovery. Native
+Session re-entry reads the native Store; without public Library/activation UI it
+does not fall back to the V1 Picker or silently activate a saved execution.
+The existing aggregate revision preserves this native context after the last
+Execution is discarded and the page reloads; no additional persistent key is used.
+
+Uncertain readback keeps the App gated and the sole source/target pending state
+in the Bridge. `continueNativeExecutionExit()` reconciles read-only: source keeps
+the active Session, target continues cleanup once, conflict/read failure stays
+blocked. Late Store-lock request failures also retain suspend reconciliation;
+the App checks this path read-only, distinguishing pre-callback rejection from a
+persisted target. Confirmed persistence with cleanup/release/recovery failure is
+`handoffFailed` with `persisted: true`; continuation retries cleanup, never the
+lifecycle write. No public confirmation UI, Panel, Library or Picker cutover is
+included. Unreleased PWA references are v71.
+
+`completeExecutionInRecord(record, options)` and Runtime Bridge
+`completeExecution(options)` explicitly archive a STARTED ACTIVE or SUSPENDED
+execution. They use the existing exit identity/revision preconditions, plus an
+explicit integer `completedAt` and complete `workshopNotes` snapshot supplied by
+the caller. Unstarted READY is rejected. ACTIVE completion reconciles/freezes the
+existing Session clock and records final phase outcomes; it does not simulate
+NEXT/COMPLETE or force the agenda to finish. SUSPENDED completion uses its frozen
+validated checkpoint, never activates it and adds no suspended time. Completion
+time cannot precede the last authoritative runtime/checkpoint timestamp.
+
+The same execution becomes COMPLETED with its source, original
+`attempt.startSnapshot`, final `currentPlan`, final `phaseOutcomes` and Workshop-
+Notizen retained. There is no duplicate final-plan snapshot. New fields are
+`completion: { completedAt, workshopOvertimeMs }` and initially `reflection: ''`.
+Measured active phase time plus workshop overtime cannot exceed the wall-clock
+span from first START to completion; this is a consistency bound, not a replacement
+for measured durations or a calculation that counts pauses as active time.
+Workshop overtime is captured separately only from the end-of-agenda clock;
+it never extends the settled last phase's duration. Aggregate, Execution and
+runtime revisions increase once. The matching ACTIVE runtime or selected
+suspended checkpoint is removed atomically; unrelated active state is unchanged.
+
+`updateCompletedReflectionInRecord()` and Bridge `updateCompletedReflection()`
+change only the one reflection value and increment aggregate/Execution revisions.
+Runtime revision, lifecycle, identity, source and all historical content remain
+fixed. The Store compares already persisted archives against every write target:
+history mutation, replacement, reactivation, removal or invalid reflection revision
+is rejected before storage. Whole-archive deletion awaits a separate approved
+library operation. Reflection is a String, with no new per-field text limit;
+invalid types fail validation, storage quota failures are controlled, and JSON
+export/import retains its existing 10 MiB UTF-8 document limit. No version history,
+new editor or renderer is introduced.
+
+ACTIVE completion requires held ownership before and at write entry. SUSPENDED
+completion and reflection need only the existing Store lock. Every new Bridge
+operation retains full source/target pending snapshots after unconfirmed readback
+or a late lock-request failure, blocks overlapping mutations and reconciles
+read-only without retry. Confirmed calls return the full Store record; pending
+reconciliation identifies `kind: 'complete' | 'reflection'` and source/target/conflict.
+No Bridge method detaches local runtime, releases ownership, closes the Panel or navigates.
+The later UI must collect every open note draft, confirm persistence/reconciliation,
+detach the local runtime, release ownership and only then leave. Failed operations
+must retain editable input. COMPLETED records now round-trip in passive backups
+and individual Execution documents; Execution import and backup restore remain
+unsupported, and Template import remains Template-only. No public cutover is included.
+
+**Internal actual phase-outcome contract (unreleased):** A native Execution with
+an Attempt must include `phaseOutcomes`, an array of exact records
+`{ phaseId, conducted, activeMs, overtimeMs }`. Stable phase IDs bind results to
+the immutable first-START plan and current plan, including baseline phases later
+absent from the configured plan. Every baseline phase must have exactly one
+record; unknown/duplicate IDs, non-integer or negative times, invalid booleans,
+overtime exceeding active duration and positive times for a non-conducted phase
+are rejected. A phase started and immediately stopped may legitimately have zero
+active duration. PLANNED and never-started ACTIVE/SUSPENDED Executions have no
+outcome field. The first actual START initializes the known new history: phase
+one is conducted at zero elapsed time, other phases have not yet been conducted.
+
+`recordExecutionPhaseOutcomes()` in `execution-runtime.mjs` observes reconciled
+Session-engine output using existing `timeBudget()` values, never a separate
+clock or elapsed-time accumulator. Store actions capture the current phase before
+NEXT/COMPLETE replaces its clock, and again after the transition. A READY phase
+bypassed without START stays not conducted. Automatic catch-up confirms actual
+engine STARTs and settles crossed phases at their authoritative planned budgets,
+with no callback-delay phase overtime. Current-phase results are a sample at the
+persisted runtime/checkpoint time, not a separately running counter. Once agenda
+completion settles a phase, final workshop overtime never extends its result.
+The Execution lifecycle remains ACTIVE until a separately implemented deliberate
+end operation; clock expiration cannot create COMPLETED history.
+
+Store validation cross-checks results against the runtime's stable phase IDs,
+current clock, settled phase overtime and future unstarted phases. Suspend samples
+the frozen checkpoint before changing lifecycle; Resume preserves those results
+and the same Attempt without charging suspended time. Read-only native adoption
+returns current derived `runtime.phaseOutcomes` while retaining the exact persisted
+`record`; a later write derives progress from that authoritative snapshot, not by
+adding the observed projection again. Semantic timer actions retain their existing
+aggregate-only progress revision behavior. Lifecycle revision increments and
+runtime bindings are unchanged; Attempt identity and start snapshot never change.
+Retain removes outcomes with the Attempt, and discard removes only the selected
+Execution. Full-record Bridge reconciliation also includes outcome data.
+
+**Approved incompatibility:** Required-field validation is the explicit boundary;
+no redundant version flag is added. Previously started native development records
+without complete outcomes fail validation/loading/portability. There is no default
+history, conversion, repair, automatic deletion, or invalid-Store-to-empty fallback.
+Unstarted native PLANNED/READY records remain valid without invented history;
+released V1 persistence, Session engine and Recovery are unchanged. This records
+results for the internal archival contract above, not archive UI, live timing
+edits or a chronological event log. Early finalization samples the current
+authoritative phase clock before freezing the final result.
+
+**Internal persistent retain/discard contract (unreleased):**
+`retainExecutionPlanInRecord(record, options)` and
+`discardExecutionInRecord(record, options)` operate on ACTIVE and SUSPENDED
+executions, both READY and already started. Options identify `executionId`,
+`expectedLifecycle`, `expectedAggregateRevision`, `expectedExecutionRevision`,
+`expectedRuntimeRevision`, `expectedAttemptId` and `expectedRunId`. READY ACTIVE
+uses its existing runtime Run ID; READY SUSPENDED uses null Attempt/Run references.
+Started states require the existing Attempt and Run IDs. A stale revision,
+changed lifecycle, missing execution or mismatching binding rejects the operation.
+PLANNED library deletion and COMPLETED/archive are outside these exit operations.
+
+Retain reuses the extended `retainCurrentPlan()` domain operation: the same
+execution and source reference return to PLANNED with an independent copy of the
+complete latest configured plan. Workshop-Notizen, Attempt/start baseline and
+suspended checkpoint are discarded. Aggregate, Execution and runtime revisions
+each increase once. Discard removes the complete selected execution and increases
+only the aggregate revision; there is no remaining Execution to revise. Both
+operations validate the complete target and remove only the selected ACTIVE
+runtime. A SUSPENDED exit leaves a different ACTIVE execution/runtime untouched.
+Templates and all unrelated execution entries remain unchanged.
+
+Runtime Bridge methods `retainExecutionPlan(options)` and
+`discardExecution(options)` capture the supplied options and reuse the exclusive
+Store writer. ACTIVE exits require ownership before and at write-callback entry;
+SUSPENDED exits neither require nor acquire Active-Timer ownership. Successful
+calls return the full confirmed Store record, following existing Bridge API
+conventions; errors reject with the established codes. `reconcilePendingOperation()`
+returns `kind: 'retainPlan'` or `'discard'`, `outcome: 'source' | 'target' |
+'conflict'`, and the observed record. Unconfirmed/mismatching readback or a late
+Store-lock request failure after target construction retains full source/target
+snapshots, blocks new Bridge mutations and never retries. Reconciliation remains
+read-only, requires retained ownership for ACTIVE-origin operations, and needs
+only the Store lock for SUSPENDED-origin operations. A source result does not
+confirm the requested exit; conflicts and failed reads retain pending state.
+
+These operations never release ownership, detach a local timer, close a Panel
+or navigate. Future UI must confirm intent, persist/reconcile, detach the local
+runtime, release ownership and then navigate; editable drafts stay available on
+failure. Bridge pending state is still in-memory only. Actual phase-result
+recording and archival use the separate internal contracts above. Public
+ending/reset UI and historical migration are not introduced by these exits.
+
+**Internal native Template import contract (unreleased):**
+`createNativeTemplateImportService({ writer, createId })` in
+`editor-template-import.mjs` separates `prepareImport(text,
+expectedAggregateRevision)` from the explicit `persistImport(candidate)` decision.
+Preparation uses the existing strict, versioned portability parser and its
+10 MiB UTF-8 limit, reads/writes nothing and returns `prepared` with an isolated
+candidate. Only an individual `editor-template` document is accepted. Its fresh
+Template ID must differ from the source ID; revision starts at 1. All planning
+fields and phase IDs are retained: phase uniqueness is scoped to each plan, so
+there are no cross-Template phase references to remap. ID collisions are rejected
+without regeneration. The candidate retains the caller's observed aggregate
+revision; persistence checks it under the existing exclusive Store writer lock,
+inserts once and returns `confirmed`, the imported `templateId` and the full
+confirmed `record`. No existing Template, Execution or ACTIVE runtime is changed.
+
+Failures return structured `error` outcomes and preserve a valid candidate.
+Unconfirmed/mismatching readback, or a LockManager rejection after the insertion
+callback ran, returns `uncertain` with a caller-retained `reconciliation` ticket
+containing the candidate and complete source/target records. There is no pending
+registry, automatic retry, merge or second ID allocation. `reconcileImport(ticket)`
+validates those records against the insertion and performs only `writer.read()`:
+the exact target is `confirmed`, the exact source is `absent`, and any other
+snapshot or failed read is `unresolved`. Absence describes the current unchanged
+source snapshot, not proof that a write never occurred. Unresolved outcomes retain
+the ticket; the caller must retain it until an explicit resolution. Tickets are
+not durably stored and do not provide crash recovery of an unfinished import.
+
+Execution documents and backups, even valid ones containing ACTIVE runtime, are
+not persistent imports. Passive parsing/export remains supported, but Execution
+identity/checkpoint import policy and full-backup replacement/ownership policy
+require separate review. No restore, activation, timer ownership claim, V1
+conversion, public import UI or public Editor cutover is included.
+
+**Internal Planner integration boundary:** The UI-neutral native Planner service
+loads copy-isolated Template Library snapshots, prepares complete isolated create
+or edit drafts, and carries the captured aggregate and Template revisions into
+the existing lock-protected native operations. Successful writes return a fresh
+confirmed library snapshot; rejected writes return structured error information
+and preserve the unsaved draft without merge, retry or overwrite. The service
+does not cache library state, access V1 storage or change the public Editor,
+Session Picker or timer UI. Their cutover remains separately reviewable and
+requires explicit approval.
+
+**Internal Session launch boundary:** Native launch orchestration first creates
+one independent PLANNED Execution through the existing locked Store writer and
+then activates that same Execution into READY through the existing Runtime
+Bridge. Confirmed planning is never rolled back or repeated merely because
+activation fails. An unconfirmed planning write returns its stable Execution ID
+for explicit read-only observation; an unconfirmed activation remains subject to
+the Runtime Bridge's existing pending-operation reconciliation. READY has no
+Attempt and does not count time: only a later explicit START may create the first
+Attempt and begin the authoritative Session clock. This boundary does not yet
+change the public Session Picker, Direct Launch or Editor UI.
+
+**Binding EDITOR-001 data decision:** There are no historical user Rundowns that
+require migration. New templates and independent executions are created directly
+as native Schema-2 objects in the Editor Store aggregate. No V1-to-V2 conversion,
+historical compatibility import, dual-library migration, startup migration or
+migration wizard is required or authorized. The released V1 implementation may
+remain temporarily and must keep working until separately approved replacement;
+that regression requirement does not imply data migration. Future JSON
+import/export for the new model is a separate contract, not a historical V1
+migration path. Revisit this decision only through an explicit Product Owner
+change.
 
 ## Purpose
 
@@ -15,6 +519,22 @@ A rundown is the **result of planning with the information available at planning
 **Terminology guidance for future About/FAQ copy:** Avoid saying that a rundown is *not* a script. Instead, explain that it **may be followed as written, but is not an inflexible mandate**; adapting it is an option, not an obligation. easyTimer supports facilitation rather than dictating it.
 
 This is a focused evolution of easyTimer, **not** an attempt to recreate SessionLab or build a general workshop-management platform.
+
+**Public entry scaffold:** The current unreleased integration adds a neutral
+Home presentation before ordinary fresh use. It links to the existing Quick
+Timer, native Session Picker and native Session Editor and shows Stopwatch only
+as an unavailable placeholder. This adds no routing, persistence or Timer
+authority. Runtime/Recovery restoration remains prior, and lifecycle actions
+return Home only after confirmed persistence and safe handoff. A progressed
+independent Quick Timer behind the Workspace is never reset implicitly: its
+existing departure confirmation precedes any terminal SUSPENDED write.
+
+**Public view isolation correction:** Home, Quick/Session Timer, Session Picker
+and Session Editor continue to use the existing application view state. An
+explicit hidden style for the Timer container prevents its flex rule from
+keeping it visible beside another selected view. This correction changes only
+computed visibility and keyboard reachability; it introduces no router and no
+Timer, Runtime, Recovery, Store, lock or lifecycle behavior.
 
 ## 1. Session Editor — preparation workspace
 
@@ -57,6 +577,9 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 
 - Distinguish **reusable templates** from **individual workshop rundowns / executions** in the user's library. A user may create and deliberately edit templates, then prepare a separate workshop-specific rundown from one (with or without customization). Starting an unchanged template still creates an **independent execution entity**, not a modification of the original.
 - An execution may be planned, active in the timer, deliberately suspended, and eventually deliberately ended. **Archiving is optional:** only executions the facilitator chooses to archive become persistent **Abgeschlossen** historical records in the library; they remain independently available rather than disappearing or being silently merged into their source template. Deliberately ending an execution must not require adding an archive entry. Precise end-without-archive disposal/preservation choices still require UX review.
+- Deleting a reusable Template is permitted and never cascades into independent Executions. Their plans, progress and historical source Template ID remain unchanged, including while an ACTIVE runtime exists. This applies to PLANNED, ACTIVE, SUSPENDED and COMPLETED records.
+- A future separately approved operation may use an existing Execution as the source for a new independent cloned Execution. The clone receives a new identity and independent progress; this capability is not implemented by the current Template Library contract.
+- A complete native backup includes all currently supported Templates and Executions, including suspended checkpoints and the matching saved runtime for an ACTIVE Execution. Individual Template and Execution exports are supported by the same versioned passive format. An ACTIVE snapshot does not transfer timer ownership, and parsing never restores, activates or persists anything. Public import/export UI and restore policy remain pending. COMPLETED/archive documents now retain their frozen history and single reflection through passive serialization/parsing; no Execution import, backup restore, V1 migration or compatibility import is involved.
 - Make the distinction **unmistakable in the UI** through a meaningful icon and/or a short text label; don't rely on subtle iconography alone when template edits might be mistaken for changes to an individual execution. Decide the exact placement against real desktop/mobile layouts.
 - An ongoing execution may evolve without retroactively changing completed phases' **structure, timekeeping, progress, or outcomes**. Edits to the **current and upcoming phase structure and timing** must respect already accepted ET-001 decisions 39–43, 45–48, 53–56: completed phases remain structurally/timekeeping-protected; the current phase cannot be deleted/reordered, but allowed title/duration adjustments follow approved timing/conflict rules; upcoming phases may be changed. **Separate informational-content correction (agreed exception):** During an individual execution that has **not yet been deliberately finalized** (including READY, running, paused, suspended), the facilitator may correct or add **prepared rundown/phase information and resource links in the Session Editor, even for a previously conducted phase**, without altering that phase's historic measured time, completion status, order/history, or the immutable original first-Start planning baseline. Such changes update **only that individual execution's latest configured information** and are reflected in its final snapshot if archived; **never automatically change the reusable source template**. Once the entire execution is **Abgeschlossen**, the archived information is read-only under the separately agreed archive rule. Safe execution-aware editing, concurrency and persistence remain prerequisites. **No timer or recovery behavior change is authorized by this concept document.** Runtime-edit implementation remains separately scoped under ST-003.
 - Retain the execution's actual changes, phase outcomes, overtime and other relevant history when the facilitator deliberately archives it (precise historical data and retention contract to be designed). **Optionally** allow reusable planning content from an archived execution to be applied to its originating template, but only via an unambiguous, deliberate overwrite confirmation. **There is no template version history, automatic backup or restore flow**: confirmed changes replace the previous template content. Which planning fields are transferable, whether to offer a preview, and exclusion of actual runtime statistics from the template require a separate focused UX/data-contract review.
@@ -134,7 +657,7 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 ### Completed-execution archive: start and final states, not an audit trail — agreed direction
 
 - **Precisely two planning snapshots per archived execution:** Capture an immutable **start baseline** at the moment of the **first actual Start of timekeeping in the Session Timer** for that execution; capture the **final state** when the facilitator deliberately selects **Durchführung abschließen** and **archives its results**. A never-started READY execution is **not eligible for archival** and has no fabricated start/final history. **Session starten** in the template/library only prepares the timer in READY and is **not** this baseline trigger. The baseline includes the individually prepared rundown as it stands at the actual first Start, not necessarily the original source template. Pausing, resuming, and suspending/returning must not overwrite that baseline. After a deliberately discarded attempt resets the execution to **Geplant**, a future new first Start establishes a fresh baseline; exact atomic persistence and reset rules need data-contract tests.
-- **Default archived view is final-first, but meaningfully annotated (agreed, variant A):** Opening a completed execution is an intentional look back at its actual result, so this default view may be richer than the live rundown. Show the final agenda, actual phase outcomes/timings, edited notes/resources, and any phases **not conducted** although still planned when the facilitator ended the event. **Also show phases that existed in the start baseline but were deliberately removed during the execution**, as clearly subdued/struck-through historical entries labeled **Entfernt / Removed**. They are *not* part of the active final agenda and must never be portrayed as conducted. Subtle icons/indicators may mark modified or added phases, original-plan variance, and unperformed phases; the owner's suggested X/+/>> and colors are **illustrative only**, not approved iconography. Reserve the optional comparison for more detailed analysis, not as the only way to discover removed phases.
+- **Default archived view is final-first, but meaningfully annotated (agreed, variant A):** Opening a completed execution is an intentional look back at its actual result, so this default view may be richer than the live rundown. Show the final agenda, actual phase outcomes/timings, edited notes/resources, and any phases **not conducted** although still planned when the facilitator ended the event. **Also show phases that existed in the start baseline but were deliberately removed during the execution**, as clearly subdued/struck-through historical entries labeled **Entfernt / Removed**. They are *not* part of the active final agenda. **Removal and conduct are independent facts:** a phase conducted before removal remains conducted; one removed without conduct remains not conducted. Never rewrite actual outcomes to satisfy a presentation-only rule. Subtle icons/indicators may mark modified or added phases, original-plan variance, and unperformed phases; the owner's suggested X/+/>> and colors are **illustrative only**, not approved iconography. Reserve the optional comparison for more detailed analysis, not as the only way to discover removed phases.
 - **Skipped and never-started phases (agreed):** Use the **same factual archive result, Nicht durchgeführt / Not conducted**, for a phase deliberately bypassed during a workshop and one still planned but never started by the time the facilitator finalizes. Do **not** introduce a separate **Übersprungen / Skipped** outcome or require a reason. These phases remain part of the archived final agenda unless explicitly **removed** from it; **Entfernt / Removed** is a distinct case. A phase that was actually started counts as **Durchgeführt / Conducted**, including when its time was cut short by an explicit finalization. This decision defines archive semantics, not a new skip control or automatic transition behavior.
 - **Optional comparison on explicit request:** Let the user reveal an **initial-plan vs. finalized-execution** comparison for learning and reflection. Changes in phase presence/order, titles, planned timeboxes, prepared notes, links, and recorded execution outcomes may be compared as supported by the data. Stable phase identities distinguish true additions/removals from edits or reordering. A deleted phase may no longer be present in the final rundown but remains identifiable from the immutable start baseline. Precise comparison presentation is a separate UX design decision.
 - **Not a change log or version-control feature:** Do not store or display a sequence of intermediate planning edits, timestamps per edit, change reasons, or an audit timeline. Only the immutable start baseline, final state, and the separately required actual phase outcomes/timekeeping records are needed. They can reveal **what differs**, but not necessarily when or why an edit happened, nor any intermediate change later undone.
@@ -163,11 +686,11 @@ Give the Session Editor more space and a clearer identity as a first-class featu
 
 ### Predefined categories for rundowns and phases — agreed direction
 
-- **Category fields belong in the future data model for both rundowns and individual phases**, irrespective of whether the user explicitly chooses a category. A neutral predefined fallback (such as “uncategorized” / “standard”) must be present in the persisted JSON when none is chosen; the final identifiers and schema migration are not yet selected.
+- **Category fields belong in the new data model for both rundowns and individual phases**, irrespective of whether the user explicitly chooses a category. A neutral predefined fallback must be present in persisted Schema-2 JSON when none is chosen. Schema 2 uses the fixed identifier `uncategorized`; no V1 category conversion or migration is required.
 - Categories come from **fixed, application-defined lists**, not user-defined or customizable taxonomies. Possible rundown examples: workshop, congress/conference, meeting, training. Possible phase examples: talk/presentation, discussion, breakout, break. Exact initial lists and labels still require a separate review.
 - **Choosing a category remains optional in the UI**. Do not impose a classification step on users who just want to create and run a timer.
 - Distinguish a rundown's **library role** (template vs. individual execution), its **lifecycle status** (planned/active-in-timer/suspended/completed), and its **category** (workshop/training/etc.); these are independent concepts.
-- **Confirmed user value of phase categories:** Optional phase icons can later make an agenda and timer phases recognizable and help facilitators scan the balance of presentations, discussions, group work and breaks. Categories are a modest initial JSON field, with UI iconography deliverable in a later increment; no category-specific clock/timer behavior is implied. Exact iconography and visual treatment remain open. Import/export and backward compatibility with existing category-free JSON must be addressed in the separately approved data contract. Import/export and backward compatibility with existing category-free JSON must be addressed in the separately approved data contract.
+- **Confirmed user value of phase categories:** Optional phase icons can later make an agenda and timer phases recognizable and help facilitators scan the balance of presentations, discussions, group work and breaks. Categories are a modest Schema-2 JSON field, with UI iconography deliverable in a later increment; no category-specific clock/timer behavior is implied. Exact iconography and visual treatment remain open. Future import/export must validate the new model; category-free historical V1 JSON needs no compatibility or conversion path.
 
 ### Built-in example rundowns — agreed product direction
 
@@ -240,8 +763,8 @@ Requirements and boundaries:
 
 - Preserve one authoritative timer state and existing Session Timer behavior.
 - Maintain the distinction between the saved Rundown definition, the active run's snapshot, and notes captured during that run.
-- Any extension to persisted Rundown data must be designed and tested with existing library storage, validation, JSON import/export, compatibility with saved data, and recovery. The optional Google synchronization work must not be accidentally broken.
-- **JSON field naming (open, distinct from UI copy):** The currently released Rundown library uses **`schemaVersion: 1`**; phase records currently have **`id`**, **`title`**, and **`durationSeconds`** without any notes field. Prefer a neutral, purpose-independent planned-phase field such as **`notes`**, rather than encoding 'moderator-only', 'audience-only', or a changeable German UI label into its key. Store notes captured during a run **separately in the execution context**, associated with stable target phase identity (possible concept-level name: **`phaseNotes`**), not by silently merging them with prepared notes. **Neither proposed field name nor its structure is approved as a schema change**; settle versioning/migration, notes representation, validation, JSON portability and recovery in the later explicit data contract. Displaying prepared content to an audience remains a presentation choice, not a field-level security promise.
+- New persisted Rundown data must be designed and tested with Schema-2 storage, strict validation, new-model JSON import/export and recovery. Existing released functionality and the isolated optional Google synchronization work must not be accidentally broken. This regression boundary does not require V1-to-V2 data migration.
+- **JSON field naming (distinct from UI copy):** The released Rundown implementation still uses **`schemaVersion: 1`** and phase records with **`id`**, **`title`**, and **`durationSeconds`**. EDITOR-001 instead uses the approved native Schema-2 contract, including neutral prepared `notes`, resources and separate execution `workshopNotes` associated with stable phase identities. New-model JSON portability and recovery require their own explicit integration and tests; they must not become a historical V1 conversion path. Displaying prepared content to an audience remains a presentation choice, not a field-level security promise.
 - No own backend, database, account system, file hosting, or mandatory Google login for the initial increments.
 - No new confidentiality, roles, or access-control system in this initiative.
 - Cross-device **live timer synchronization** is a separate, strategically important feature and takes priority over private notes or role-gated views. Google identity alone must not be mistaken for live state synchronization.
@@ -249,13 +772,20 @@ Requirements and boundaries:
 
 ## 5. Candidate incremental delivery path (not yet approved)
 
-1. **Concept and data contract:** settle preparation fields, backward-compatible storage/JSON behavior, and the active-run snapshot boundary. Treat data-model changes as higher-risk than cosmetic UI work.
+1. **Concept and data contract:** use native Schema-2 templates and independent executions, validate new-model storage/JSON behavior, and preserve the active-run snapshot boundary. No historical V1 compatibility migration is required. Treat data-model changes as higher-risk than cosmetic UI work.
 2. **Editor workspace and prepared content:** progressively add more usable phase details, rundown/phase notes, and labeled resource links without losing the simple phase-list workflow.
 3. **Read-only Facilitator Panel:** reveal prepared information on demand in the current Session Timer, without changing timer controls or transitions.
 4. **Lightweight live note capture:** capture phase/rundown observations and optionally transfer selected notes into a saved Rundown after explicit confirmation.
 5. **Optional phase types and visual cues:** design restrained phase color/icon conventions for planning and runtime. Do not add type-specific timer logic by default.
 
 These increments may be split or reordered after the detailed UX review. Nothing here authorizes implementation.
+
+The R6 custom Pointer Events drag presentation remains a rejected historical
+experiment. The corrected R7 framework-free dnd-kit spike was accepted by the
+Product Owner on desktop and iPhone Safari. Its native Schema-2 Editor
+integration is now pending independent review and subsequent acceptance; the
+position chooser remains the accessible fallback and global Save remains the
+only persistence boundary.
 
 ## 6. Questions for the later design review
 

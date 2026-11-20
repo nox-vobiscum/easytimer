@@ -219,8 +219,8 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
     };
     const assertReturnLabels = async view => {
         const expected = {
-            de: { quick:'Zurück zum Timer', session:'Zurück zur Session', editor:'Zurück zum Session-Editor', direct:'Zum Timer' },
-            en: { quick:'Back to Timer', session:'Back to Session', editor:'Back to Session Editor', direct:'Go to Timer' },
+            de: { home:'Zurück zur Startseite', quick:'Zurück zum Timer', session:'Zurück zur Session', editor:'Zurück zum Session-Editor', direct:'Zur Startseite' },
+            en: { home:'Back to Home', quick:'Back to Timer', session:'Back to Session', editor:'Back to Session Editor', direct:'Go to Home' },
         };
         const hrefs = await evaluate('Array.from(document.querySelectorAll("[data-info-back]"),a=>a.getAttribute("href"))');
         for (const language of ['de', 'en']) {
@@ -262,6 +262,11 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
     try {
         await evaluate('window.confirm=()=>true');
         await clock.install(await evaluate('Date.now()')); await syncClock();
+        if (await evaluate('document.body.dataset.mode==="home"')) {
+            await excursion('home', '0s');
+            assert.equal(await evaluate('document.body.dataset.mode'), 'home');
+            await evaluate('document.querySelector("#home-quick").click()');
+        }
         await configureQuickTimebox(evaluate, 60000);
         await evaluate('document.querySelector("#primary").click()');
         const running = await readRecord();

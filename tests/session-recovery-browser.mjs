@@ -65,7 +65,14 @@ export async function checkSessionRecovery({ evaluate, click, text, cdp }) {
         await reload(base + 10000000);
         assert.equal(await text('#time'), '+00:25'); assert.equal((await record()).clock.status, 'OVERTIME_STOPPED');
         assert.equal(await evaluate("document.querySelector('#primary').hidden"), true);
-        await click('#stop'); await reload(base + 10000100);
+        await click('#stop');
+        assert.equal(await evaluate("document.querySelector('#stop-workshop-dialog').open"), true);
+        await click('#stop-workshop-confirm');
+        await wait("!document.querySelector('#stop-workshop-dialog').open&&document.querySelector('#time').textContent==='01:00'");
+        assert.equal(await evaluate("document.querySelector('#stop-workshop-dialog').open"), false);
+        assert.equal(await text('#time'), '01:00'); assert.equal((await record()).clock.status, 'READY');
+        assert.equal((await record()).run.runId, first.run.runId); assert.deepEqual((await record()).run.phaseOvertime, {});
+        await reload(base + 10000100);
         assert.equal(await text('#time'), '01:00'); assert.equal((await record()).clock.status, 'READY');
         assert.equal((await record()).run.runId, first.run.runId); assert.deepEqual((await record()).run.phaseOvertime, {});
 

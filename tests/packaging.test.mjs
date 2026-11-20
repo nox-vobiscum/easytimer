@@ -7,7 +7,14 @@ import { packageProduction, verifyArtifact, validateProduction, sourceRoot } fro
 
 test('production packaging is repeatable, allowlisted and checksum-verifiable across checkout line endings', async () => {
     const a = await packageProduction(), b = await packageProduction();
-    assert.equal(a.inventory.files.length, 24);
+    assert.equal(a.inventory.files.length, 39);
+    const paths = a.inventory.files.map(file => file.path);
+    for (const file of ['src/js/editor-workspace.mjs', 'src/js/editor-launch-service.mjs',
+        'src/js/editor-planner-service.mjs', 'src/js/editor-portability.mjs',
+        'src/js/editor-phase-drag.mjs', 'src/js/editor-phase-dndkit-vendor.mjs',
+        'src/THIRD_PARTY_NOTICES.txt']) assert(paths.includes(file));
+    for (const file of ['src/js/planner.js', 'src/js/planner-v1.mjs',
+        'src/js/portability.mjs']) assert(!paths.includes(file));
     assert.deepEqual(a.inventory, b.inventory);
     assert.deepEqual(await verifyArtifact(a.directory), a.inventory);
     const source = await mkdtemp(join(tmpdir(), 'easytimer-package-lines-'));
@@ -32,7 +39,7 @@ test('packaging rejects the original version mismatch, missing files and unexpec
     await writeFile(session, original + '\nimport { probe } from "../../tools/app-sync/account.mjs";\n');
     await assert.rejects(validateProduction(source), /DEPENDENCY_NOT_ALLOWED/);
     await writeFile(session, original + '\nimport("./unexpected.mjs");\n');
-    await assert.rejects(validateProduction(source), /UNREVIEWED_IMPORT_SYNTAX|UNREVIEWED_RUNTIME_LOADING/);
+    await assert.rejects(validateProduction(source), /DEPENDENCY_NOT_ALLOWED|UNREVIEWED_IMPORT_SYNTAX|UNREVIEWED_RUNTIME_LOADING/);
     await writeFile(session, original);
     const about = join(source, 'about.html'), aboutHTML = await readFile(about, 'utf8');
     await writeFile(about, aboutHTML.replace('js/info.js?v=59', '../tools/app-sync/account.mjs'));

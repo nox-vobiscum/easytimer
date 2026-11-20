@@ -27,7 +27,9 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | --- | --- | --- | --- |
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
-| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — design pending | Future preparation workspace, notes/resources and on-demand facilitator reference |
+| PLAN-003 | Optional target total duration for Rundowns | Later / Future idea | Planning aid only; no automatic duration allocation |
+| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — public Schema-2 cutover implemented locally; independent review and real-browser acceptance open | One native public Editor/library, lifecycle and archive implemented; Facilitator Panel remains open |
+| NANO-001 | Nano-View – Always-on-Top Timer View | Next feature after EDITOR-001 is complete, accepted and production-released; before SW-001 | Secondary Document Picture-in-Picture view of the authoritative active timer; separate approval required |
 | EDITOR-002 | Restore unsaved Workshop-Notizen after reload/crash | Someday / Spike — „für lange Winternächte“ | Explicitly deferred; at most a tiny feasibility spike if a safe, simple approach appears |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
 | SYNC-002C | Isolated storage/snapshot/Drive integration | Isolated integration PoC validated with real Google Drive | [Owner acceptance and open gates](archive/investigations/SYNC-002C_ISOLATED_INTEGRATION.md); no production integration |
@@ -37,10 +39,12 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | UX-019 | Subtle Start/Resume and Stop Button Accents | Released in PWA v64 | Owner-accepted semantic Start/Resume and Stop accents |
 | UX-015 | Timer View Typography & Information Hierarchy | Session hierarchy released in PWA v66; remaining work open | Quick Timer typography and compact-landscape menu remain open |
 | BUG-001 | Fullscreen-safe Workshop Stop confirmation | Released in PWA v67 | Document-modal confirmation replaces the browser-native prompt |
+| BUG-002 | Session next-phase transition unexpectedly enters recovery lockout | Fix implemented in unreleased PWA v79; Firefox acceptance open | Exact confirmed-action installation fixes the false local conflict without weakening Store/runtime safeguards |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
 | SW-001 | Stopwatch with Time Marks | Candidate / Design Review | Optional third mode; elapsed-time semantics and mark presentation require approval |
+| ST-004 | Hybrid countdown and unlimited Session phases | Later / Future idea | Evaluate alongside or after SW-001; one authoritative Session timer |
 | ST-003 | Live Session editing and workshop statistics | Later | ST-002 runtime, stable phase IDs |
-| ADHOC-001 | Independent ad-hoc timebox | Later | Shared timer/session state design |
+| ADHOC-002 | Minimal Ad-hoc Timer Overlay | After EDITOR-001 including the Facilitator Panel | Ephemeral independent overlay; separate scope and explicit approval required |
 | QT-002 | Optional manual Quick Timer duration entry | Later | Subtraction and contextual controls are delivered; preserve current one-timer simplicity |
 | REL-001 | Remaining runtime recovery hardening | Later | REL-001A/B are deployed; real-device and four-hour-policy UX remain open |
 | SIGNAL-001 | Configurable visual/audio signals | Later | Meaningful runtime events |
@@ -49,6 +53,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | LIVE-001 | Shared Live Timer & Remote Control | Low / Someday-Maybe | After current UX, sync productization and production-release priorities; related to REMOTE-001, separate from Drive backup/sync |
 | VIS-001 | Alternative Timer Visualizations | Candidate / Design Review | Alternate views of the existing timer; visual and overtime behavior remain open |
 | CUSTOM-001 | Optional presentation customization | Someday | Stable core UI and audience-display requirements |
+| I18N-001 | On-demand translation of saved Rundowns | Later / Future idea | Explicit user action to translate a copy of title, phases, prepared notes and other authored content; no automatic mutation on UI language changes |
 | AI-001 | Image-to-Rundown conversion | Someday (low priority) | DATA-001 portability; separate design/feasibility review |
 
 ## Session Planner improvements
@@ -69,11 +74,410 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 
 **Status:** Released to staging and production in PWA v65 at commit `56e02b5bc989359b3e1e15f817ec1b3886a7667b`; verified production workflow run [`41302013099`](https://github.com/nox-vobiscum/easytimer/actions/runs/41302013099).
 
+### PLAN-003 — Optional target total duration for Rundowns
+
+**Priority:** Later. **Status:** Future idea only; not part of the current
+EDITOR-001 scope and no implementation is authorized.
+
+Allow a facilitator to define an optional **available time** or **target total
+duration** for a Rundown and compare it with the sum of all already specified
+phase durations. Show the remaining or exceeded amount and recalculate it
+immediately when phase durations change or phases are added or removed. A
+restrained progress indicator may be explored, but Rundowns without a target
+total must remain fully usable.
+
+Missing phase durations must remain visibly distinct from the time already
+planned. Never automatically adjust, distribute or infer phase durations. For
+example, an eight-hour target with six hours and thirty minutes planned and
+three phases still lacking timeboxes would show one hour and thirty minutes
+remaining to allocate while still identifying those incomplete phases.
+
+Before any implementation, review the data model, presentation of an exceeded
+target and interaction with deliberately unlimited phases.
+
 ### EDITOR-001 — Session Editor Evolution & Facilitator Panel
 
-**Priority:** High / Near-term — strategic product direction. **Status:** Concept direction accepted; detailed design and implementation pending.
+**Priority:** High / Near-term — strategic product direction. **Status:** The
+coordinated public Schema-2 cutover is implemented locally and remains unreleased
+pending independent review and mandatory real-browser acceptance. One native
+Workspace is the public Editor; one native aggregate supplies Templates and
+PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions to the Workspace and Picker.
+Direct launch, activation, ownership-safe entry, checkpoint-preserving resume,
+Suspend, Retain Plan/reset, discard, completion and a minimal read-only archive
+reuse the existing Store Writer, Runtime Bridge, Active Lock and Timer/Session
+engine. The Facilitator Panel remains open and requires separate approval.
+Targeted integration review corrections now scope delayed Picker reads to their
+originating navigation, make unchanged-language Workspace updates non-rendering,
+retain late Activation/Resume lock failures for read-only reconciliation, and
+enforce monotonic active Runtime installation without clock rewind. Mandatory
+real-browser acceptance remains open.
+
+The focused native Editor interaction correction is implemented for review:
+Library Back and post-Cancel Back share the guarded close path, dirty and pending
+states retain their existing protection, resource-row edits preserve disclosure
+and focus, and explicit Save treats only completely empty resource rows as
+unused placeholders. Partial or invalid HTTP(S) links remain visible with DE/EN
+field errors and cannot write. Failed or uncertain operations retain the
+original editable draft and reconciliation ticket. This advances the unreleased
+shell to PWA v75 without changing Runtime, Recovery, ownership or lifecycle
+semantics. Real-browser acceptance remains open.
+
+UX-002 view isolation is implemented for renewed review. The existing Home,
+Picker, Workspace and Timer orchestration is unchanged; a scoped Timer hidden
+style now guarantees that only the selected primary view participates in layout
+or keyboard navigation. Computed-visibility regressions cover Home, Quick Timer,
+Session Picker, Session Editor and ACTIVE Session across repeated and responsive
+navigation. The unreleased shell advances to PWA v76. This is a corrective
+presentation boundary, not the pending Editor redesign.
+
+The minimal public Home scaffold is implemented locally on top of this cutover.
+It provides DE/EN entry points for Quick Timer, Session Timer and Session Editor,
+with an explicitly unavailable Stopwatch placeholder. Recovery and ACTIVE
+Runtime adoption remain prior states; only confirmed lifecycle completion
+returns Home. Visual/text refinement and Stopwatch implementation remain
+separate future work. Terminal SUSPENDED actions confirm departure before their
+write when a progressed independent Quick Timer is behind the Workspace, so a
+rejected Home transition preserves both states. The Landing Page checkpoint was
+PWA v74; the focused Editor interaction fixes advance the unreleased public shell
+to PWA v75.
+
+V1 Planner, Template Store and JSON sources remain only as repository history and
+focused legacy evidence; they are no longer reachable from public startup,
+precache or the deterministic production package. There is no V1 migration,
+compatibility import, dual library or second public Editor. Production
+dependency/precache references were aligned at the v73 cutover checkpoint, then
+for the v74 Landing Page shell and the v75 Editor interaction-fix shell, and are
+now aligned for the v76 view-isolation shell.
+
+The native Editor Workspace is implemented and covered
+by a direct browser harness. One native snapshot presents Templates and all
+Execution lifecycle groups. Template CRUD, complete rundown/phase editing,
+independent PLANNED creation/editing and single-Template JSON portability reuse
+the authoritative native services. Explicit Save is the only persistence path;
+Cancel is write-free, conflicts retain drafts, and uncertain acknowledgements
+offer read-only reconciliation without retry or merge. ACTIVE entries open the
+owned Timer, SUSPENDED entries expose explicit resume and lifecycle choices, and
+COMPLETED entries open a minimal read-only archive. The public App supplies only
+host orchestration and installs confirmed complete Store records; the Workspace
+does not create another Timer or lifecycle architecture. The Facilitator Panel
+remains open work.
+
+**Historical increment record:** The paragraphs below preserve the narrower
+boundaries of the reviewed native foundation slices in the order they were
+implemented. Statements there that a public cutover or lifecycle control was
+still pending describe that earlier checkpoint and are superseded by the current
+0AV-T status above. Their data, revision and uncertainty guarantees remain
+binding.
+
+Internal native Template Create, Update and Delete now preserve the exact
+validated operation and complete Store source/target snapshots after an
+uncertain readback or late lock acknowledgement. Planner reconciliation validates
+caller-held tickets and reads only: target is confirmed, source is absent and a
+different or unreadable aggregate remains unresolved. It never retries, merges,
+rebases or allocates another Create identity; create/update drafts remain
+available. A minimal `loadWorkspace()` read returns one validated, copy-isolated
+native aggregate containing both Templates and Executions with lifecycle and
+revision metadata. This adds no cache, lifecycle controller, V1 access, public
+Library/Picker/Editor integration or PWA change.
+
+Internal App-side native exits now guard identity, actions and navigation through
+confirmed persistence or read-only Bridge reconciliation, local detachment,
+awaited ownership release and ordinary Quick Recovery initialization. Cleanup
+failure after persistence is distinct and never retries the lifecycle write.
+Unrelated recovery records remain intact. Direct App browser tests cover the
+handoff; public lifecycle controls, unified Library/Picker, Editor and Facilitator
+Panel integration remain pending. Native Session re-entry does not fall back to
+the V1 Library. Existing public V1 workflows remain unchanged.
+
+Native Template draft editing is prepared internally through pure copy-isolated
+operations on existing Planner Service drafts. Name, transition mode, categories,
+prepared information, phase titles/durations/notes/resources and stable-ID phase
+insertion/removal/reordering are covered. Revision bases are retained and only
+explicit Planner Service Save validates/persists data. The internal Workspace
+now consumes these operations; public Editor integration and cutover remain open.
+
+Internal PLANNED Execution plan editing now reuses the same native draft
+operations with an explicit Execution mapping. A locked save updates only the
+existing selected Execution's current plan; aggregate/Execution revisions advance
+once while runtime revision, source, workshop notes and unrelated ACTIVE state
+remain unchanged. Full drafts survive rejected saves; uncertain acknowledgements
+use caller-held source/target tickets and read-only reconciliation without retry.
+This is unreleased internal functionality. Existing Template editing remains
+separate; public Editor, Library and Panel integration are not implemented by
+this slice.
+
+Internal ACTIVE/SUSPENDED prepared-information correction now updates only the
+selected Execution's rundown information and phase notes/resources through the
+existing locked Store writer. Stable phase IDs and exact aggregate, Execution,
+runtime, lifecycle, Attempt and Run preconditions protect ACTIVE Runtime/Clock,
+SUSPENDED checkpoints and newer Timer transitions. Aggregate and Execution
+revisions advance once; runtime revision, source Template, plan structure/timing,
+first-START snapshot, phase outcomes, Workshop-Notizen and unrelated records stay
+unchanged. Failed saves retain the full information draft. Uncertain writes use
+validated source/target tickets and read-only reconciliation without retry,
+merge or rebase. Strict aggregate conflicts during concurrent Timer persistence
+are an intentional correctness-first limitation for later UI integration. This
+is internal only: general ACTIVE/SUSPENDED plan editing and the public
+Editor/Facilitator Panel remain pending; Workshop-Notizen use the separate
+explicit persistence contract below.
+
+Internal ACTIVE/SUSPENDED Workshop-Notizen persistence now loads and explicitly
+saves the complete existing `{ rundown, phases }` snapshot through the locked
+Store writer. Sparse phase entries retain stable IDs; removing an entry clears
+that phase note, while an empty rundown note remains valid. Exact aggregate,
+Execution/runtime, lifecycle, Attempt and Run preconditions reject concurrent
+Timer, plan/information, lifecycle and note changes. Aggregate and Execution
+revisions advance once; runtime state, checkpoints, current plan/prepared
+information, first-START baseline, outcomes, Templates and unrelated Executions
+remain unchanged. Failed drafts survive, and uncertain writes reconcile full
+source/target snapshots read-only without retry. Existing Suspend and Completion
+still accept complete caller snapshots; their revision checks prevent an older
+staged snapshot from overwriting a newer independent note save. This internal
+contract is separate from COMPLETED reflection and does not implement the public
+Facilitator Panel, autosave or crash-draft recovery.
+
+An internal native phase field group now consumes those operations for phase
+title, minute duration and category, with expandable category details, DE/EN,
+keyboard/focus handling and host-supplied validation feedback. Browser tests use
+real native drafts and services. The public V1 Planner does not load this group.
+The internal Workspace now supplies name/transition and Rundown metadata fields,
+prepared Notes/Resources and phase structural controls. Public integration
+remains open.
 
 Develop the Session Editor into an approachable workshop-preparation workspace with rundown/phase notes, labeled resource links and optional visually marked phase types. During a run, expose prepared information through an unobtrusive, intentionally opened, primarily read-only Facilitator Panel; optionally capture small run-specific notes and explicitly transfer selected notes to the saved Rundown. Preserve the existing timer, active-run snapshots, JSON portability and simplicity. No initial file uploads, own backend/accounts, confidentiality model or Miro integration. Cross-device live timer synchronization remains a separate higher-priority concern than private or role-specific notes. See the [concept and open design questions](SESSION_EDITOR_EVOLUTION.md).
+
+**Binding data decision:** No historical user Rundowns require migration.
+EDITOR-001 creates templates and independent executions directly in the native
+Schema-2 Editor Store aggregate. V1-to-V2 conversion, historical compatibility
+import, automatic or dual-library migration and a migration wizard are neither
+required nor open backlog work, and they are not dependencies for the new
+Session Editor. Existing V1 implementation code may remain temporarily for
+regression safety; preserve released timer, editor and recovery behavior until
+separately approved replacement. The internal Schema-2 portability contract can
+strictly serialize and parse complete Template/Execution backups and individual
+Template or Execution snapshots without persistence or activation. Public
+import/export UI and restore policy remain separate new-model requirements, not
+historical migration tasks. COMPLETED archival persistence is now internal only.
+
+Deleting a reusable native Template does not cascade into its independent
+Executions: PLANNED, ACTIVE, SUSPENDED and COMPLETED records retain their
+plans, progress and historical source Template ID, and an ACTIVE runtime remains
+untouched. A future operation may create a new independent Execution from an
+existing Execution with a fresh identity and independent progress; that cloning
+capability is not implemented and requires a separate approved slice.
+
+Internal COMPLETED persistence now archives a deliberately ended, previously
+started ACTIVE or SUSPENDED execution with its original baseline, final plan,
+phase outcomes, full caller-supplied Workshop-Notizen and separate workshop
+overtime. The Store atomically removes only its matching runtime/checkpoint and
+protects already archived history at write time. Only the single reflection and
+its permitted revisions may change; whole-archive deletion is not implemented.
+COMPLETED records round-trip passively in backups and individual exports.
+Removed and conducted remain independent historical facts. Public completion
+dialogs, archive/reflection views, local detachment, ownership release and
+navigation remain pending; no public cutover or automatic completion is included.
+
+Internal actual phase outcomes are now recorded for started native executions,
+using stable phase IDs, conducted status, active milliseconds and phase overtime.
+Existing engine values preserve early manual transitions, skipped READY phases,
+automatic catch-up, pauses and suspended checkpoints; final workshop overtime is
+separate. Store validation, passive portability and read-only adoption preserve
+the contract, with full-record uncertain-write reconciliation. Retain/discard
+removes the selected outcome history. Incomplete started native development
+records are deliberately rejected without migration, inferred history, repair or
+overwrite; unstarted native records and released V1 data are unaffected. This is
+unreleased internal functionality supporting archival, not public UI integration.
+
+Internal persistent non-archiving exits now support ACTIVE and SUSPENDED READY
+and STARTED executions. Retain-plan returns the same execution to PLANNED with
+its latest complete planning content and clears Attempt, checkpoint and all
+Workshop-Notizen. Discard removes only the selected execution. Both use existing
+Store/Bridge revision and binding checks; matching ACTIVE runtime is removed in
+the same record write, while unrelated active runtime remains unchanged.
+Uncertain outcomes retain read-only source/target reconciliation without retries.
+Neither exit releases ownership or detaches the local timer. Public confirmation,
+detachment, ownership release and navigation remain unimplemented; actual phase
+results and COMPLETED archival use the separate internal contracts above. These exits
+do not implement PLANNED library deletion or change the NO-MIGRATION decision.
+
+An unreleased internal native Template import service now separates strict JSON
+preview from explicit persistence. A single Template document becomes an
+independent Template with a fresh ID and revision 1, retaining phase IDs and all
+planning fields. Confirmation checks the reviewed aggregate revision under the
+existing Store writer lock and preserves all existing Templates, Executions and
+ACTIVE runtime. Conflicts never rebase or overwrite. Uncertain acknowledgement
+retains full source/target snapshots and the stable candidate for read-only
+reconciliation, without retry or a second ID. This does not integrate public
+import UI. Execution import and full-backup restore remain unsupported pending
+explicit identity, replacement and ownership policies; passive portability is
+unchanged. No historical migration is introduced.
+
+Native backups include all currently supported Templates and independent
+Executions, including suspended checkpoints and a matching saved runtime for an
+ACTIVE Execution. Individual exports use the same passive snapshot rule. Export
+documents do not grant timer ownership, and parsing never restores, activates or
+writes anything. COMPLETED records now preserve their immutable history and
+single reflection through the same passive format; persistent Execution import
+and backup restore remain unsupported.
+
+The internal Planner service prepares copy-isolated create/edit drafts containing
+all native planning fields, captures aggregate and Template revisions for
+conflict-safe writes, delegates persistence to the existing locked Template
+integration, and returns refreshed confirmed library snapshots. Validation,
+conflict, missing-record, storage and lock failures remain structured and retain
+the caller's unsaved draft. This is an unreleased UI-neutral contract only; the
+public Editor, visible library and Session Picker still use their existing paths.
+
+The internal launch service separates three operations: creating an independent
+PLANNED Execution from a selected Template, activating an explicitly selected
+PLANNED Execution into READY through the existing ownership-protected Runtime
+Bridge, and the later explicit timer START that alone creates an Attempt and
+begins counting. If activation fails after confirmed planning, the PLANNED
+Execution is retained without rollback or duplication. Ambiguous planning writes
+must be observed explicitly by their stable Execution ID; ambiguous activation
+writes remain pending in the existing Runtime Bridge until explicitly reconciled.
+No public Session Picker or Direct Launch path uses this service yet.
+
+
+### EDITOR-001 / UX-001 — Product Owner decision consolidation (2026-11-17)
+
+**Status: accepted UX/product decisions only; not implemented by this documentation commit, not production acceptance, and not permission to implement or deploy.** This section consolidates the reproducible decisions from the focused November 16–17 Product Owner review **against** existing native Schema-2 work, released V1 Planner behavior, [the earlier UX-001 decision register](EDITOR-001_UX-001_DECISIONS_2026-11-16.md), [the original EDITOR-001 concept](SESSION_EDITOR_EVOLUTION.md), and deferred items above. For the specific interactions explicitly changed here, **this later accepted wording supersedes contradictory UX wording** in those older records. All unmentioned prior decisions remain binding. Do **not** re-interview the Product Owner about settled questions. Capture implementation verification and any real incompatibility separately, without making up a new architecture.
+
+#### A. Actual existing foundation versus requested UX
+
+- **Existing, verified on this feature branch:** `src/js/editor-template-draft.mjs` exports `repositionNativeDraftPhase(draft, phaseId, position)`, moving a stable-ID phase to an arbitrary valid numeric position in a copy-isolated draft. The first UX-001 implementation slice gives every native phase an accessible two-digit position button and explicit select-then-Move popover, and routes it plus **Nach vorne / Nach hinten** through the same disclosure-, focus- and scroll-preserving draft path. The second slice keeps title and duration directly editable in collapsed and expanded rows, moves the five existing categories into a localized icon popover, and makes the final chevron the sole details disclosure. All remain draft-only until global Save. Functional drag-and-drop and the remaining Editor redesign are still pending.
+- **Existing in released production V1 (owner screenshot, not the current native Workspace):** an accessible-intent repositioning popover with **Nach oben / Nach unten**, a **Position** select showing **number plus phase title**, an explicit **Verschieben** action and a close action; and an optional insertion-position selector when adding a phase. `PLAN-001` (insert a **new** phase at a chosen position) and `PLAN-002` (readable planned total) are **already released**. Do not redesign or accidentally remove these capabilities. Adapt the established behavior in the **one** native Editor where feasible, instead of recreating a competing V1 Planner or separate position algorithm. The native draft operation can be reused but the existing V1 popover is **not** proof that the final native UI is already implemented.
+- **Already defined in Schema-2:** template/execution separation, lifecycle and ownership, stable phase IDs, category values, prepared rundown/phase information, independent Workshop-Notizen and `source.kind = builtin` support for execution provenance. That last provenance value is **not evidence** of a fully implemented built-in Template catalog, system-template update mechanism, visibility flag, direct execution-to-template creation flow or on-demand translation. Inspect exact existing services before choosing minimal additive boundaries.
+- **Retain:** strict runtime ownership/lock, conflict and uncertain-write reconciliation, one Store, one Runtime Bridge, one timer engine, independent completed history, no V1 compatibility migration. Avoid structural saves or active-clock mutation simply to change presentation. All new persistent metadata/storage changes need contract and test review; never evade schema validators by writing ad-hoc fields.
+- **Already decided, unchanged from earlier UX-001 register:** library tabs and lifecycle groups, 5-card pagination and sort, template-start versus plan-execution semantics, global Save/discard, validation of incomplete drafts versus run eligibility, overlay/read-only previews, named HTTP(S) resource links, locally vendored OverType candidate, 8–10-line fixed notes editing frame and associated focus/confirmation rules. The separate Facilitator Panel remains mandatory EDITOR-001 work, **not** part of this compact-row redesign.
+
+#### B. Compact phase-list row — newer decision replaces collapsed-row-only-read and whole-row-click UX
+
+- All existing and newly created phase rows are compact **and directly editable without opening their detail section**. Reading order/primary layout: **six-dot drag handle → computed two-digit phase position button → inline phase-title input → inline minutes input → directly clickable phase-category icon → detail expand/collapse chevron**.
+- **Title and planned minutes are the primary frequent edits**, directly editable even when details are collapsed; never show a second duplicate title or duration field inside the expanded panel. Inline editing must not implicitly expand/collapse the row, reorder it, commit the global Store or change the active timer.
+- **Position number is a separate, explicitly interactive button**, labeled accessibly e.g. “Phase 03 – Position ändern”; opens the familiar position popover from the collapsed **or** expanded row. The target select displays **position number + current phase title**. Preselect the current position; keep **Verschieben** disabled until a different valid target is chosen; **Abbrechen** dismisses without changes. **Verschieben** updates only the current draft and does **not** trigger another “are you sure?” confirmation, global Save or execution-side timer transition. This is the accepted explicit select-then-apply pattern; *never* immediately move the row merely by changing the select. Replace V1's ambiguous popover “Schließen” cancel copy with **Abbrechen**; use localized DE/EN copy. Position chooser is not an inline freely typed number.
+- **Category icon** sits between minutes and the final detail chevron in normal wide layout. Tapping/clicking the icon **itself**, with no extra category chevron, opens a small accessible category selection popover/menu with the five existing categories/icons: `uncategorized`, `presentation`, `discussion`, `breakout`, `break`. Selecting updates that field in the same draft; no need to expand the details. Its icon visually reflects the current category.
+- **Final chevron only** controls the phase's additional details (prepared notes/links, supplemental actions); it is independent of other controls. **The whole collapsed row is no longer a disclosure target.** Keep independently expandable multiple phases and the already agreed 3–4-line prepared-note and max-three-link read previews. Do not make the phase category a duplicate edit field in details unless required by a genuine accessibility fallback.
+- **Six-dot drag handle:** additional familiar reorder method, not replacement for the position popover. Drag by handle only, not by selecting inputs or by normal vertical page scrolling. Goal **mouse, touch and keyboard-accessible alternative**: touch reordering is desired, not guaranteed without feasibility. On drop, update the **draft immediately** without separate confirmation; only global Rundown Save persists. Preserve unsaved values and expanded/collapsed state of moved **and other** phases, plus focus/scroll as feasible. The existing position button remains the always-available, accessible fallback. **Pareto gate:** small feasibility/real-device test first; avoid a heavyweight dependency, second drag engine, fragile mobile touch gestures or a new reorder architecture; if disproportionate, report the fallback and obtain scope decision instead of silently building complexity.
+- **Responsive:** On desktop keep the compact one-row arrangement; on mobile allow responsive wrapping/repositioning of controls (including category icon), smaller but legible typography and screen-reader-only labels where necessary. Do **not** reduce interactive targets below the existing 44×44px goal. **No horizontal scrolling** in easyTimer layouts except for an independently justified exceptional case. Do not force every control into a single unreadable narrow row. On expanded phase, keep only information and secondary controls, not redundant primary editors.
+- **Future Editor fine-tuning after Slice 2 (accepted, not part of the completed slice):** place the desktop disclosure chevron directly to the right of the category icon instead of below the position number; visually align the category and position popovers; and refine the 320px phase-row composition more deliberately and compactly. Preserve all existing behavior, accessibility, keyboard support and 44×44px touch targets while doing so.
+  - **Additional owner observation (2026-11-19, Firefox private mode):** The current `uncategorized` phase-category icon resembles a prohibition/locked symbol and can misleadingly imply that the phase row is disabled or blocked. In future UX polish, replace it with a neutral, unmistakably non-restrictive `no category assigned` representation, consistently in the compact phase row and category popover. Keep its category semantics, accessibility label, existing selection behavior and DE/EN unchanged; evaluate a suitable existing icon rather than changing category storage or introducing new dependencies. This is a visual-only follow-up, **not** part of BUG-002 or its ongoing Firefox verification.
+- **Mobile phase-duration keyboard (PO iPhone observation, 2026-11-19; future Editor UX polish):** The minutes field currently opens the full text keyboard in Safari on iPhone. Prefer the numeric keyboard, for example with `inputmode="numeric"` on the existing input, while retaining all current value validation, draft/Save semantics, accessibility and desktop behavior. Verify on actual iPhone Safari. This is an accepted future UX request, not part of the ongoing isolated R6 drag-and-drop spike. No implementation authorized by this documentation change.
+- **Phase categories describe facilitation interaction/setting, not the specific method or semantic topic**: presentation = one/few presenters, discussion = participants exchanging insights, breakout/group work = participants working together or in smaller groups, break = break, uncategorized = no assignment. This interpretation guides icons and the built-in retrospective, but does not add method-dependent timer logic or change allowed data values.
+- Retain the original **add-phase at end** default with expanded new phase and title focus, and the released `PLAN-001` explicit chosen insertion position; do not conflate *inserting* a new phase with *repositioning* an existing one.
+
+#### B1. Drag-and-drop touch UX – R6 real-iPhone rejection and standard-pattern research (2026-11-19)
+
+**Status: Functional feasibility demonstrated; UX NOT accepted for Editor integration. Research / Pareto redesign required before further implementation.** This records explicit Product Owner feedback from real iPhone Safari testing of the isolated staging spike at `/spikes/editor-phase-drag-v1/` (R1–R6). Do **not** mark drag-and-drop as production-ready merely because pointer, draft reorder, auto-scroll and state-preservation tests pass. Do not treat this documentation as permission to implement R7, modify the native Editor, overwrite the staging spike or deploy.
+
+**What worked on real iPhone:** The dedicated six-dot handle initiates drag; phases can move several positions; normal scrolling outside the handle, edge auto-scroll, stable draft IDs, unsaved inputs/notes and expanded details functionally survive. The original numeric position chooser remains the required keyboard/precision fallback. Technical feasibility is established, not tactile/visual quality.
+
+**Owner's explicit rejection of current R6 UX (desktop and iPhone screenshots):**
+- The dragged item appears as a small detached *position number + title* caption instead of a recognizable, lifted phase row/card that follows the finger; preview appears awkward and partly clipped beyond the left screen edge in the iPhone capture.
+- The list largely stays visually fixed apart from a blue destination line/highlight. Neighboring items do not create an obvious gap or naturally shift out of the way, so the interaction feels improvised rather than native/mobile-familiar.
+- **Critical on iPhone:** Safari visibly selects background text during a drag, producing its normal blue selection handles and a large translucent selection region spanning multiple rows. This is unacceptable and visually competes with the moving preview. Screenshot documents the symptom; the exact underlying CSS/event-handling cause remains to be proven, not guessed.
+- Overall verdict: **“nicht ausreichend zufriedenstellend”, “selbstg'strickt”**; do not call the R6 visual interaction accepted. Avoid minor cosmetics as a substitute for resolving the interaction model.
+
+**Concrete Product Owner UX reference (iPhone screenshots, 2026-11-19):** [dnd kit – Sortable concept](https://dndkit.com/concepts/sortable/), demonstrated at `dndkit.com`. The owner explicitly likes the **drag interaction**, *not* the demo's graphics/styling. In the reference, a recognizable **full-width sortable card** appears lifted with a shadow and follows the finger, while other cards visibly **move aside/reflow** to open space, rather than showing only a small text chip and fixed blue target line. This is now the **behavioral benchmark** to compare against in the R7 research and real-iPhone acceptance. Verify that moving/canceling the drag does not select background text, that rows settle naturally, and that Safari edge scrolling remains usable. Two owner-provided screenshots are visual references, **not proof of an implementation choice** or complete cross-browser test. **Do not interpret this as authorization to install dnd-kit**: the regular easyTimer editor uses vanilla JS without React, so compare interaction principles and the bundle/architecture costs before considering any dependency. Do not imitate the visual theme/colors of the demo.
+
+**Research summary – common established reorder patterns (technical / visual / perceived haptics):**
+1. **Visual lift and movement:** A recognizable representation of the *whole list item* (or a faithful, non-interactive compact card at approximately the row's perceived width) lifts clearly from its source and tracks the pointer with a stable finger offset; it must remain within usable viewport bounds, including Safari browser bars. Prefer a visible in-list placeholder/gap and neighboring rows shifting/animating toward their next positions. The dragged item should appear to belong to the list, not as an unrelated label. Show a clear target, then a quick settle/snap on drop or snap-back on cancel. Provide reduced-motion treatment; don't force decorative effects.
+2. **Input/scroll conflict control:** Initiate only at the dedicated 44×44 handle; preserve normal scrolling and editable text elsewhere. Check CSS `touch-action: none` **only on the handle**, Safari's `-webkit-user-select: none` alongside standard `user-select: none`, and, if confirmed necessary, temporarily scoped selection/callout suppression during an active drag with complete restore on drop/cancel. Investigate `selectstart`, focus, pointer capture and `pointercancel` paths; avoid disabling selection or normal input editing across the entire Editor permanently. A text-selection regression is a **hard stop**. Do not use a blind global `preventDefault`/gesture override without real-device proof.
+3. **Movement semantics and performance:** Existing Pointer Events + stable-ID `repositionNativeDraftPhase()` remain the baseline; any visual lift, placeholder or neighbor animation must not create a second reorder algorithm, repeatedly commit drafts or duplicate editable controls. Reorder once on valid drop; animate via compositor-friendly transforms where feasible, avoiding unstable live DOM state or forced heavy reflows. Test long lists, variable row heights/open details, edge auto-scroll, orientation and Safari viewport changes.
+4. **Perceived touch/haptics:** Immediate visual pickup, close finger-to-item tracking, predictable resistance/gap, visible landing and fast settle matter more than copying precise native pixels. Don't assume web-based vibration/haptic APIs can deliver native iOS feedback; not a requirement. Reassess threshold versus accidental drags/scrolling on real devices, but do not mandate Long Press merely to imitate native behavior.
+5. **Keyboard/accessibility:** Preserve the position-number popover (select-then-Move) for keyboard, screen readers and precision; dedicated handle must have a meaningful Enter/Space action and visible focus; successful reorder announced without unnecessary verbosity. Preserve IDs, prepared data, disclosure, scroll and focus, draft-only Save boundary, ownership/Runtime/Recovery integrity.
+6. **Technical options to compare rather than decide prematurely:** (A) smallest improvement to current Pointer Events spike with a full-width lifted preview + placeholder/animated neighboring rows + Safari selection fix; (B) reuse a battle-tested sortable interaction pattern/library only if A proves disproportionately complex, with explicit license, size, offline/CSP, accessibility and Store/draft boundary review; (C) retain the already-working direct-position chooser alone if neither yields convincing real-device UX. Native HTML drag-and-drop alone must not be assumed to provide reliable iPhone list sorting. The codebase's free/offline, no-new-dependency preference remains binding.
+
+**Authoritative external references for the later comparison (guidance, not implementation mandate):** [Apple Human Interface Guidelines – Drag and Drop](https://developer.apple.com/design/human-interface-guidelines/drag-and-drop); [Chrome Modern Web Guidance – Rearrange Items with Drag and Drop](https://developer.chrome.com/docs/modern-web-guidance/guides/ui-behaviors/drag-and-drop); [Chrome Modern Web Guidance – Build a Draggable Element](https://developer.chrome.com/docs/modern-web-guidance/guides/ui-behaviors/drag); [MDN – CSS user-select / Safari prefix](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/user-select); [MDN – touch-action](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/touch-action); [SortableJS options as an optional comparison](https://github.com/SortableJS/Sortable).
+
+**Required next gate (not authorized yet):** Present a short evidence-based IST → options A/B/C → complexity/risk → recommendation, including a small desktop/mobile *structural* wireframe for a lifted row and placeholder. Only after separate GO consider a small R7 touch-UX experiment on the isolated spike, independent review, controlled staging update and **real iPhone Safari re-acceptance**. Success requires: no native text-selection handles or blue selection during a drag; recognizable moving card within viewport; clear in-list space and unambiguous drop; reliable cancel/edge-scroll; unchanged editability and keyboard fallback; no heavy framework or second reorder engine. Failing these, postpone/omit the handle and use the position chooser. Do not fold R7 into normal Editor UX polishing without that gate.
+
+**Subsequent R7 decision (2026-11-20):** The corrected framework-free
+`@dnd-kit/dom@0.5.3` spike passed Product Owner acceptance on desktop and real
+iPhone Safari. Its full-card feedback, neighboring-row displacement, drop and
+touch behavior supersede R6 as the accepted interaction. R6 remains a rejected
+historical UX experiment. Native Schema-2 Editor integration is implemented on
+the feature branch with the existing stable-ID draft operation as its sole
+domain reorder boundary and is pending independent review and separate browser
+acceptance; it is not deployment approval.
+
+#### B2. Editor responsive layout and desktop real-estate review (PO decision 2026-11-20)
+
+**Status: Accepted near-term concept/review priority, NOT implementation approval. Scheduling: after the current UX-001/dnd-kit feature block AND after the Facilitator Panel, as a finishing follow-up within EDITOR-001 before its final closure.** This must not delay the active drag-and-drop integration or interrupt the Facilitator Panel. Preserve the accepted `NANO-001` priority as the next **separate feature** after EDITOR-001 is completed/accepted/released; do not silently displace or forget it.
+
+**Product Owner observation / external UX inspiration:** Real SessionRun screenshots (workshop rundown **Editor** and **Live Timer**, 2026-11-20) show adaptive use of wide desktop space: a prominent central working area, navigation and context in separate regions, and layouts that arrange, wrap or stack components according to the space available. Treat these screenshots as **interaction and space-utilization references only**, not as approval to copy SessionRun's visual language, navigation, timer behavior, participant sharing or other product scope. Distinguish editor needs from timer/presentation views: the normal easyTimer timer already uses its display area expansively; the Editor presently feels too compressed on desktop.
+
+**Verified current technical baseline at decision time:** `src/css/styles.css` limits `.planner` to `max-width:900px` and the nested `.native-editor-workspace` to `max-width:58rem`. The outer cap effectively constrains the native Editor to roughly 900px even on wide screens, while the compact phase row accommodates drag handle, position, editable title, minutes, category and details controls. This is a concrete reason to critically evaluate the global width cap rather than merely micro-optimizing compact controls.
+
+**Later concept-review scope (no code yet):**
+- Compare actual desktop, intermediate/tablet and narrow/mobile layouts, including 320px, portrait/landscape, keyboard and touch. Examine available space, readability, editing flow, navigation, metadata, phase cards, open details and scrolling in real browser windows.
+- Investigate **adaptive composition**, e.g., a generous agenda column alongside a contextual/session-metadata region on sufficiently wide screens, stacking or rearranging these on narrower viewports. This is a design option, **not an agreed two-/three-column architecture**.
+- Distinguish useful constraints on **text line length / individual panels** from an unnecessary **max-width on the entire working surface**. Avoid using maximum available width merely to stretch text fields across unreadably long lines.
+- Review CSS Grid, existing container queries and content-driven breakpoints instead of forcing a single compressed row on every viewport. Preserve visible hierarchy and 44×44px interactive targets, prevent horizontal scrolling and avoid duplicative editing controls.
+- Consider how draggable variable-height cards and neighboring shifts work in each responsive arrangement. Preserve draft-only reorder and focus/scroll/expanded-detail semantics.
+- Keep existing DE/EN, accessibility, light/dark themes, static/offline PWA, storage/runtime invariants and current Editor product behavior. Do not build a new Timer, Facilitator Panel or navigation architecture as part of responsive polish.
+- Deliver a concise **IST audit, 2–3 low-fidelity structural layout alternatives (desktop/tablet/mobile), pros/cons, and an implementable minimal-slice recommendation** for a separate PO decision. No pixel-perfect design, refactor or external UI framework is authorized by this entry.
+
+**Outcome sought:** On wide desktop screens, the Editor uses available space comfortably and intentionally; as the viewport narrows, content reorganizes naturally rather than becoming unnecessarily cramped. Product Owner explicitly requested this review **soon**, but **after** the active feature block and Facilitator Panel.
+
+#### C. One protected, maintainable Retromat-inspired example Template
+
+- Ship **exactly one** initial built-in example, not a template gallery, standalone example tab, separate tutorial workspace or forced onboarding. In normal **Meine Vorlagen** cards, mark it discreetly **Beispiel / Example** as metadata/badge, **not** a name prefix, extra category or sorting hack. System example is **read-only as an original**: no direct modification, overwrite or actual permanent user deletion. User can start or plan a **new independent execution** from it using the already agreed template actions, then explicitly create a new personal Template from that execution. No redundant “copy built-in template” shortcut required solely for this.
+- The original protected built-in example **may be hidden**, like any user entry, and restored; it remains accessible as a local/offline fallback. A future app maintenance release may replace/update the **built-in example content** without touching independently created personal Templates, planned/current/suspended/completed Executions or archived history. Maintain the built-in's hidden preference across updates. No mandatory user-facing example version history, migration wizard or upgrade prompt.
+- **Built-in example title**: German UI **Retrospektive**, English UI **Retrospective**; no “60 min”, revision number or “Example” in the stored/displayed title (separate badge). **Rundown category:** `workshop`. **Default total:** **60 minutes**, pragmatically adjustable. Five phase titles stay in **English in both locales**:
+
+  | Order / phase title | Minutes | Phase category | Prepared note: purpose only |
+  | --- | ---: | --- | --- |
+  | 01 Set the Stage | 5 | `breakout` / Gruppenarbeit | Arrive, focus, and open participation |
+  | 02 Gather Data | 15 | `breakout` / Gruppenarbeit | Collect experiences, observations and events |
+  | 03 Generate Insights | 15 | `discussion` / Diskussion | Spot patterns and understand underlying causes |
+  | 04 Decide What to Do | 20 | `discussion` / Diskussion | Select and agree on concrete improvements |
+  | 05 Close | 5 | `breakout` / Gruppenarbeit | Summarize, reflect and close the retrospective |
+
+- Notes above describe **intent, not prescribed exercises**: no specific facilitation activities, script, methodological instructions or copied Retromat method descriptions. Make the notes **ultra-short**, localized DE/EN, adjusted to sound natural (the English mini-descriptions above are semantic guidance, not text requiring verbatim reproduction). Include **one illustrative named HTTP(S) resource link** to `https://retromat.org/` in the **Rundown-wide prepared information/resources area**, not a link for every phase, and make the attribution/inspiration clear without implying Retromat endorsement. Respect content and branding rights.
+- **Localized protected example display, Pareto-only:** prepare bundled German and English title/short-note variants; phase names remain English initially. When UI language changes frequently, the **protected example itself** should show the currently selected locale *if* this can be implemented as a small local display-and-copy mapping without a new generalized multilingual Schema-2 data model. Creating a new execution chooses the current language's prepared text **once**; all subsequently user-owned Templates/Executions and their edited contents **never auto-translate** when UI language changes. If localization of the protected example demands disproportional schema/storage change, report a simpler fixed-language fallback before coding.
+- Translation **by explicit user action** for arbitrary personal Templates or planned Executions is **deferred to `I18N-001`**; do not implement it as a side effect of the protected example.
+
+#### D. Universal library visibility (workspace organization, not lifecycle/archive)
+
+- **Every Template and every Execution** may be deliberately **hidden or shown at any time**, regardless of execution state (PLANNED, ACTIVE incl. READY/running/paused, SUSPENDED, COMPLETED). Built-in example uses the same view-level hide/show behavior, while its protected content remains immutable. **Hide is not Delete, Archive, Completion, Stop, Suspend or Restore**. Never change live timer state, execution ownership, persisted plan, completion history or lifecycle when hiding.
+- **All newly created entries always start visible**, regardless of their origin (new from scratch, copied from a visible/hidden Template, execution-derived Template, built-in example). **Never inherit** the source entry's hidden flag.
+- Per-card accessible action **Ausblenden / Einblenden**, preferably in the existing overflow menu. The user's individual choice **persists immediately**, separate from the global Rundown draft Save. Use safe existing storage/conflict protections; a failed or uncertain persistence must not falsely claim success, silently change unrelated data or drop current active status. Do not introduce a new timer write or second library.
+- A separate, accessible **Ausgeblendete anzeigen** view toggle exists **per tab** (Templates and Executions). **Default OFF whenever the editor/library is freshly opened.** Switching it on temporarily mixes hidden entries into their normal sort/status-group order, with a subtle **Ausgeblendet** distinction and individual restore actions; it does **not** permanently unhide them. When OFF, hidden entries do not count toward the displayed **5-card pagination**. Do not invent an archive/tab/folder/gallery for hidden items. Counts and page validity must update after hide/show; per-execution lifecycle groups and their existing collapsible behavior remain intact.
+- **Empty-state behavior is deliberately very minimal:** with **zero total records** in a tab, a subdued line such as “Noch keine Vorlagen vorhanden” and the existing **Neue Vorlage** action (analogous execution-specific action if appropriate). With records present but **zero visible**, a subdued count e.g. **“10 von 10 Vorlagen ausgeblendet”** and **“Alle 10 Vorlagen anzeigen”** button that **turns on the same existing temporary visibility toggle**. No placeholder cards, illustrations, new onboarding, tutorials or extra navigation. When only some entries are hidden, the normal toggle may show the hidden count unobtrusively.
+- Visibility persistence implementation location is **not predetermined** by UX: inspect current Schema-2 exact-field validators, template/execution Store operations, browser-local settings and future sync before choosing an additive, safe metadata boundary. Avoid casually modifying strict records or active-run persistence just to satisfy a workspace filter. This is **new scope**, not an implemented preexisting `hidden` property.
+
+#### E. Create personal Template from any Execution — explicit copy, not mutation
+
+- At **every lifecycle status** (PLANNED, ACTIVE READY/running/paused, SUSPENDED, COMPLETED), offer **Als Vorlage speichern** for an independent Execution. This is *not* a conversion that consumes, resets or changes the Execution. Make a **new independent Template** from a **consistent snapshot of its current planned Rundown content**: title, phase titles and positions, categories, planned durations, prepared rundown/phase notes and labeled resources. Do **not** copy live clock/progress, Attempt/Run/checkpoints, actual results, overtime, lifecycle, execution-specific **Workshop-Notizen**, or completed-reflection text. Purposefully transferring selected run notes into prepared content is a **different, already planned manual workflow**, not automatic template export.
+- Open a **small explicit confirmation/name dialog** with the Execution's title prefilled as an editable **suggestion**, *without automatically selecting all text*; provide **Vorlage erstellen** to perform the authoritative create. The origin Execution stays as is. **Duplicate names are permitted** for Templates **and** Executions: no duplicate warning, forced suffix or name-based identity; IDs disambiguate. A new Template starts **visible**, even when originating Execution is hidden.
+- **Active execution is not automatically forbidden.** Feasibility/safety gate: inspect existing `ACTIVE` ownership locks, bridge and Store snapshots; creation must be a safe copy with no timer interruption and no mutation to runtime or active content. If the existing guards cannot support a consistent snapshot at reasonable cost, report the real blocker and seek a scoped fallback; **never bypass locks or invent a second persistence path**.
+- The current native Workspace/Planner service **does not implement a public “Execution → Template” create action** merely because it supports copying Template drafts or records. Do not declare it delivered. Make it a separately reviewed implementation slice with associated services/tests.
+
+#### F. Agreed behavior that should not be grilled again; remaining evidence work
+
+- Phase relocation (button, existing up/down or future drag) keeps the moved phase's **current expanded state and all local edit buffers**, all other phases' expanded/edit state, and best-effort focus and scroll. Only position and computed number change. On direct-position selection the **Verschieben** action is the only commit to the draft.
+- Keep prepared information versus **execution-only Workshop-Notizen** separate, and obey the preexisting Facilitator Panel rule set. Workshop-Notizen are **never automatically copied into reusable Templates**.
+- Do not reopen settled styling, note-editor height, overlay/apply/cancel/dismissal, prepared-information preview, empty phase, library sorting, or template-vs-run rules. Open practical checks instead: real desktop/mobile width and iOS/Firefox tests, 44px touch/keyboard focus, drag feasibility, real CSP/security/offline vendoring, reliable Store metadata/snapshots, conflicts and safe runtime validation. Existing test/source evidence outranks wishful implementation-complete claims.
+- **Known authorized direct-GitHub documentation updates on this feature branch are not unexpected drift:** `5ab01e78`, `1b80f634`, `ed941516`, `1ecbeefa` (earlier UX decisions), `7c32830a` (`I18N-001` backlog) and the commit that adds this consolidation. On a local clone, preflight with `fetch`, compare the real remote HEAD, preserve untracked OverType spike and any review ZIP, and **safe fast-forward only where possible**. Do not halt merely because these known authorized docs are ahead locally; do stop for actual unexpected commits/conflicts/dirty tracked files. No `reset --hard`, destructive cleanup, forced push, overwrite or unapproved merge. Sol's next task must explicitly be told about the authorized documentation delta.
+- **Before any implementation:** inspect current `docs/BRIEFING.md`, `SESSION_EDITOR_EVOLUTION.md`, the 2026-11-16 decision register, this backlog, existing native Workspace/Planner/Store/Runtime files and test gates. Deliver a small **IST → gap → Pareto implementation-slice proposal** with exact file/test scope; **no source edits before explicit GO**. This documentation commit grants no rollout approval.
+
+#### G. Post-action navigation and success feedback for reset-and-save (owner decision 2026-11-19)
+
+**Status:** Accepted future Session Editor / library navigation UX; documentation only, **not part of BUG-002** and no authorization for an immediate implementation. BUG-002's Session-action false-conflict fix is functionally accepted by the Product Owner after real Firefox private-mode NEXT → READY → START, pause/resume, reload and deliberate finish tests; keep that fix separate.
+
+**Observed problem:** When a facilitator deliberately chooses the existing **end/reset-and-save Rundown** outcome (not Delete, Archive, Suspend or a different completion action), the app currently returns to the general landing page without a visible confirmation. This leaves the facilitator unsure whether the reset and Rundown save succeeded and where to find the Rundown next.
+
+**Accepted target behavior:**
+- After **authoritatively confirmed successful completion** of the specific *reset and save Rundown* action, navigate to the **Session Editor's execution/Rundown list**, in the relevant Session context, **not** silently to the generic home/landing page.
+- Bring the affected Rundown/Execution into view or make it readily identifiable in the existing lifecycle group, respecting the actual persisted status and existing library organization.
+- Display a **clearly visible but unobtrusive positive confirmation with a green checkmark** and localized, action-specific text explaining **exactly what succeeded: the Rundown was saved and reset**. Candidate German copy: **“Rundown gespeichert und zurückgesetzt.”** If useful, include the Rundown name. English equivalent required.
+- The checkmark is **success feedback**, not a new saved-state flag, new lifecycle state, archive action or mandatory blocking dialog. Prefer an accessible status announcement (screen readers) that does not steal focus. Do not show success until persistence has been confirmed, and never claim that discarded timer progress was saved.
+- The confirmation for other actions (**Unterbrechen**, **Archivieren**, **Löschen**, **Abschließen** without reset, etc.) must describe their **actual distinct outcomes**. Do not use a generic “Saved” message where it is inaccurate.
+- Preserve the one authoritative Timer/Runtime/Store, recovery/ownership protection, current lifecycle rules and reload behavior. Determine the existing end/reset action's exact persistence and lifecycle semantics from code/contracts **before** specifying the final copy, group placement or navigation trigger. Do not change those semantics as a side effect of UX polish.
+- A future implementation slice should cover desktop/mobile, DE/EN, keyboard/focus, the single-success-message lifecycle, existing filtered/hidden library entries, error/uncertain-write cases and no false success on failure.
+
+**Out of scope here:** Any code change, new runtime state, redesign of confirmation dialogues, BUG-002 change or immediate navigation implementation. This records a Product Owner decision so it is not lost.
 
 ### EDITOR-002 — Unsaved Workshop-Notizen draft recovery („Für lange Winternächte“)
 
@@ -138,17 +542,40 @@ Add an optional third timer mode that counts elapsed time upward until explicitl
 
 Whether marks display absolute elapsed timestamps, intervals between marks, or both remains an open product decision. Interaction design, persistence and recovery behavior also require a separately approved design review. Preserve all existing Quick Timer and Session Timer functionality, and do not introduce this mode by changing their timing semantics.
 
+### ST-004 — Hybrid countdown and unlimited Session phases
+
+**Priority:** Later. **Status:** Future idea only; explicitly outside
+EDITOR-001 and not authorized for implementation. Evaluate alongside or after
+the standalone Stopwatch capability in SW-001.
+
+A Session phase may eventually use either a fixed countdown timebox or an
+explicitly selected unlimited duration. An unlimited phase measures elapsed
+time in stopwatch style and is displayed with an unambiguous infinity symbol
+(`∞`) plus accessible text. An unspecified duration (`-- min`) remains
+incomplete and prevents Session start; it must never implicitly mean unlimited.
+
+When the facilitator deliberately advances from an unlimited phase, retain its
+elapsed time and let the following phase use its own selected timing mode. A
+representative Rundown is: Welcome (15 min) → Keynote (30 min) → Open Discussion
+(unlimited) → Outro (15 min).
+
+Explore reuse of the future standalone Stopwatch capability without creating a
+competing Timer engine. Preserve authoritative Session ownership, Pause/Resume,
+Recovery, lifecycle semantics and compatibility with future synchronization.
+Reporting and statistics implications require evaluation before any design or
+implementation approval.
+
 ### ST-003 — Editing and statistics during a session
 
 Later: edit the current and upcoming phases without stopping the running session, with protected current/completed phases, conflict-safe drafts, per-phase time saved/overrun, workshop totals, and recovery behavior. Follow ET-001 decisions 39–43, 45–48, and 53–56 instead of simplifying them silently.
 
 **Status:** Later; depends on ST-002.
 
-### ADHOC-001 — Independent ad-hoc timer
+### ADHOC-002 — Minimal Ad-hoc Timer Overlay
 
-Temporary timebox that suspends the main session/Quick countdown or overtime according to the previously accepted ET-001 behavior, while keeping its own duration and explicit return/resume controls. Ad-hoc time must not contaminate the workshop total.
+**Priority:** Strictly after EDITOR-001, including the Facilitator Panel. **Status:** Deferred separate feature; implementation requires explicit Product Owner approval and is not part of EDITOR-001 or 0AM.
 
-**Status:** Later; depends on a clear runtime-state design.
+Provide a small accessible DE/EN countdown overlay above a still-visible, independently continuing Session Rundown. It is not another application mode and must never modify the Session Timer, rundown, phase transitions or Execution lifecycle. Reuse existing timer calculations with one separate ephemeral timer starting at `00:00`, `+1 min` and `+5 min` adjustments, and appropriate Start/Pause/Resume controls. At completion it remains at `00:00` until an explicit **Stop & Close** action. Stop & Close—and Escape if supported—requires confirmation before discarding and closing; there is no separate close button. Do not persist or recover this temporary timer after reload or crash, and add a brief FAQ explanation only when the feature is implemented.
 
 ### QT-002 — Optional Quick Timer refinements
 
@@ -177,6 +604,16 @@ Independent visual/audio preferences, with audio off by default, event-specific 
 **Status:** Later; useful once relevant runtime events exist.
 
 ## Presentation and remote control
+
+### NANO-001 — Nano-View – Always-on-Top Timer View
+
+**Priority:** Next feature immediately after EDITOR-001, including the Facilitator Panel, is fully completed, accepted and released to production; before SW-001. **Status:** Accepted product direction only; implementation requires separate explicit Product Owner approval and must not interrupt EDITOR-001.
+
+Provide a compact, primarily desktop-oriented secondary view of the currently active Quick Timer or Session Timer. Where supported, open it in a small floating, always-on-top browser window using the native Document Picture-in-Picture API so facilitators can keep essential timing information visible while working in presentations, Miro, browsers or other desktop applications. Show the time, minimal relevant context and only essential timer controls. Keep the UI lightweight, accessible and consistent with the existing DE/EN and theme conventions.
+
+The Nano-View is strictly a view and controller of the existing authoritative timer: do not add another timer instance, timer engine, lifecycle, persistence or recovery architecture. Closing or hiding it must not stop, pause, reset or otherwise alter the timer. Unsupported browsers retain normal EasyTimer functionality. Do not require external utilities, administrator rights, PowerToys or installed desktop applications. Reliable visibility over another application's exclusive fullscreen presentation is desirable but not a release requirement, and precise programmatic window placement is not required. Verify actual browser support and behavior during the later technical design and acceptance phase; do not promise universal compatibility.
+
+This item is distinct from PRES-001's same-device Moderator/Audience dual-window concept, VIS-001's alternative timer renderings and SW-001's separate elapsed-time mode. Detailed interaction design and implementation remain separately reviewable.
 
 ### PRES-001 — Moderator View & Audience View (same device)
 
@@ -271,13 +708,71 @@ Consider user-configurable colors, progress-bar treatment/visibility, informatio
 
 UX-008 endgame highlighting is implemented locally and always enabled in both timer modes; it is not a pending customization item. A simple global ON/OFF preference remains an optional later refinement. Threshold percentages/tables, custom warning durations, endgame color pickers, flashing and additional warning levels are not planned as part of UX-008. See the [canonical UX-008 record](EASYTIMER_UX_KONZEPT_v2.md#ux-008--shared-timebox-endgame-highlight-approved-implemented-locally).
 
+
+### I18N-001 — On-demand translation of a Rundown
+
+**Priority:** Later / Future idea. **Status:** Parked at Product Owner request, not approved for implementation.
+
+**User need:** A facilitator regularly switches the easyTimer UI between German and English for different teams, and wants a deliberate **Translate / Übersetzen** action to prepare an existing user-authored template or planned execution in the other language, rather than manually translating every title and note.
+
+**Potential scope:** Rundown title, phase titles, prepared rundown-wide and phase notes, and other authored descriptive text as appropriate; resource URLs remain unchanged, and display labels need deliberate treatment. Target languages initially DE/EN. Avoid translating runtime state, IDs, timestamps, durations, categories or captured workshop notes implicitly. Preserve phase identity and the original text unless the user explicitly approves replacing it; favor preview/copy, safe confirmation and offline/free-first feasibility.
+
+**Boundary:** Changing the interface language must **never automatically translate or mutate an existing personal template/execution**. The protected built-in retrospective may display bundled DE/EN content dynamically under the separate EDITOR-001 Pareto constraint. Any translation engine, privacy implications, offline operation, cost and preview UX require a separate future review; do not assume a third-party translation API or subscription.
+
 ## Reliability and browser compatibility
+
+
+### BUG-002 — Session next-phase transition enters recovery lockout (owner report 2026-11-18)
+
+**Implementation update (2026-11-19):** Root cause confirmed and the narrowly
+approved App-side fix is implemented in unreleased PWA v79; automated regression
+and manual Firefox acceptance remain required before release readiness. The
+authoritative Store successfully committed ordinary native Session actions
+without changing their Runtime binding revision, as designed. The App then
+treated the changed Runtime payload under that stable binding as an arbitrary
+conflict and blocked local controls while leaving the confirmed target in
+storage.
+
+The App now captures the exact source and action options, reconstructs the target
+with the existing authoritative Store transformation, and permits local Runtime
+installation only when the returned confirmed record is byte-for-byte equal to
+that target. Arbitrary, stale, foreign and unconfirmed records retain the
+ordinary strict installer; local installation failure remains blocking and never
+retries the write. No Runtime Bridge, Store, ownership, Recovery, lifecycle or
+timer-engine contract changed.
+
+**Priority:** High. **Status:** Fix implemented locally under the separately
+approved BUG-002 scope; independent review and real Firefox acceptance remain
+open. Runtime, Recovery, Store, ownership and clock semantics are unchanged.
+
+**Observed steps (Firefox screenshot; exact origin/build beyond current testing context to verify):**
+
+1. Start a Session using the currently tested native Editor/Session flow; example rundown: “Retrospektive Testdingens”, seven phases, first phase “Erste Phase”.
+2. Let the timer run in phase 1, then activate the existing **Next Phase** arrow/button in the bottom-right of the Session Timer.
+3. The UI displays a prominent **“Timer recovery”** banner: **“This session can no longer be changed safely. Reload to retry; stored data was not overwritten.”** At the same time, the timer remains visually rendered with phase **“Erste Phase”**, **“PHASE 1 OF 7”**, countdown **09:48** and status **“Running”** in the captured screenshot; Pause/Stop Workshop appear unavailable/disabled. Exact internal timer advancement and authoritative stored state are **unknown** from the screenshot alone.
+
+**Additional Product Owner observations (same test sequence, 2026-11-18):**
+
+- **On the initial lockout:** **Pause**, **Stop Workshop** and **Next Phase** cannot be clicked/activated. The main **menu** and **fullsize/fullscreen view control** still respond. Thus the UI is not globally frozen; session-changing commands specifically become unavailable. Distinguish genuine disabled state from an overlay intercepting pointer events during investigation.
+- **After browser reload:** The session is displayed again in the first phase in **READY**. The session controls appear enabled/available again.
+- **After clicking Start from that reloaded READY state:** The **same “Timer recovery / This session can no longer be changed safely...” error reappears**, and **the timer does not start/count down this time**. The resulting blocker is therefore **not limited to the Next Phase handler**; it also manifests on a subsequent Start attempt after reload. Exact restored/persisted run identity, timer state, revision, ownership and lock status are still unknown.
+- These are **observations**, not proof of a particular defective lock, storage revision, runtime-state transition or recovery implementation. Preserve any meaningful recoverable state; do not bypass safety checks.
+
+**Diagnostic addition:** Reproduce and compare both paths separately: **running phase 1 → Next Phase → lockout** and **reload → READY → Start → lockout/no countdown**. Inspect whether session controls are truly disabled due to protective read-only state; why menu and fullscreen remain functional; what persisted state was restored as READY; and whether any common guarded write/ownership/revision path fails on both Next Phase and Start. Record state transitions and concrete error codes without guessing.
+
+**Expected:** The Next Phase command should either safely advance exactly one phase and continue ordinary timekeeping/persistence, or present a precise recoverable state without an unjustified lockout; never silently overwrite newer or conflicting state. Do not weaken recovery/lock protections to hide this symptom.
+
+**Investigation plan (first, separate narrow diagnostic slice, no speculative fix):** Capture exact reproduction and environment (local v77 production build versus deployment; normal/private tab; single vs multiple tab; previous recovery candidates; local/remote revisions, ownership); browser console/error and relevant safe diagnostic logs; native phase-transition orchestration, active Runtime Bridge, Store writer, lock/revision checks and read-only reconciliation. Compare expected transition and persisted runtime snapshot; test first phase-to-second, later transitions, manual/automatic mode, reload/recovery and cross-tab conflicts without corrupting meaningful runs. Determine whether lockout is a legitimate detected conflict or an actual false conflict/regression. Report concrete causal codepath and smallest safe fix with focused regression tests **before** code changes; seek explicit GO. Avoid requesting user to clear localStorage, reset recovery, delete sessions or bypass safeguards before preserving the state.
+
+**Scope:** This is distinct from resolved `BUG-001` (fullscreen Stop), future `UX-017` recovery-candidate management, `REL-001` recovery hardening and the UX-001 compact-phase-row work. **Do not silently bundle the runtime diagnostic/fix into frontend Slice 2.** Preserve the error screenshot/evidence in review notes; screenshot is not committed here. Real manual Firefox acceptance required after any eventual fix.
 
 ### BUG-001 — Fullscreen-safe Workshop Stop confirmation
 
 **Status:** Released to staging and production in PWA v67 at commit
 `72b2d28435ebb6b6e77739c454add57a49eee0f7`; verified production workflow run
 [`41323065346`](https://github.com/nox-vobiscum/easytimer/actions/runs/41323065346).
+An unreleased follow-up guard is implemented locally so that dialog Escape does
+not also invoke the global fullscreen or expanded-view exit.
 
 Firefox can hide a browser-native `window.confirm()` prompt behind its fullscreen
 surface, leaving Workshop Stop visibly blocked until fullscreen is exited. The

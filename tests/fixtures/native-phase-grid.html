@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="/src/css/styles.css">
+</head>
+<body class="planner-open">
+  <main>
+    <section id="fixture" class="planner native-editor-workspace">
+      <ol class="phase-list"></ol>
+      <pre id="result">pending</pre>
+    </section>
+  </main>
+  <script type="module">
+    import { createNativePhaseFields } from '/src/js/editor-phase-fields.mjs';
+    const parameters = new URL(location.href).searchParams;
+    const requestedWidth = Number(parameters.get('width')) || 900;
+    document.documentElement.dataset.theme = parameters.get('theme') || 'light';
+    document.querySelector('#fixture').style.width = `${requestedWidth}px`;
+    const phases = Array.from({ length: 4 }, (_, index) => ({
+      id: `phase-${index + 1}`, title: `Phase ${index + 1} with editable title`,
+      durationSeconds: 900, category: 'discussion', notes: '', resources: [],
+    }));
+    let draft = { template: { phases } };
+    const list = document.querySelector('.phase-list');
+    for (const phase of phases) {
+      const fields = createNativePhaseFields({
+        getDraft: () => draft, onDraftChange: next => { draft = next; },
+        onReposition: () => {}, phaseId: phase.id, language: 'en',
+      });
+      fields.element.querySelector('.native-phase-details').append(document.createElement('textarea'));
+      list.append(fields.element);
+    }
+    const row = list.children[1];
+    row.querySelector('[data-action="details"]').click();
+    row.querySelector('[data-action="position"]').click();
+    const names = ['drag', 'position', 'title', 'duration', 'category', 'details'];
+    const controls = names.map(name => row.querySelector(`[data-action="${name}"], [data-field="${name}"]`));
+    const bounds = controls.map(control => {
+      const rect = control.getBoundingClientRect();
+      return { left: Math.round(rect.left), top: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height) };
+    });
+    const columns = getComputedStyle(row).gridTemplateColumns.split(' ').filter(Boolean);
+    const placeholder = row.cloneNode(true); placeholder.setAttribute('data-dnd-placeholder', 'clone');
+    list.append(placeholder);
+    row.setAttribute('data-dnd-dragging', 'true');
+    const feedbackStyle = getComputedStyle(row); const placeholderStyle = getComputedStyle(placeholder);
+    const accentProbe = document.createElement('span'); accentProbe.style.color = 'var(--accent)'; document.body.append(accentProbe);
+    const expectedAccent = getComputedStyle(accentProbe).color;
+    const feedbackState = {
+      background: feedbackStyle.backgroundColor, opacity: feedbackStyle.opacity,
+      shadow: feedbackStyle.boxShadow, borderColor: feedbackStyle.borderColor,
+    };
+    const placeholderState = {
+      borderStyle: placeholderStyle.borderStyle, shadow: placeholderStyle.boxShadow,
+      childVisibility: getComputedStyle(placeholder.firstElementChild).visibility,
+    };
+    row.removeAttribute('data-dnd-dragging'); placeholder.remove(); accentProbe.remove();
+    const restoredStyle = getComputedStyle(row);
+    const compact = columns.length === 5;
+    const ordered = compact
+      ? bounds[0].left < bounds[1].left && bounds[1].left < bounds[2].left
+        && bounds[2].left === bounds[3].left && bounds[3].left < bounds[4].left && bounds[4].left < bounds[5].left
+        && bounds[2].top < bounds[3].top
+      : bounds.every((bound, index) => index === 0 || bound.left > bounds[index - 1].left);
+    document.querySelector('#result').textContent = JSON.stringify({
+      viewport: innerWidth, requestedWidth, theme: document.documentElement.dataset.theme,
+      container: Math.round(document.querySelector('#fixture').getBoundingClientRect().width),
+      columns: columns.length, compact, ordered, controls: controls.length,
+      enabled: controls.every(control => !control.disabled), detailsOpen: !row.querySelector('.native-phase-details').hidden,
+      positionOpen: !row.querySelector('.phase-reposition-popover').hidden,
+      horizontalOverflow: document.documentElement.scrollWidth > innerWidth, bounds,
+      feedbackOpaque: feedbackState.background !== 'rgba(0, 0, 0, 0)' && feedbackState.opacity === '1'
+        && feedbackState.shadow !== 'none',
+      feedbackAccent: feedbackState.borderColor === expectedAccent,
+      placeholderEmpty: placeholderState.borderStyle === 'dashed'
+        && placeholderState.childVisibility === 'hidden' && placeholderState.shadow === 'none',
+      cleanupRestored: !row.hasAttribute('data-dnd-dragging') && !placeholder.isConnected
+        && restoredStyle.boxShadow === 'none',
+    });
+    document.body.dataset.complete = 'true';
+  </script>
+</body>
+</html>

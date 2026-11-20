@@ -333,8 +333,8 @@ async function checkCompactPlanner({ evaluate, click, text, cdp }) {
             console.log(`Compact planner ${width}x${height}: ${await evaluate(`document.querySelector('.phase-list li').getBoundingClientRect().height`)} px per phase`);
         }
         const original = await evaluate(`localStorage.getItem('easyTimerTemplates')`);
-        for (const [minutes,total] of [['1','02:46:00'],['90','04:15:00'],['180','05:45:00'],['6000','102:45:00']]) {
-            await field('.phase-duration input', minutes); assert.match(await text('#planner-total'), new RegExp(total));
+        for (const [minutes,total] of [['1','2 h 46 min'],['90','4 h 15 min'],['180','5 h 45 min'],['6000','102 h 45 min']]) {
+            await field('.phase-duration input', minutes); assert.equal(await text('#planner-total'), `Total planned duration: ${total}`);
         }
         await field('.phase-duration input',''); await action('Save');
         assert.match(await text('.planner-feedback'), /whole number/);
@@ -345,9 +345,9 @@ async function checkCompactPlanner({ evaluate, click, text, cdp }) {
         assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`), original);
         await click('.template-library li:nth-child(2) button:not(.rundown-launch)');
         assert.equal(await evaluate(`document.querySelector('.phase-duration input').value`), '6000');
-        assert.match(await text('#planner-total'), /100:00:00/);
+        assert.equal(await text('#planner-total'), 'Total planned duration: 100 h');
         await action('Cancel'); await click('.template-library li:nth-child(3) button:not(.rundown-launch)');
-        assert.match(await text('#planner-total'), /1000:00:00/);
+        assert.equal(await text('#planner-total'), 'Total planned duration: 1000 h');
         await action('+ Add phase'); await field('.phase-list li:last-child .phase-title input','Over limit'); await action('Save');
         assert.match(await text('.planner-feedback'), /60,000/);
         assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`), original, 'An excessive total never overwrites valid data');
