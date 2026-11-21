@@ -27,6 +27,14 @@ test('internal Workspace uses reviewed native editing and portability boundaries
     assert.match(workspace, /onReposition: repositionPhase/);
     assert.match(workspace, /bounds\.top < 0 \|\| bounds\.bottom > viewportHeight/);
     assert.match(workspace, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest' \}\)/);
+    assert.match(workspace, /function focusAddedPhaseTitle\(phaseId\)/);
+    assert.match(workspace, /const top = viewport\?\.offsetTop \?\? 0/);
+    assert.match(workspace, /viewport\?\.height \?\? window\.innerHeight/);
+    assert.match(workspace, /viewport\.addEventListener\('resize', resized\)/);
+    assert.match(workspace, /cancelPhaseTitleReveal\(\)/);
+    const titleFocusBoundary = workspace.slice(workspace.indexOf('function focusAddedPhaseTitle'), workspace.indexOf('function repositionPhase'));
+    assert.ok(titleFocusBoundary.indexOf("viewport.addEventListener('resize', resized)")
+        < titleFocusBoundary.indexOf('field.focus({ preventScroll: true })'));
     const phaseFields = await read('src/js/editor-phase-fields.mjs');
     assert.doesNotMatch(phaseFields, /positionPanel\.style\.(?:left|top)/);
     assert.match(phaseFields, /categoryIconPaths/);

@@ -141,6 +141,7 @@ export function createNativeEditorWorkspace({
     let lifecycleRequest = null; let archiveId = null; let closeAfterMutation = null;
     let fileReadId = 0; let resourceErrors = new Map();
     let phaseDragCleanup = null; let phaseDragToken = 0;
+    let phaseTitleRevealCleanup = null;
     let phaseDragAnnouncement = '';
     const t = () => copy[language];
     const library = () => ({ revision: workspace.revision, templates: workspace.templates });
@@ -165,6 +166,7 @@ export function createNativeEditorWorkspace({
     }
     const mutationBlocked = () => mutationBusy || pending !== null;
     function clearEditor({ clearPending = false } = {}) {
+        cancelPhaseTitleReveal();
         destroyPhaseDragging();
         draft = null; editorKind = null; baseline = null; resourceErrors = new Map();
         if (clearPending) pending = null;
@@ -605,6 +607,47 @@ export function createNativeEditorWorkspace({
         phaseDragToken += 1;
         phaseDragCleanup?.(); phaseDragCleanup = null;
     }
+    function cancelPhaseTitleReveal() {
+        phaseTitleRevealCleanup?.(); phaseTitleRevealCleanup = null;
+    }
+    function focusAddedPhaseTitle(phaseId) {
+        cancelPhaseTitleReveal();
+        const field = root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"] [data-field="title"]`);
+        if (!field) return;
+        const reveal = () => {
+            if (!active || !field.isConnected || document.activeElement !== field) return;
+            const viewport = window.visualViewport;
+            const top = viewport?.offsetTop ?? 0;
+            const bottom = top + (viewport?.height ?? window.innerHeight);
+            const bounds = field.getBoundingClientRect();
+            if (bounds.top >= top && bounds.bottom <= bottom) return;
+            window.scrollBy({
+                top: bounds.top + bounds.height / 2 - (top + bottom) / 2,
+                left: 0,
+                behavior: 'auto',
+            });
+        };
+        const viewport = window.visualViewport;
+        if (viewport?.addEventListener) {
+            let frame = 0; let timeout = 0; let finished = false;
+            const detach = () => {
+                if (finished) return;
+                finished = true; viewport.removeEventListener('resize', resized); window.clearTimeout(timeout);
+            };
+            const resized = () => {
+                detach();
+                frame = window.requestAnimationFrame(() => {
+                    frame = 0; reveal(); phaseTitleRevealCleanup = null;
+                });
+            };
+            phaseTitleRevealCleanup = () => { detach(); if (frame) window.cancelAnimationFrame(frame); };
+            viewport.addEventListener('resize', resized);
+            timeout = window.setTimeout(() => { detach(); phaseTitleRevealCleanup = null; }, 1000);
+        }
+        field.focus({ preventScroll: true });
+        if (!field.isConnected || document.activeElement !== field) { cancelPhaseTitleReveal(); return; }
+        reveal();
+    }
     function repositionPhase(phaseId, position, focus = 'position', announcement = '') {
         const expanded = expandedPhaseIds();
         const scroll = { x: window.scrollX, y: window.scrollY };
@@ -741,7 +784,7 @@ export function createNativeEditorWorkspace({
         form.append(dragStatus, list);
         form.append(button(t().addPhase, () => {
             const phaseId = createPhaseId(); draft = insertNativeDraftPhase(draft, { phaseId }); render();
-            root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"] [data-field="title"]`)?.focus({ preventScroll: true });
+            focusAddedPhaseTitle(phaseId);
         }, 'add-phase'));
         const total = draft.template.phases.reduce((sum, phase) => sum + (Number.isSafeInteger(phase.durationSeconds) ? phase.durationSeconds : 0), 0) / 60;
         form.append(el('p', `${t().total}: ${total} ${t().minutes}`, 'planner-hint'));
@@ -775,6 +818,7 @@ export function createNativeEditorWorkspace({
     }
     function render() {
         if (!active) return;
+        cancelPhaseTitleReveal();
         root.className = 'planner native-editor-workspace'; root.dataset.nativeEditorWorkspace = '';
         if (!workspace) { root.replaceChildren(el('p', t().loading)); return; }
         if (draft) renderEditor(); else if (archiveId) renderArchive(); else renderLibrary();

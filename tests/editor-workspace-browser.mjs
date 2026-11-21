@@ -213,7 +213,93 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         'a real language change rerenders localized UI while preserving the complete draft');
         await field('.native-workspace-control', 'training', 'change');
         await field('[data-field="prepared"]', 'Goals and **plain text**');
-        await action('Add phase'); await action('Add phase');
+        await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            f.phaseFocusProbe = {
+                viewportDescriptor: Object.getOwnPropertyDescriptor(window, 'visualViewport'),
+                scrollBy: window.scrollBy,
+                bounds: HTMLElement.prototype.getBoundingClientRect,
+                scrolls: [], top: 100,
+            };
+            Object.defineProperty(window, 'visualViewport', { configurable: true, value: undefined });
+            window.scrollBy = options => {
+                f.phaseFocusProbe.scrolls.push(options);
+                f.phaseFocusProbe.top -= options.top;
+            };
+            HTMLElement.prototype.getBoundingClientRect = function () {
+                if (this.matches?.('[data-field="title"]')) {
+                    const top = f.phaseFocusProbe.top;
+                    return { top, bottom: top + 44, left: 0, right: 200, width: 200, height: 44, x: 0, y: top };
+                }
+                return f.phaseFocusProbe.bounds.call(this);
+            };
+        })()`);
+        await action('Add phase');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            return [document.activeElement === f.root.querySelector('[data-native-phase-id="phase-1"] [data-field="title"]'),
+                f.phaseFocusProbe.scrolls.length, f.writes];
+        })()`), [true, 0, 0], 'visible new title focuses synchronously without scrolling and without persistence');
+        await evaluate(`nativeWorkspaceFixture.phaseFocusProbe.top = 900`);
+        await action('Add phase');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, bounds = f.root
+                .querySelector('[data-native-phase-id="phase-2"] [data-field="title"]').getBoundingClientRect();
+            return [document.activeElement === f.root.querySelector('[data-native-phase-id="phase-2"] [data-field="title"]'),
+                f.phaseFocusProbe.scrolls.length, f.phaseFocusProbe.scrolls[0].top,
+                bounds.top >= 0 && bounds.bottom <= innerHeight, f.writes];
+        })()`), [true, 1, 522, true, 0], 'offscreen new title uses innerHeight fallback and becomes visible without persistence');
+        await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, viewport = new EventTarget();
+            viewport.height = 300; viewport.offsetTop = 100; f.phaseFocusProbe.viewport = viewport;
+            f.phaseFocusProbe.top = 500;
+            Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+            f.phaseFocusProbe.resizeDuringFocus = event => {
+                if (!event.target.matches?.('[data-native-phase-id="phase-3"] [data-field="title"]')) return;
+                document.removeEventListener('focusin', f.phaseFocusProbe.resizeDuringFocus);
+                viewport.height = 100; viewport.offsetTop = 300; viewport.dispatchEvent(new Event('resize'));
+            };
+            document.addEventListener('focusin', f.phaseFocusProbe.resizeDuringFocus);
+        })()`);
+        await action('Add phase');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, viewport = f.phaseFocusProbe.viewport, bounds = f.root
+                .querySelector('[data-native-phase-id="phase-3"] [data-field="title"]').getBoundingClientRect();
+            return [document.activeElement === f.root.querySelector('[data-native-phase-id="phase-3"] [data-field="title"]'),
+                f.phaseFocusProbe.scrolls.length, f.phaseFocusProbe.scrolls[1].top,
+                bounds.top >= viewport.offsetTop && bounds.bottom <= viewport.offsetTop + viewport.height, f.writes];
+        })()`), [true, 2, 172, true, 0], 'resize during synchronous focus uses the current visual viewport and does not persist');
+        await delay(40);
+        await evaluate(`nativeWorkspaceFixture.phaseFocusProbe.viewport.dispatchEvent(new Event('resize'))`);
+        await delay(40);
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, viewport = f.phaseFocusProbe.viewport, bounds = f.root
+                .querySelector('[data-native-phase-id="phase-3"] [data-field="title"]').getBoundingClientRect();
+            return [f.phaseFocusProbe.scrolls.length,
+                bounds.top >= viewport.offsetTop && bounds.bottom <= viewport.offsetTop + viewport.height];
+        })()`), [2, true], 'focus-time keyboard resize performs one correction, ignores later resize and restores visibility');
+        await click('[data-native-phase-id="phase-3"] [data-action="details"]');
+        await action('Remove phase', '[data-native-phase-id="phase-3"]');
+        await evaluate(`nativeWorkspaceFixture.phaseFocusProbe.top = 500`);
+        await action('Add phase');
+        await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            f.workspace.setLanguage('de'); f.workspace.setLanguage('en');
+            f.phaseFocusProbe.viewport.dispatchEvent(new Event('resize'));
+        })()`);
+        await delay(40);
+        assert.equal(await evaluate(`nativeWorkspaceFixture.phaseFocusProbe.scrolls.length`), 3,
+            'rerender cancels the pending correction for the disconnected title');
+        await click('[data-native-phase-id="phase-4"] [data-action="details"]');
+        await action('Remove phase', '[data-native-phase-id="phase-4"]');
+        await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, probe = f.phaseFocusProbe;
+            document.removeEventListener('focusin', probe.resizeDuringFocus);
+            window.scrollBy = probe.scrollBy; HTMLElement.prototype.getBoundingClientRect = probe.bounds;
+            if (probe.viewportDescriptor) Object.defineProperty(window, 'visualViewport', probe.viewportDescriptor);
+            else delete window.visualViewport;
+            delete f.phaseFocusProbe;
+        })()`);
         await field('[data-native-phase-id="phase-1"] [data-field="title"]', 'First phase');
         await field('[data-native-phase-id="phase-1"] [data-field="duration"]', '15');
         await field('[data-native-phase-id="phase-2"] [data-field="title"]', 'Second phase');
@@ -620,6 +706,14 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         await cdp('Emulation.clearDeviceMetricsOverride').catch(() => {});
         await evaluate(`(() => {
             const f = window.nativeWorkspaceFixture;
+            const probe = f?.phaseFocusProbe;
+            if (probe) {
+                document.removeEventListener('focusin', probe.resizeDuringFocus);
+                window.scrollBy = probe.scrollBy; HTMLElement.prototype.getBoundingClientRect = probe.bounds;
+                if (probe.viewportDescriptor) Object.defineProperty(window, 'visualViewport', probe.viewportDescriptor);
+                else delete window.visualViewport;
+                delete f.phaseFocusProbe;
+            }
             if (window.nativeWorkspaceConfirm) window.confirm = window.nativeWorkspaceConfirm;
             delete window.nativeWorkspaceConfirm;
             f?.workspace?.close(); f?.root?.remove(); delete window.nativeWorkspaceFixture;
