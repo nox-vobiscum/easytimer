@@ -44,6 +44,7 @@ const copy = {
         conflict: 'The data changed elsewhere. Your complete draft is retained; reload or cancel instead of overwriting it.',
         validation: 'Correct the highlighted or invalid fields. Nothing was saved.',
         storage: 'Storage could not confirm the operation. Your draft is retained.',
+        recoveryWarning: 'Draft recovery could not confirm this checkpoint. Keep this editor open; later changes will not be retried automatically.',
         unexpected: 'The operation failed. Your draft is retained.',
         readFailed: 'The native Workspace could not be read.',
         lifecycleInfo: 'Lifecycle actions are intentionally unavailable until the coordinated public cutover.',
@@ -89,6 +90,7 @@ const copy = {
         conflict: 'Die Daten wurden anderweitig geändert. Der vollständige Entwurf bleibt erhalten; neu laden oder abbrechen statt überschreiben.',
         validation: 'Ungültige Felder korrigieren. Es wurde nichts gespeichert.',
         storage: 'Der Speicher konnte den Vorgang nicht bestätigen. Der Entwurf bleibt erhalten.',
+        recoveryWarning: 'Die Entwurfswiederherstellung konnte diesen Zwischenstand nicht bestätigen. Diesen Editor geöffnet lassen; weitere Änderungen werden nicht automatisch erneut gesichert.',
         unexpected: 'Der Vorgang ist fehlgeschlagen. Der Entwurf bleibt erhalten.',
         readFailed: 'Der native Arbeitsbereich konnte nicht gelesen werden.',
         lifecycleInfo: 'Lebenszyklusaktionen bleiben bis zur koordinierten öffentlichen Umstellung absichtlich nicht verfügbar.',
@@ -120,6 +122,7 @@ const safeLink = value => {
 
 export function createNativeEditorWorkspace({
     root, plannerService, plannedExecutionService, launchService, importService,
+    templateRecovery = null,
     language = 'en', createPhaseId = () => crypto.randomUUID(),
     onClose = () => {}, onRequest = async () => ({ status: 'error' }),
     onRecheck = async () => ({ status: 'error' }), onRecord = () => {},
@@ -131,6 +134,8 @@ export function createNativeEditorWorkspace({
 } = {}) {
     if (!(root instanceof HTMLElement) || !copy[language]
         || !plannerService || !plannedExecutionService || !launchService || !importService
+        || (templateRecovery !== null && (typeof templateRecovery.begin !== 'function'
+            || typeof templateRecovery.checkpoint !== 'function' || typeof templateRecovery.deactivate !== 'function'))
         || typeof createPhaseId !== 'function' || typeof downloadTemplate !== 'function'
         || typeof onClose !== 'function' || typeof onRequest !== 'function'
         || typeof onRecheck !== 'function' || typeof onRecord !== 'function') fail('invalidWorkspace');
@@ -143,6 +148,7 @@ export function createNativeEditorWorkspace({
     let phaseDragCleanup = null; let phaseDragToken = 0;
     let phaseTitleRevealCleanup = null;
     let phaseDragAnnouncement = '';
+    let recoveryWarning = false;
     const t = () => copy[language];
     const library = () => ({ revision: workspace.revision, templates: workspace.templates });
     const currentPlan = (source = draft) => { const { id, ...plan } = source.template; return plan; };
@@ -152,6 +158,23 @@ export function createNativeEditorWorkspace({
     const resultCode = result => result.error?.type === 'conflict' ? 'conflict'
         : result.error?.type === 'validation' ? 'validation'
             : result.error?.type === 'storage' || uncertainCodes.has(result.error?.code) ? 'storage' : 'unexpected';
+
+    function syncRecoveryWarning() {
+        const warning = root.querySelector('[data-template-recovery-warning]');
+        if (!warning) return;
+        warning.hidden = !recoveryWarning;
+        warning.textContent = recoveryWarning ? t().recoveryWarning : '';
+    }
+
+    function checkpointTemplateDraft(next) {
+        draft = next;
+        if (editorKind !== 'template' || !templateRecovery) return;
+        try {
+            const result = templateRecovery.checkpoint(draft);
+            if (!['success', 'ready'].includes(result?.status)) recoveryWarning = true;
+        } catch { recoveryWarning = true; }
+        syncRecoveryWarning();
+    }
 
     async function loadWorkspace() {
         const result = await plannerService.loadWorkspace();
@@ -168,6 +191,7 @@ export function createNativeEditorWorkspace({
     function clearEditor({ clearPending = false } = {}) {
         cancelPhaseTitleReveal();
         destroyPhaseDragging();
+        templateRecovery?.deactivate(); recoveryWarning = false;
         draft = null; editorKind = null; baseline = null; resourceErrors = new Map();
         if (clearPending) pending = null;
     }
@@ -215,8 +239,16 @@ export function createNativeEditorWorkspace({
         clearEditor({ clearPending: true }); importCandidate = null; setFeedback(message, false); render(); focusHeading();
     }
     function beginDraft(next, kind) {
+        templateRecovery?.deactivate(); recoveryWarning = false;
         draft = structuredClone(next); editorKind = kind; baseline = JSON.stringify(draft);
-        pending = null; setFeedback(null, false); render();
+        pending = null; setFeedback(null, false);
+        if (kind === 'template' && templateRecovery) {
+            try {
+                const result = templateRecovery.begin(draft);
+                if (!['success', 'ready'].includes(result?.status)) recoveryWarning = true;
+            } catch { recoveryWarning = true; }
+        }
+        render();
         root.querySelector('[data-field="name"]')?.focus({ preventScroll: true });
     }
     function beginTemplate(templateId = null) {
@@ -588,7 +620,7 @@ export function createNativeEditorWorkspace({
         renderImport(section); root.replaceChildren(section); renderDeleteDialog();
     }
     function controlLabel(text, control) { const label = el('label'); label.append(el('span', text), control); return label; }
-    function editTemplate(changes) { draft = editNativeTemplateDraft(draft, changes); }
+    function editTemplate(changes) { checkpointTemplateDraft(editNativeTemplateDraft(draft, changes)); }
     function expandedPhaseIds() {
         return new Set([...root.querySelectorAll('[data-native-phase-id]')]
             .filter(row => row.querySelector('[data-action="details"]')?.getAttribute('aria-expanded') === 'true')
@@ -651,7 +683,7 @@ export function createNativeEditorWorkspace({
     function repositionPhase(phaseId, position, focus = 'position', announcement = '') {
         const expanded = expandedPhaseIds();
         const scroll = { x: window.scrollX, y: window.scrollY };
-        draft = repositionNativeDraftPhase(draft, phaseId, position);
+        checkpointTemplateDraft(repositionNativeDraftPhase(draft, phaseId, position));
         phaseDragAnnouncement = announcement;
         render(); restorePhaseDisclosures(expanded);
         const action = focus === 'drag' ? 'drag' : 'position';
@@ -684,7 +716,7 @@ export function createNativeEditorWorkspace({
             label.setAttribute('aria-label', t().resourceLabel); label.addEventListener('input', () => {
                 const current = draft.template.phases.find(item => item.id === phase.id);
                 const resources = structuredClone(current.resources); resources[index].label = label.value;
-                draft = editNativePhaseDraft(draft, phase.id, { resources });
+                checkpointTemplateDraft(editNativePhaseDraft(draft, phase.id, { resources }));
                 resourceErrors.delete(`${phase.id}:${index}:label`);
                 label.removeAttribute('aria-invalid'); label.removeAttribute('aria-describedby');
                 label.parentElement?.querySelector('.native-resource-error')?.remove();
@@ -695,7 +727,7 @@ export function createNativeEditorWorkspace({
             url.setAttribute('aria-label', t().resourceUrl); url.addEventListener('input', () => {
                 const current = draft.template.phases.find(item => item.id === phase.id);
                 const resources = structuredClone(current.resources); resources[index].url = url.value;
-                draft = editNativePhaseDraft(draft, phase.id, { resources });
+                checkpointTemplateDraft(editNativePhaseDraft(draft, phase.id, { resources }));
                 const href = safeLink(url.value); preview.hidden = !href; if (href) preview.href = href;
                 resourceErrors.delete(`${phase.id}:${index}:url`);
                 url.removeAttribute('aria-invalid'); url.removeAttribute('aria-describedby');
@@ -705,7 +737,7 @@ export function createNativeEditorWorkspace({
             const href = safeLink(resource.url); preview.hidden = !href; if (href) preview.href = href;
             const remove = button(t().removeResource, () => {
                 const resources = structuredClone(draft.template.phases.find(item => item.id === phase.id).resources);
-                resources.splice(index, 1); draft = editNativePhaseDraft(draft, phase.id, { resources });
+                resources.splice(index, 1); checkpointTemplateDraft(editNativePhaseDraft(draft, phase.id, { resources }));
                 const focusIndex = Math.min(index, resources.length - 1);
                 renderResourceMutation(phase.id, focusIndex >= 0
                     ? `[data-resource-index="${focusIndex}"] [data-resource-field="label"]`
@@ -725,24 +757,24 @@ export function createNativeEditorWorkspace({
         const add = button(t().addResource, () => {
             const current = draft.template.phases.find(item => item.id === phase.id);
             const index = current.resources.length;
-            draft = editNativePhaseDraft(draft, phase.id, { resources: [...current.resources, { label: '', url: '' }] });
+            checkpointTemplateDraft(editNativePhaseDraft(draft, phase.id, { resources: [...current.resources, { label: '', url: '' }] }));
             renderResourceMutation(phase.id, `[data-resource-index="${index}"] [data-resource-field="label"]`);
         });
         add.dataset.action = 'add-resource'; details.append(add);
     }
     function renderPhase(phase, index, list) {
         const fields = createNativePhaseFields({
-            getDraft: () => draft, onDraftChange: next => { draft = next; }, phaseId: phase.id, language,
+            getDraft: () => draft, onDraftChange: checkpointTemplateDraft, phaseId: phase.id, language,
             onReposition: repositionPhase,
         });
         const details = fields.element.querySelector('.native-phase-details');
         details.prepend(el('p', t().indicators(Boolean(phase.notes.trim()), phase.resources.filter(resource => !emptyResource(resource)).length), 'planner-hint'));
         const notes = el('textarea'); notes.rows = 4; notes.value = phase.notes; notes.dataset.field = 'notes';
-        notes.addEventListener('input', () => { draft = editNativePhaseDraft(draft, phase.id, { notes: notes.value }); });
+        notes.addEventListener('input', () => checkpointTemplateDraft(editNativePhaseDraft(draft, phase.id, { notes: notes.value })));
         details.append(controlLabel(t().notes, notes)); renderResources(details, phase);
         const actions = el('div', undefined, 'planner-actions native-workspace-phase-actions');
         const structural = (label, operation, focusId = phase.id) => button(label, () => {
-            draft = operation(); render();
+            checkpointTemplateDraft(operation()); render();
             root.querySelector(`[data-native-phase-id="${CSS.escape(focusId)}"] [data-action="details"]`)?.focus({ preventScroll: true });
         });
         const earlier = button(t().earlier, () => repositionPhase(phase.id, index)); earlier.disabled = index === 0;
@@ -758,6 +790,9 @@ export function createNativeEditorWorkspace({
         const title = editorKind === 'template' ? (draft.mode === 'create' ? t().newTemplate : t().templateEditor)
             : editorKind === 'newExecution' ? t().newExecution : t().executionEditor;
         form.append(el('h2', title), el('p', editorKind === 'template' ? t().templateEntity : t().executionEntity, 'planner-hint'));
+        const recovery = el('p', recoveryWarning ? t().recoveryWarning : '', 'planner-feedback');
+        recovery.dataset.templateRecoveryWarning = ''; recovery.dataset.error = 'true'; recovery.setAttribute('role', 'alert');
+        recovery.hidden = !recoveryWarning; form.append(recovery);
         renderFeedback(form);
         const metadata = el('div', undefined, 'planner-metadata');
         const name = el('input'); name.type = 'text'; name.required = true; name.maxLength = 120; name.value = draft.template.name; name.dataset.field = 'name';
@@ -783,7 +818,7 @@ export function createNativeEditorWorkspace({
         const list = el('ol', undefined, 'phase-list'); draft.template.phases.forEach((phase, index) => renderPhase(phase, index, list));
         form.append(dragStatus, list);
         form.append(button(t().addPhase, () => {
-            const phaseId = createPhaseId(); draft = insertNativeDraftPhase(draft, { phaseId }); render();
+            const phaseId = createPhaseId(); checkpointTemplateDraft(insertNativeDraftPhase(draft, { phaseId })); render();
             focusAddedPhaseTitle(phaseId);
         }, 'add-phase'));
         const total = draft.template.phases.reduce((sum, phase) => sum + (Number.isSafeInteger(phase.durationSeconds) ? phase.durationSeconds : 0), 0) / 60;

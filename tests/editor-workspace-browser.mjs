@@ -22,6 +22,21 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         const input = document.querySelector(${JSON.stringify(`#native-editor-workspace-fixture ${selector}`)});
         input.value = ${JSON.stringify(value)}; input.dispatchEvent(new Event(${JSON.stringify(event)}, { bubbles: true }));
     })()`);
+    const recoveryWriteCount = () => evaluate(`nativeWorkspaceFixture.recoveryCalls
+        .filter(([operation]) => operation === 'set').length`);
+    const recoveryState = () => evaluate(`(() => {
+        const f = nativeWorkspaceFixture;
+        return {
+            writes: f.recoveryCalls.filter(([operation]) => operation === 'set').length,
+            record: JSON.parse([...f.recoveryValues.values()].at(-1)),
+        };
+    })()`);
+    const expectRecoveryCheckpoint = async (before, project, expected, message) => {
+        const state = await recoveryState();
+        assert.equal(state.writes, before + 1, `${message}: one synchronous Recovery write`);
+        assert.deepEqual(project(state.record.draft.template), expected, message);
+    };
+    let recoveryWritesBefore;
     try {
         await cdp('Emulation.setDeviceMetricsOverride', {
             width: 1280, height: 800, screenWidth: 1280, screenHeight: 800, mobile: false, deviceScaleFactor: 1,
@@ -30,11 +45,12 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             'public native Workspace remains unmounted until requested');
         await evaluate(`(async () => {
             const [workspaceModule, plannerModule, integrationModule, writerModule, storeModule, importModule,
-                launchModule, domain, runtimeModule] = await Promise.all([
+                launchModule, domain, runtimeModule, recoveryStoreModule, recoveryServiceModule] = await Promise.all([
                 import('/js/editor-workspace.mjs'), import('/js/editor-planner-service.mjs'),
                 import('/js/editor-template-integration.mjs'), import('/js/editor-storage-lock.mjs'),
                 import('/js/editor-storage.mjs'), import('/js/editor-template-import.mjs'), import('/js/editor-launch-service.mjs'),
                 import('/js/editor-domain.mjs'), import('/js/execution-runtime.mjs'),
+                import('/js/editor-draft-recovery.mjs'), import('/js/editor-template-draft-recovery-service.mjs'),
             ]);
             const f = window.nativeWorkspaceFixture = {
                 raw: null, writes: 0, keys: [], uncertainOnSet: false, throwReadback: false,
@@ -89,6 +105,41 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 },
             };
             f.writer = writerModule.createEditorStoreWriter({ getStorage: () => storage, locks: navigator.locks });
+            f.recoveryValues = new Map(); f.recoveryCalls = []; f.recoveryIdentity = 0;
+            const recoveryStorage = {
+                get length() { return f.recoveryValues.size; },
+                key(index) { return [...f.recoveryValues.keys()][index] ?? null; },
+                getItem(key) {
+                    f.recoveryCalls.push(['get', key]);
+                    if (f.recoveryThrowReadback) { f.recoveryThrowReadback = false; throw new Error('recovery readback failure'); }
+                    return f.recoveryValues.get(key) ?? null;
+                },
+                setItem(key, value) {
+                    f.recoveryCalls.push(['set', key]);
+                    f.recoveryValues.set(key, value);
+                    if (f.recoveryUnconfirmedOnSet) {
+                        f.recoveryUnconfirmedOnSet = false; f.recoveryThrowReadback = true;
+                    }
+                },
+                removeItem(key) { f.recoveryCalls.push(['remove', key]); f.recoveryValues.delete(key); },
+            };
+            f.recoveryErrors = [];
+            const baseRecoveryStore = recoveryStoreModule.createEditorDraftRecoveryStore(recoveryStorage);
+            const recoveryStore = {
+                create(record) {
+                    try { return baseRecoveryStore.create(record); }
+                    catch (error) { f.recoveryErrors.push(error.message); throw error; }
+                },
+                update(record, expectedSavedAt) {
+                    try { return baseRecoveryStore.update(record, expectedSavedAt); }
+                    catch (error) { f.recoveryErrors.push(error.message); throw error; }
+                },
+            };
+            f.templateRecovery = recoveryServiceModule.createNativeTemplateDraftRecoveryService({
+                store: recoveryStore,
+                createId: kind => kind + '-' + (++f.recoveryIdentity),
+                now: () => 1000,
+            });
             const basePlanner = plannerModule.createNativePlannerService({
                 integration: integrationModule.createNativeEditorTemplateIntegration({ writer: f.writer }),
                 createId: () => 'template-' + (++f.imported),
@@ -149,6 +200,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             f.workspace = workspaceModule.createNativeEditorWorkspace({
                 root: f.root, plannerService: f.planner, plannedExecutionService: f.planned,
                 launchService: f.launch, importService: f.importer,
+                templateRecovery: f.templateRecovery,
                 createPhaseId: () => 'phase-' + (++f.phase),
                 downloadTemplate: file => f.downloads.push(file),
                 onClose: options => f.closeCalls.push(options),
@@ -165,6 +217,13 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         })()`), [true, 'Session Editor', ['Templates', 'Planned executions', 'Active in Timer', 'Suspended', 'Completed'], false, false]);
         assert.deepEqual(await evaluate(`nativeWorkspaceFixture.keys.every(key => key === 'easyTimerEditor.v1')`), true,
             'Workspace reads only native storage');
+        assert.equal(await evaluate(`nativeWorkspaceFixture.recoveryValues.size`), 0,
+            'opening the library alone creates no draft recovery entry');
+
+        await rowAction('Lifecycle source', 'Edit');
+        assert.equal(await evaluate(`nativeWorkspaceFixture.recoveryValues.size`), 0,
+            'opening an existing Template without changing it creates no recovery entry');
+        await action('Cancel');
 
         await action('Back');
         assert.deepEqual(await evaluate(`[
@@ -195,7 +254,23 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         await evaluate(`window.confirm = window.nativeWorkspaceConfirm; delete window.nativeWorkspaceConfirm; nativeWorkspaceFixture.workspace.open()`);
 
         await action('Create template');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            const record = JSON.parse([...f.recoveryValues.values()].at(-1));
+            return [f.recoveryValues.size, record.draft.mode, record.draft.template.name,
+                record.baseline.template.name, record.state, f.writes];
+        })()`), [3, 'create', '', '', 'draft', 0],
+        'new Template begin synchronously checkpoints the complete draft without an authoritative write');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-field="name"]', 'Independent workshop');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.name, 'Independent workshop',
+            'name input checkpoints immediately');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            const record = JSON.parse([...f.recoveryValues.values()].at(-1));
+            return [record.draft.template.name, record.baseline.template.name, f.writes];
+        })()`), ['Independent workshop', '', 0],
+        'each input checkpoint is synchronous, monotone and isolated from the authoritative Store');
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, input = f.root.querySelector('[data-field="name"]');
             input.focus(); input.renderIdentity = 'unchanged-language';
@@ -211,8 +286,18 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             f.workspace.setLanguage('en'); return result;
         })()`), ['Independent workshop', 'Session-Editor', true],
         'a real language change rerenders localized UI while preserving the complete draft');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('.native-workspace-control', 'training', 'change');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.category, 'training',
+            'Rundown category checkpoints immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
+        await click('[name="native-transition"][value="automatic"]');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.transitionMode, 'automatic',
+            'transition mode checkpoints immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-field="prepared"]', 'Goals and **plain text**');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.preparedInformation, 'Goals and **plain text**',
+            'prepared information checkpoints immediately');
         await evaluate(`(() => {
             const f = nativeWorkspaceFixture;
             f.phaseFocusProbe = {
@@ -234,7 +319,10 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 return f.phaseFocusProbe.bounds.call(this);
             };
         })()`);
+        recoveryWritesBefore = await recoveryWriteCount();
         await action('Add phase');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases.map(phase => phase.id), ['phase-1'],
+            'adding a phase checkpoints immediately');
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture;
             return [document.activeElement === f.root.querySelector('[data-native-phase-id="phase-1"] [data-field="title"]'),
@@ -279,7 +367,10 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 bounds.top >= viewport.offsetTop && bounds.bottom <= viewport.offsetTop + viewport.height];
         })()`), [2, true], 'focus-time keyboard resize performs one correction, ignores later resize and restores visibility');
         await click('[data-native-phase-id="phase-3"] [data-action="details"]');
+        recoveryWritesBefore = await recoveryWriteCount();
         await action('Remove phase', '[data-native-phase-id="phase-3"]');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases.map(phase => phase.id), ['phase-1', 'phase-2'],
+            'removing a phase checkpoints immediately');
         await evaluate(`nativeWorkspaceFixture.phaseFocusProbe.top = 500`);
         await action('Add phase');
         await evaluate(`(() => {
@@ -300,10 +391,26 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             else delete window.visualViewport;
             delete f.phaseFocusProbe;
         })()`);
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-native-phase-id="phase-1"] [data-field="title"]', 'First phase');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].title, 'First phase',
+            'phase title checkpoints immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
+        await field('[data-native-phase-id="phase-1"] [data-field="duration"]', '1x');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].durationSeconds, '1x',
+            'incomplete phase duration checkpoints immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-native-phase-id="phase-1"] [data-field="duration"]', '15');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].durationSeconds, 900,
+            'valid phase duration checkpoints immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-native-phase-id="phase-2"] [data-field="title"]', 'Second phase');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[1].title, 'Second phase',
+            'second phase title checkpoints immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-native-phase-id="phase-2"] [data-field="duration"]', '20');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[1].durationSeconds, 1200,
+            'second phase duration checkpoints immediately');
         await click('[data-native-phase-id="phase-1"] [data-action="category"]');
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, row = f.root.querySelector('[data-native-phase-id="phase-1"]');
@@ -313,7 +420,10 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 row.querySelector('[data-category="uncategorized"]').getAttribute('aria-pressed'), f.writes];
         })()`), ['false', 'true', ['Uncategorized', 'Presentation', 'Discussion', 'Breakout', 'Break'], 'true', 0],
         'collapsed inline category popover is complete, selected and write-free');
+        recoveryWritesBefore = await recoveryWriteCount();
         await click('[data-native-phase-id="phase-1"] [data-category="discussion"]');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].category, 'discussion',
+            'phase category checkpoints immediately');
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, row = f.root.querySelector('[data-native-phase-id="phase-1"]');
             const trigger = row.querySelector('[data-action="category"]');
@@ -324,8 +434,14 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         'category selection updates only the local draft, closes independently and restores focus');
         await click('[data-native-phase-id="phase-1"] [data-action="details"]');
         await click('[data-native-phase-id="phase-2"] [data-action="details"]');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-native-phase-id="phase-1"] [data-field="notes"]', 'Facilitator notes');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].notes, 'Facilitator notes',
+            'phase notes checkpoint immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
         await action('Add resource', '[data-native-phase-id="phase-1"]');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].resources, [{ label: '', url: '' }],
+            'adding a resource checkpoints immediately');
         assert.deepEqual(await evaluate(`(() => {
             const root = nativeWorkspaceFixture.root, phase = root.querySelector('[data-native-phase-id="phase-1"]');
             return [
@@ -335,8 +451,14 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 phase.querySelector('.planner-hint').textContent.includes('0 links'), nativeWorkspaceFixture.writes,
             ];
         })()`), ['true', 'true', true, true, 0], 'adding a resource preserves all disclosures, focuses its label and does not persist');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-native-phase-id="phase-1"] input[aria-label="Link label"]', 'Board');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].resources[0].label, 'Board',
+            'resource label checkpoints immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-native-phase-id="phase-1"] input[aria-label="HTTPS or HTTP URL"]', 'https://example.com/board');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].resources[0].url, 'https://example.com/board',
+            'resource URL checkpoints immediately');
         await action('Add resource', '[data-native-phase-id="phase-1"]');
         await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="label"]', 'Only label');
         await evaluate(`nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
@@ -370,7 +492,10 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="label"]', '   ');
         await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="url"]', '  ');
         await action('Add resource', '[data-native-phase-id="phase-1"]');
+        recoveryWritesBefore = await recoveryWriteCount();
         await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id="phase-1"] [data-resource-index="2"] button').click()`);
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases[0].resources.length, 2,
+            'removing a resource checkpoints immediately');
         assert.deepEqual(await evaluate(`(() => {
             const root = nativeWorkspaceFixture.root, phase = root.querySelector('[data-native-phase-id="phase-1"]');
             return [phase.querySelector('[data-action="details"]').getAttribute('aria-expanded'),
@@ -404,7 +529,10 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         })()`), true, 'Escape cancels position selection without mutation');
         await click('[data-native-phase-id="phase-2"] [data-action="position"]');
         await field('[data-native-phase-id="phase-2"] [data-field="position"]', '1', 'change');
+        recoveryWritesBefore = await recoveryWriteCount();
         await click('[data-native-phase-id="phase-2"] [data-action="move-position"]');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases.map(phase => phase.id), ['phase-2', 'phase-1'],
+            'position popover move checkpoints immediately');
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, root = f.root;
             const moved = root.querySelector('[data-native-phase-id="phase-2"]');
@@ -417,8 +545,14 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 f.writes];
         })()`), [['phase-2', 'phase-1'], ['true', 'true'], true, 'Facilitator notes', '   ', 0],
         'Move reorders once while preserving disclosure, unsaved fields, stable IDs, focus and write-free editing');
+        recoveryWritesBefore = await recoveryWriteCount();
         await action('Move later', '[data-native-phase-id="phase-2"]');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases.map(phase => phase.id), ['phase-1', 'phase-2'],
+            'Move later checkpoints immediately');
+        recoveryWritesBefore = await recoveryWriteCount();
         await action('Move earlier', '[data-native-phase-id="phase-2"]');
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases.map(phase => phase.id), ['phase-2', 'phase-1'],
+            'Move earlier checkpoints immediately');
         assert.deepEqual(await evaluate(`(() => {
             const root = nativeWorkspaceFixture.root;
             return [[...root.querySelectorAll('[data-native-phase-id]')].map(row => row.dataset.nativePhaseId),
@@ -426,6 +560,49 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 document.activeElement === root.querySelector('[data-native-phase-id="phase-2"] [data-action="position"]')];
         })()`), [['phase-2', 'phase-1'], ['true', 'true'], true],
         'existing earlier/later controls share the disclosure- and focus-preserving reorder path');
+        await delay(40);
+        recoveryWritesBefore = await recoveryWriteCount();
+        const drag = await evaluate(`(() => {
+            const root = nativeWorkspaceFixture.root;
+            const handle = root.querySelector('[data-native-phase-id="phase-2"] [data-action="drag"]');
+            const target = root.querySelector('[data-native-phase-id="phase-1"]');
+            const sourceBounds = handle.getBoundingClientRect(), targetBounds = target.getBoundingClientRect();
+            return {
+                start: { x: sourceBounds.left + sourceBounds.width / 2, y: sourceBounds.top + sourceBounds.height / 2 },
+                end: { x: targetBounds.left + targetBounds.width / 2, y: targetBounds.bottom - 4 },
+            };
+        })()`);
+        await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', ...drag.start });
+        await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', ...drag.start, button: 'left', buttons: 1, clickCount: 1 });
+        for (let step = 1; step <= 8; step++) {
+            await cdp('Input.dispatchMouseEvent', {
+                type: 'mouseMoved',
+                x: drag.start.x + (drag.end.x - drag.start.x) * step / 8,
+                y: drag.start.y + (drag.end.y - drag.start.y) * step / 8,
+                button: 'left', buttons: 1,
+            });
+        }
+        await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', ...drag.end, button: 'left', buttons: 0, clickCount: 1 });
+        for (let attempt = 0; attempt < 50 && await recoveryWriteCount() === recoveryWritesBefore; attempt++) await delay(20);
+        await expectRecoveryCheckpoint(recoveryWritesBefore, plan => plan.phases.map(phase => phase.id), ['phase-1', 'phase-2'],
+            'actual Workspace drag-and-drop callback checkpoints immediately');
+        assert.deepEqual(await evaluate(`[
+            ...nativeWorkspaceFixture.root.querySelectorAll('[data-native-phase-id]')
+        ].map(row => row.dataset.nativePhaseId)`), ['phase-1', 'phase-2'],
+        'actual Workspace drag-and-drop updates the rendered draft order');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            const record = JSON.parse([...f.recoveryValues.values()].at(-1));
+            const plan = record.draft.template;
+            return [plan.name, plan.category, plan.transitionMode, plan.preparedInformation,
+                plan.phases.map(phase => phase.id), plan.phases[0].title, plan.phases[0].durationSeconds,
+                plan.phases[0].category, plan.phases[0].notes,
+                plan.phases[0].resources.map(resource => [resource.label, resource.url]),
+                record.baseline.template.phases.length, f.writes];
+        })()`), ['Independent workshop', 'training', 'automatic', 'Goals and **plain text**', ['phase-1', 'phase-2'],
+            'First phase', 900, 'discussion', 'Facilitator notes',
+            [['Board', 'https://example.com/board'], ['   ', '  ']], 0, 0],
+        'all text and structural mutation paths retain recoverable intermediate values and the original baseline');
 
         await evaluate(`(() => {
             const f = nativeWorkspaceFixture; f.uncertainOnSet = true; f.hold('templateSave');
@@ -483,9 +660,9 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         }
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, record = JSON.parse(f.raw), saved = record.templates.find(item => item.plan.name === 'Independent workshop');
-            return [f.writes, Boolean(saved), saved.plan.phases.map(phase => phase.id), saved.plan.phases[1].notes,
-                saved.plan.phases[1].resources.length, saved.plan.phases[1].resources[0], f.root.textContent.includes('Saved.')];
-        })()`), [1, true, ['phase-2', 'phase-1'], 'Facilitator notes',
+            return [f.writes, Boolean(saved), saved.plan.phases.map(phase => phase.id), saved.plan.phases[0].notes,
+                saved.plan.phases[0].resources.length, saved.plan.phases[0].resources[0], f.root.textContent.includes('Saved.')];
+        })()`), [1, true, ['phase-1', 'phase-2'], 'Facilitator notes',
             1, { label: 'Board', url: 'https://example.com/board' }, true],
         'read-only reconciliation performs no duplicate write and persists no empty resource placeholders');
 
@@ -497,6 +674,43 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             nativeWorkspaceFixture.writes,
             JSON.parse(nativeWorkspaceFixture.raw).templates.find(item => item.plan.name === 'Independent workshop').plan.name,
         ]`), [writesBeforeCancel, 'Independent workshop'], 'Cancel never persists');
+
+        await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            f.recoveryUnconfirmedBefore = {
+                sets: f.recoveryCalls.filter(([operation]) => operation === 'set').length,
+                candidates: f.recoveryValues.size,
+            };
+            f.recoveryUnconfirmedOnSet = true;
+        })()`);
+        await action('Create template');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, warning = f.root.querySelector('[data-template-recovery-warning]');
+            const record = JSON.parse([...f.recoveryValues.values()].at(-1));
+            return [warning.hidden, warning.textContent.includes('could not confirm this checkpoint'),
+                f.recoveryCalls.filter(([operation]) => operation === 'set').length - f.recoveryUnconfirmedBefore.sets,
+                f.recoveryValues.size - f.recoveryUnconfirmedBefore.candidates,
+                f.recoveryErrors.at(-1), record.draft.template.name, f.writes];
+        })()`), [false, true, 1, 1, 'recoveryStorageWriteUnconfirmed', '', writesBeforeCancel],
+        'a successful Recovery write followed by a failed readback exposes a persistent warning and preserves the candidate');
+        await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('de')`);
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, warning = f.root.querySelector('[data-template-recovery-warning]');
+            return [warning.hidden, warning.textContent.includes('nicht automatisch erneut gesichert'),
+                f.recoveryCalls.filter(([operation]) => operation === 'set').length - f.recoveryUnconfirmedBefore.sets];
+        })()`), [false, true, 1], 'the persistent Recovery warning remains visible and localized in German without retrying');
+        await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('en')`);
+        await field('[data-field="name"]', 'Still editable after recovery failure');
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            const record = JSON.parse([...f.recoveryValues.values()].at(-1));
+            return [f.root.querySelector('[data-template-recovery-warning]').hidden,
+                f.recoveryCalls.filter(([operation]) => operation === 'set').length - f.recoveryUnconfirmedBefore.sets,
+                f.recoveryValues.size - f.recoveryUnconfirmedBefore.candidates,
+                record.draft.template.name, f.root.querySelector('[data-field="name"]').value, f.writes];
+        })()`), [false, 1, 1, '', 'Still editable after recovery failure', writesBeforeCancel],
+        'a blocked Recovery session does not retry the unconfirmed write and retains its original candidate');
+        await action('Cancel');
 
         await rowAction('Independent workshop', 'Create planned execution');
         assert.equal(await evaluate(`nativeWorkspaceFixture.writes`), writesBeforeCancel, 'new Execution remains local before Save');

@@ -7,11 +7,12 @@ import { packageProduction, verifyArtifact, validateProduction, sourceRoot } fro
 
 test('production packaging is repeatable, allowlisted and checksum-verifiable across checkout line endings', async () => {
     const a = await packageProduction(), b = await packageProduction();
-    assert.equal(a.inventory.files.length, 39);
+    assert.equal(a.inventory.files.length, 41);
     const paths = a.inventory.files.map(file => file.path);
     for (const file of ['src/js/editor-workspace.mjs', 'src/js/editor-launch-service.mjs',
         'src/js/editor-planner-service.mjs', 'src/js/editor-portability.mjs',
         'src/js/editor-phase-drag.mjs', 'src/js/editor-phase-dndkit-vendor.mjs',
+        'src/js/editor-draft-recovery.mjs', 'src/js/editor-template-draft-recovery-service.mjs',
         'src/THIRD_PARTY_NOTICES.txt']) assert(paths.includes(file));
     for (const file of ['src/js/planner.js', 'src/js/planner-v1.mjs',
         'src/js/portability.mjs']) assert(!paths.includes(file));

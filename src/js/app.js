@@ -19,6 +19,8 @@ import {
 import { createNativeSessionLaunchService } from './editor-launch-service.mjs';
 import { createNativeTemplateImportService } from './editor-template-import.mjs';
 import { createNativeEditorWorkspace } from './editor-workspace.mjs';
+import { createEditorDraftRecoveryStore } from './editor-draft-recovery.mjs';
+import { createNativeTemplateDraftRecoveryService } from './editor-template-draft-recovery-service.mjs';
 
 const applicationHeader = mountApplicationHeader();
 const copy = {
@@ -149,6 +151,10 @@ const editorLaunchService = createNativeSessionLaunchService({
     runtimeBridge: editorBridge,
 });
 const editorImportService = createNativeTemplateImportService({ writer: editorWriter });
+const editorTemplateDraftRecovery = createNativeTemplateDraftRecoveryService({
+    store: createEditorDraftRecoveryStore(localStorage),
+    createId: () => crypto.randomUUID(),
+});
 let nativeRuntime = null;
 let nativeStartupFeedback = '';
 // App handoff progress only; uncertain source/target snapshots remain in the Bridge.
@@ -372,6 +378,7 @@ const planner = createNativeEditorWorkspace({
     plannedExecutionService: editorPlannedExecutionService,
     launchService: editorLaunchService,
     importService: editorImportService,
+    templateRecovery: editorTemplateDraftRecovery,
     language,
     onClose: ({ focus } = {}) => {
         navigationRevision += 1;

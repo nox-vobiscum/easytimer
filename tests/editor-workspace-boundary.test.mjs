@@ -14,6 +14,8 @@ test('native Workspace is the single public Editor and V1 Planner is unreachable
     assert.doesNotMatch(html, /planner-v1|planner\.js|portability\.mjs/);
     assert.doesNotMatch(packaging, /'js\/planner\.js'|'js\/planner-v1\.mjs'|'js\/portability\.mjs'/);
     assert.match(packaging, /'js\/editor-workspace\.mjs'/);
+    assert.match(packaging, /'js\/editor-draft-recovery\.mjs'/);
+    assert.match(packaging, /'js\/editor-template-draft-recovery-service\.mjs'/);
     assert.doesNotMatch(workspace, /planner-v1|easyTimerTemplates|easyTimerRuntime|localStorage/);
     assert.match(workspace, /createNativeEditorWorkspace/);
 });
@@ -75,6 +77,25 @@ test('Workspace shares one guarded close path and validates resource snapshots b
     assert.match(workspace, /aria-describedby/);
 });
 
+test('Template draft recovery is injected, synchronous and central without a second storage boundary', async () => {
+    const [app, workspace, service] = await Promise.all([
+        read('src/js/app.js'), read('src/js/editor-workspace.mjs'),
+        read('src/js/editor-template-draft-recovery-service.mjs'),
+    ]);
+    assert.match(app, /createEditorDraftRecoveryStore\(localStorage\)/);
+    assert.match(app, /templateRecovery: editorTemplateDraftRecovery/);
+    assert.doesNotMatch(service, /localStorage|sessionStorage|indexedDB|caches/);
+    assert.match(service, /store\.create\(candidate\)/);
+    assert.match(service, /store\.update\(candidate, session\.record\.savedAt\)/);
+    assert.match(workspace, /function checkpointTemplateDraft\(next\)/);
+    assert.match(workspace, /onDraftChange: checkpointTemplateDraft/);
+    assert.match(workspace, /checkpointTemplateDraft\(repositionNativeDraftPhase/);
+    assert.match(workspace, /checkpointTemplateDraft\(insertNativeDraftPhase/);
+    assert.match(workspace, /checkpointTemplateDraft\(editNativePhaseDraft/);
+    assert.match(workspace, /dataset\.templateRecoveryWarning/);
+    assert.doesNotMatch(workspace, /templateRecovery\.(?:remove|discard|restore)/);
+});
+
 test('public native entry and Picker orchestration retain identity, ownership and unresolved-operation guards', async () => {
     const app = await read('src/js/app.js');
     assert.match(app, /function activeBinding\(record\)/);
@@ -109,12 +130,14 @@ test('central styles isolate hidden primary views and the app shell advances tog
     ]);
     assert.match(css, /\.native-editor-workspace/);
     assert.match(css, /\.timer\[hidden\]\s*{\s*display:\s*none;/);
-    assert.match(html, /css\/styles\.css\?v=80/);
-    assert.match(html, /js\/app\.js\?v=80/);
-    assert.match(worker, /easytimer-shell-v80/);
-    assert.match(worker, /css\/styles\.css\?v=80/);
-    assert.match(worker, /js\/app\.js\?v=80/);
+    assert.match(html, /css\/styles\.css\?v=81/);
+    assert.match(html, /js\/app\.js\?v=81/);
+    assert.match(worker, /easytimer-shell-v81/);
+    assert.match(worker, /css\/styles\.css\?v=81/);
+    assert.match(worker, /js\/app\.js\?v=81/);
     assert.match(worker, /js\/editor-workspace\.mjs/);
+    assert.match(worker, /js\/editor-draft-recovery\.mjs/);
+    assert.match(worker, /js\/editor-template-draft-recovery-service\.mjs/);
     assert.doesNotMatch(worker, /planner-v1|planner\.js|portability\.mjs\?v=37/);
 });
 
