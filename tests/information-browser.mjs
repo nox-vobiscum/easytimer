@@ -164,6 +164,25 @@ export async function checkInformation({ cdp, evaluate, wait, origin, screenshot
             assert(await evaluate('document.querySelector(".info-return[data-info-back]").getBoundingClientRect().height >= 44'));
             assert.equal(await evaluate('getComputedStyle(document.querySelector("main p [data-info-back]")).textDecorationLine'), 'underline', 'Content links retain their underline');
             assert.equal(await evaluate('document.querySelectorAll(".info-draft, article [style]").length'), 0, 'No internal draft notice or inline styling enters public content');
+            if (page === 'faq') {
+                const questions = language === 'de' ? [
+                    'Wofür ist der Session-Editor da?',
+                    'Was unterscheidet eine Vorlage von einer Durchführung?',
+                    'Kann ich Phasen, Notizen und Links vorbereiten?',
+                    'Kann ich ungespeicherte Änderungen nach dem Neuladen wiederherstellen?',
+                    'Was kann ich während einer laufenden Session bearbeiten?',
+                ] : [
+                    'What is the Session Editor for?',
+                    'What is the difference between a template and an execution?',
+                    'Can I prepare phases, notes and links?',
+                    'Can I recover unsaved changes after a reload?',
+                    'What can I edit during a running session?',
+                ];
+                const answered = await evaluate(`[...document.querySelectorAll('article:not([hidden]) h2')]
+                    .filter(heading => heading.nextElementSibling?.matches('p') && heading.nextElementSibling.textContent.trim())
+                    .map(heading => heading.textContent)`);
+                for (const question of questions) assert.ok(answered.includes(question), `${language} FAQ answers: ${question}`);
+            }
             if (['imprint', 'privacy'].includes(page)) {
                 assert(await evaluate(`Array.from(document.querySelectorAll('article a[href^="mailto:"]')).every(a=>a.getAttribute('href')==='mailto:noxvobiscum@gmail.at')`));
                 assert.equal(await evaluate(`document.querySelectorAll('article a[href="mailto:noxvobiscum@gmail.at"]').length`), 2);
@@ -227,7 +246,7 @@ export async function checkInformation({ cdp, evaluate, wait, origin, screenshot
     assert.equal(await evaluate('document.querySelector("#preferences").hidden'), true);
     assert.equal(await evaluate('document.activeElement.id'), 'menu-toggle');
     await evaluate('document.querySelector("#menu-toggle").click();document.querySelector(".info-return").click()');
-    await wait('Boolean(document.querySelector("#primary")?.title)');
+    await wait(appReady);
     await cdp('Page.navigate', { url: origin + '/faq.html?lang=en' });
     await wait('location.pathname==="/faq.html" && Boolean(document.querySelector(".info-return"))');
     await evaluate('document.querySelector("[data-info-page=about]").click()');
@@ -237,7 +256,7 @@ export async function checkInformation({ cdp, evaluate, wait, origin, screenshot
     await wait('location.pathname === "/faq.html" && document.documentElement.lang === "en"');
     await cdp('Emulation.setDeviceMetricsOverride', { width:1280, height:800, deviceScaleFactor:1, mobile:false });
     await cdp('Page.navigate', { url: origin + '/' });
-    await wait('Boolean(document.querySelector("#primary")?.title)');
+    await wait(appReady);
     for (const language of ['de', 'en']) {
         await evaluate(`document.querySelector('[data-language="${language}"]').click()`);
         await cdp('Emulation.setDeviceMetricsOverride', { width:320, height:375, deviceScaleFactor:1, mobile:false });
@@ -332,6 +351,17 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
             assert.equal(await evaluate('document.body.dataset.mode'), 'home');
             await evaluate('document.querySelector("#home-quick").click()');
         }
+        await menu('#open-home');
+        await wait('document.body.dataset.mode === "home"');
+        await evaluate('document.dispatchEvent(new Event("visibilitychange"))');
+        const homeDocument = await evaluate('performance.timeOrigin');
+        await cdp('Page.reload');
+        await wait(`performance.timeOrigin !== ${homeDocument} && ${appReady}`);
+        assert.deepEqual(await evaluate(`[document.body.dataset.mode,
+            document.querySelector('#home-view').hidden, document.querySelector('#timer-view').hidden]`),
+        ['home', false, true], 'Home selected from the menu remains visible after reload');
+        console.log('PASS: Menu Home survives reload without reopening the Quick Timer.');
+        await evaluate('document.querySelector("#home-quick").click()');
         await configureQuickTimebox(evaluate, 60000);
         await evaluate('document.querySelector("#primary").click()');
         const running = await readRecord();

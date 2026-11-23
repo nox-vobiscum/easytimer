@@ -91,6 +91,11 @@ async function checkOffline(negativeControl) {
             await click('#menu-toggle');
             assert.equal(await evaluate('document.querySelectorAll(".menu-information a").length'), 4);
             await click('#open-planner');
+            await wait('Boolean(document.querySelector("#planner #data-backup > summary")?.getClientRects().length)');
+            await click('#planner #data-backup > summary');
+            assert.equal(await evaluate(`[...document.querySelectorAll('#planner #data-backup[open] button')]
+                .some(button => button.textContent === 'Export all local data' && !button.disabled && button.getClientRects().length > 0)`),
+            true, 'The native Editor offers a usable full-data export');
             assert.match(await evaluate('document.querySelector("#data-backup").textContent'), /Full backup restore is not yet supported/);
             await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create template").click()');
             await evaluate('const name=document.querySelector("#planner [data-field=name]");name.value="Unsaved information test";name.dispatchEvent(new Event("input",{bubbles:true}))');

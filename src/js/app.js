@@ -814,6 +814,7 @@ function dispatchNative(action) {
     return persistNativeAction(action, Date.now());
 }
 function dispatch(action) {
+    if (homeOpen && action.type === 'TICK') return;
     if (nativeExit && !nativeRuntime) return;
     if (nativeRuntime) return dispatchNative(action);
     if (mode === 'session' && run) {

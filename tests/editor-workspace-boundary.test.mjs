@@ -136,11 +136,11 @@ test('central styles isolate hidden primary views and the app shell advances tog
     ]);
     assert.match(css, /\.native-editor-workspace/);
     assert.match(css, /\.timer\[hidden\]\s*{\s*display:\s*none;/);
-    assert.match(html, /css\/styles\.css\?v=83/);
-    assert.match(html, /js\/app\.js\?v=83/);
-    assert.match(worker, /easytimer-shell-v83/);
-    assert.match(worker, /css\/styles\.css\?v=83/);
-    assert.match(worker, /js\/app\.js\?v=83/);
+    assert.match(html, /css\/styles\.css\?v=84/);
+    assert.match(html, /js\/app\.js\?v=84/);
+    assert.match(worker, /easytimer-shell-v84/);
+    assert.match(worker, /css\/styles\.css\?v=84/);
+    assert.match(worker, /js\/app\.js\?v=84/);
     assert.match(worker, /js\/editor-workspace\.mjs/);
     assert.match(worker, /js\/editor-draft-recovery\.mjs/);
     assert.match(worker, /js\/editor-template-draft-recovery-service\.mjs/);
