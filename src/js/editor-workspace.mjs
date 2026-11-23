@@ -45,6 +45,23 @@ const copy = {
         validation: 'Correct the highlighted or invalid fields. Nothing was saved.',
         storage: 'Storage could not confirm the operation. Your draft is retained.',
         recoveryWarning: 'Draft recovery could not confirm this checkpoint. Keep this editor open; later changes will not be retried automatically.',
+        recoveryHeading: 'Local recovery drafts', recoveryEmptyName: 'Unnamed local draft',
+        recoveryRestore: 'Restore', recoveryReview: 'View draft', recoveryExport: 'Export recovery JSON',
+        recoveryDiscard: 'Discard local draft', recoveryRetry: 'Retry loading',
+        recoveryRestorable: 'This local draft can be restored without changing the saved library.',
+        recoveryPending: 'Save confirmation is pending. Recheck reads storage without writing again.',
+        recoveryConflict: 'The saved library changed. This draft is read-only and cannot overwrite it.',
+        recoveryCorrupt: 'A local recovery entry could not be read. It was kept unchanged.',
+        recoveryLoadFailed: 'Local recovery drafts could not be read. Nothing was deleted.',
+        recoveryRestoreFailed: 'This local recovery draft could not be read for restoration. It was kept unchanged.',
+        recoveryDiscardConfirm: name => `Discard the local recovery copy for “${name}”? This cannot be undone.`,
+        recoveryDraftDiscardConfirm: 'Discard this unsaved draft and its local recovery copy? This cannot be undone.',
+        recoveryDiscardFailed: 'The local recovery copy could not be discarded. It was kept for review.',
+        recoveryCleanupFailed: 'Saved successfully. The separate local recovery copy could not be cleaned up and remains available for review.',
+        recoveryCleanupUncertain: 'Saved. It could not be confirmed whether the local recovery copy was removed.',
+        recoverySavedReloadFailed: 'Saved successfully, but the updated library could not be loaded. Retry loading; saving again is not required.',
+        recoverySavedRetry: 'Retry saved result', recoveryDetails: 'Recovery details',
+        recoverySavedAt: 'Last confirmed checkpoint', recoveryCreate: 'New Template', recoveryUpdate: 'Edited Template',
         unexpected: 'The operation failed. Your draft is retained.',
         readFailed: 'The native Workspace could not be read.',
         lifecycleInfo: 'Lifecycle actions are intentionally unavailable until the coordinated public cutover.',
@@ -91,6 +108,23 @@ const copy = {
         validation: 'Ungültige Felder korrigieren. Es wurde nichts gespeichert.',
         storage: 'Der Speicher konnte den Vorgang nicht bestätigen. Der Entwurf bleibt erhalten.',
         recoveryWarning: 'Die Entwurfswiederherstellung konnte diesen Zwischenstand nicht bestätigen. Diesen Editor geöffnet lassen; weitere Änderungen werden nicht automatisch erneut gesichert.',
+        recoveryHeading: 'Lokale Wiederherstellungsentwürfe', recoveryEmptyName: 'Unbenannter lokaler Entwurf',
+        recoveryRestore: 'Wiederherstellen', recoveryReview: 'Entwurf ansehen', recoveryExport: 'Wiederherstellungs-JSON exportieren',
+        recoveryDiscard: 'Lokalen Entwurf verwerfen', recoveryRetry: 'Laden erneut versuchen',
+        recoveryRestorable: 'Dieser lokale Entwurf kann wiederhergestellt werden, ohne die gespeicherte Bibliothek zu ändern.',
+        recoveryPending: 'Die Speicherbestätigung steht aus. Die erneute Prüfung liest nur den Speicher und schreibt nicht erneut.',
+        recoveryConflict: 'Die gespeicherte Bibliothek wurde geändert. Dieser Entwurf ist schreibgeschützt und kann sie nicht überschreiben.',
+        recoveryCorrupt: 'Ein lokaler Wiederherstellungseintrag konnte nicht gelesen werden. Er wurde unverändert beibehalten.',
+        recoveryLoadFailed: 'Lokale Wiederherstellungsentwürfe konnten nicht gelesen werden. Es wurde nichts gelöscht.',
+        recoveryRestoreFailed: 'Dieser lokale Wiederherstellungsentwurf konnte zur Wiederherstellung nicht gelesen werden. Er wurde unverändert beibehalten.',
+        recoveryDiscardConfirm: name => `Die lokale Wiederherstellungskopie für „${name}“ verwerfen? Dies kann nicht rückgängig gemacht werden.`,
+        recoveryDraftDiscardConfirm: 'Diesen ungespeicherten Entwurf und seine lokale Wiederherstellungskopie verwerfen? Dies kann nicht rückgängig gemacht werden.',
+        recoveryDiscardFailed: 'Die lokale Wiederherstellungskopie konnte nicht verworfen werden. Sie bleibt zur Prüfung erhalten.',
+        recoveryCleanupFailed: 'Erfolgreich gespeichert. Die separate lokale Wiederherstellungskopie konnte nicht bereinigt werden und bleibt zur Prüfung verfügbar.',
+        recoveryCleanupUncertain: 'Gespeichert. Ob die lokale Wiederherstellungskopie entfernt wurde, konnte nicht bestätigt werden.',
+        recoverySavedReloadFailed: 'Erfolgreich gespeichert, aber die aktualisierte Bibliothek konnte nicht geladen werden. Laden erneut versuchen; erneutes Speichern ist nicht erforderlich.',
+        recoverySavedRetry: 'Gespeichertes Ergebnis erneut laden', recoveryDetails: 'Wiederherstellungsdetails',
+        recoverySavedAt: 'Letzter bestätigter Zwischenstand', recoveryCreate: 'Neue Vorlage', recoveryUpdate: 'Bearbeitete Vorlage',
         unexpected: 'Der Vorgang ist fehlgeschlagen. Der Entwurf bleibt erhalten.',
         readFailed: 'Der native Arbeitsbereich konnte nicht gelesen werden.',
         lifecycleInfo: 'Lebenszyklusaktionen bleiben bis zur koordinierten öffentlichen Umstellung absichtlich nicht verfügbar.',
@@ -134,8 +168,9 @@ export function createNativeEditorWorkspace({
 } = {}) {
     if (!(root instanceof HTMLElement) || !copy[language]
         || !plannerService || !plannedExecutionService || !launchService || !importService
-        || (templateRecovery !== null && (typeof templateRecovery.begin !== 'function'
-            || typeof templateRecovery.checkpoint !== 'function' || typeof templateRecovery.deactivate !== 'function'))
+        || (templateRecovery !== null && ['begin', 'checkpoint', 'list', 'adopt', 'checkpointPending',
+            'resolveAbsent', 'current', 'discard', 'discardCurrent', 'cleanup', 'deactivate']
+            .some(method => typeof templateRecovery[method] !== 'function'))
         || typeof createPhaseId !== 'function' || typeof downloadTemplate !== 'function'
         || typeof onClose !== 'function' || typeof onRequest !== 'function'
         || typeof onRecheck !== 'function' || typeof onRecord !== 'function') fail('invalidWorkspace');
@@ -149,6 +184,9 @@ export function createNativeEditorWorkspace({
     let phaseTitleRevealCleanup = null;
     let phaseDragAnnouncement = '';
     let recoveryWarning = false;
+    let recoveryCandidates = []; let recoveryErrors = []; let recoveryLoadError = null;
+    let recoveryDetailId = null; let recoveryNotice = null; let workspaceLoadFailed = false;
+    let templateCompletion = null;
     const t = () => copy[language];
     const library = () => ({ revision: workspace.revision, templates: workspace.templates });
     const currentPlan = (source = draft) => { const { id, ...plan } = source.template; return plan; };
@@ -176,24 +214,43 @@ export function createNativeEditorWorkspace({
         syncRecoveryWarning();
     }
 
-    async function loadWorkspace() {
+    function refreshRecoveryCandidates() {
+        if (!templateRecovery || !workspace) {
+            recoveryCandidates = []; recoveryErrors = []; recoveryLoadError = null; return true;
+        }
+        const result = templateRecovery.list(workspace);
+        if (result.status !== 'success') {
+            recoveryCandidates = []; recoveryErrors = []; recoveryLoadError = result.error; return false;
+        }
+        recoveryCandidates = result.candidates; recoveryErrors = result.errors; recoveryLoadError = null;
+        return true;
+    }
+
+    async function loadWorkspace({ completion = false } = {}) {
         const result = await plannerService.loadWorkspace();
         if (result.status !== 'success') {
             try { onRecord(null); } catch { /* Host remains fail-closed. */ }
-            setFeedback('readFailed'); return false;
+            workspaceLoadFailed = true;
+            setFeedback(completion ? 'recoverySavedReloadFailed' : 'readFailed', !completion); return false;
         }
-        workspace = result.workspace;
+        workspace = result.workspace; workspaceLoadFailed = false;
         try { onRecord(structuredClone(workspace)); }
-        catch { setFeedback('unexpected'); return false; }
+        catch {
+            workspaceLoadFailed = true;
+            setFeedback(completion ? 'recoverySavedReloadFailed' : 'unexpected', !completion);
+            return false;
+        }
+        refreshRecoveryCandidates();
         return true;
     }
-    const mutationBlocked = () => mutationBusy || pending !== null;
-    function clearEditor({ clearPending = false } = {}) {
+    const mutationBlocked = () => mutationBusy || pending !== null || templateCompletion !== null;
+    function clearEditor({ clearPending = false, clearCompletion = true } = {}) {
         cancelPhaseTitleReveal();
         destroyPhaseDragging();
         templateRecovery?.deactivate(); recoveryWarning = false;
         draft = null; editorKind = null; baseline = null; resourceErrors = new Map();
         if (clearPending) pending = null;
+        if (clearCompletion) templateCompletion = null;
     }
     function lockRenderedControls() {
         if (!mutationBlocked()) return;
@@ -202,10 +259,12 @@ export function createNativeEditorWorkspace({
         if (!mutationBusy) {
             const recheck = root.querySelector('[data-native-recheck]');
             if (recheck) recheck.disabled = false;
+            const retry = root.querySelector('[data-template-save-retry]');
+            if (retry) retry.disabled = false;
         }
     }
-    async function runMutation(operation, { allowPending = false } = {}) {
-        if (mutationBusy || (pending && !allowPending)) return false;
+    async function runMutation(operation, { allowPending = false, allowCompletion = false } = {}) {
+        if (mutationBusy || (pending && !allowPending) || (templateCompletion && !allowCompletion)) return false;
         mutationBusy = true; lockRenderedControls();
         try { await operation(); }
         catch { setFeedback('unexpected'); }
@@ -226,11 +285,20 @@ export function createNativeEditorWorkspace({
         clearEditor(); workspace = null; importCandidate = null; deleteTarget = null; lifecycleRequest = null; archiveId = null;
         root.replaceChildren(); root.classList.remove('planner', 'native-editor-workspace'); delete root.dataset.nativeEditorWorkspace;
     }
+    function discardCurrentTemplateRecovery() {
+        const current = editorKind === 'template' ? templateRecovery?.current() : null;
+        if (!current?.persisted && !current?.blocked) return true;
+        if (!window.confirm(t().recoveryDraftDiscardConfirm)) return false;
+        const result = templateRecovery.discardCurrent();
+        if (result.status === 'success') { recoveryNotice = null; refreshRecoveryCandidates(); return true; }
+        recoveryWarning = true; recoveryNotice = 'recoveryDiscardFailed'; render(); return false;
+    }
     function close() {
         if (mutationBlocked()) {
-            render(); root.querySelector('[data-native-recheck]')?.focus({ preventScroll: true }); return false;
+            render(); root.querySelector('[data-native-recheck], [data-template-save-retry]')?.focus({ preventScroll: true }); return false;
         }
-        if (dirty() && !window.confirm(t().discardDraft)) return false;
+        if (!discardCurrentTemplateRecovery()) return false;
+        if (editorKind !== 'template' && dirty() && !window.confirm(t().discardDraft)) return false;
         deactivate();
         return true;
     }
@@ -257,6 +325,55 @@ export function createNativeEditorWorkspace({
             ? plannerService.prepareNewDraft(library()) : plannerService.prepareEditDraft(library(), templateId);
         if (result.status === 'success') beginDraft(result.draft, 'template');
         else { setFeedback(resultCode(result)); render(); }
+    }
+    const recoveryName = record => record.draft.template.name.trim() || t().recoveryEmptyName;
+    function exportRecovery(record) {
+        downloadTemplate({
+            name: `easytimer-recovery-${record.recoveryId}.json`,
+            text: JSON.stringify(record, null, 2) + '\n',
+            recoveryId: record.recoveryId,
+        });
+    }
+    async function retryWorkspaceLoad() {
+        workspaceLoadFailed = false; setFeedback(null, false); render();
+        await loadWorkspace(); render(); focusHeading();
+    }
+    function retryRecoveryLoad() {
+        refreshRecoveryCandidates(); render();
+        root.querySelector('[data-recovery-heading]')?.focus({ preventScroll: true });
+    }
+    async function restoreRecovery(candidate) {
+        if (mutationBlocked()) return;
+        const selected = structuredClone(candidate.record);
+        await runMutation(async () => {
+            if (!await loadWorkspace()) return;
+            const result = templateRecovery.adopt({
+                recoveryId: selected.recoveryId,
+                expectedSavedAt: selected.savedAt,
+                workspace,
+            });
+            if (!['success', 'pending'].includes(result.status)) {
+                recoveryNotice = result.status === 'conflict' ? 'recoveryConflict' : 'recoveryRestoreFailed';
+                recoveryDetailId = result.status === 'conflict' ? selected.recoveryId : null;
+                refreshRecoveryCandidates(); return;
+            }
+            draft = structuredClone(result.record.draft); editorKind = 'template';
+            baseline = JSON.stringify(result.record.baseline); pending = result.record.pending
+                ? structuredClone(result.record.pending) : null;
+            recoveryWarning = false; recoveryNotice = null; recoveryDetailId = null; setFeedback(pending ? 'uncertain' : null, Boolean(pending));
+        });
+        (pending ? root.querySelector('[data-native-recheck]') : root.querySelector('[data-field="name"]'))
+            ?.focus({ preventScroll: true });
+    }
+    function discardRecovery(candidate) {
+        if (mutationBlocked()) return;
+        const record = candidate.record;
+        if (!window.confirm(t().recoveryDiscardConfirm(recoveryName(record)))) return;
+        const result = templateRecovery.discard(record.recoveryId, record.savedAt);
+        if (result.status !== 'success') recoveryNotice = 'recoveryDiscardFailed';
+        else { recoveryNotice = null; if (recoveryDetailId === record.recoveryId) recoveryDetailId = null; }
+        refreshRecoveryCandidates(); render();
+        root.querySelector('[data-recovery-heading]')?.focus({ preventScroll: true });
     }
     async function beginExecution(executionId) {
         if (mutationBlocked()) return;
@@ -320,10 +437,30 @@ export function createNativeEditorWorkspace({
         else setFeedback(resultCode(result));
         render();
     }
+    async function completeTemplateWrite() {
+        if (!templateCompletion) return;
+        if (!await loadWorkspace({ completion: true })) return;
+        const cleanup = templateRecovery?.cleanup() ?? { status: 'success' };
+        const cleanupNotice = cleanup.status === 'success' ? null
+            : cleanup.status === 'uncertain' ? 'recoveryCleanupUncertain' : 'recoveryCleanupFailed';
+        clearEditor({ clearPending: true }); importCandidate = null;
+        refreshRecoveryCandidates(); recoveryNotice = cleanupNotice;
+        setFeedback('saved', false);
+    }
+    function retryTemplateCompletion() {
+        return runMutation(completeTemplateWrite, { allowCompletion: true });
+    }
     async function saveTemplate(saveDraft) {
         const result = await plannerService.saveDraft(saveDraft);
-        if (result.status === 'success') { await finishWrite('saved'); return; }
-        if (result.status === 'uncertain') { pending = { kind: 'templateSave', ticket: result.reconciliation }; setFeedback('uncertain'); }
+        if (result.status === 'success') {
+            templateCompletion = { message: 'saved' }; await completeTemplateWrite(); return;
+        }
+        if (result.status === 'uncertain') {
+            pending = { kind: 'templateSave', ticket: result.reconciliation };
+            const recovery = templateRecovery?.checkpointPending(pending);
+            if (recovery && recovery.status !== 'success') recoveryWarning = true;
+            setFeedback('uncertain');
+        }
         else setFeedback(resultCode(result));
         render();
     }
@@ -397,12 +534,28 @@ export function createNativeEditorWorkspace({
                 }
                 setFeedback('unresolved'); render(); return;
             }
-            if (pending.kind === 'templateSave') result = await plannerService.reconcileSave(pending.ticket);
+            const pendingKind = pending.kind;
+            if (pendingKind === 'templateSave') result = await plannerService.reconcileSave(pending.ticket);
             else if (pending.kind === 'executionSave') result = await plannedExecutionService.reconcileSave(pending.ticket);
             else if (pending.kind === 'delete') result = await plannerService.reconcileDelete(pending.ticket);
             else result = await importService.reconcileImport(pending.ticket);
-            if (result.status === 'confirmed') { await finishWrite(pending.kind === 'delete' ? 'deleted' : pending.kind === 'import' ? 'imported' : 'saved'); return; }
-            if (result.status === 'absent') { pending = null; setFeedback('absent'); render(); return; }
+            if (result.status === 'confirmed') {
+                if (pendingKind === 'templateSave') {
+                    pending = null; templateCompletion = { message: 'saved' };
+                    await completeTemplateWrite(); return;
+                }
+                await finishWrite(pendingKind === 'delete' ? 'deleted' : pendingKind === 'import' ? 'imported' : 'saved'); return;
+            }
+            if (result.status === 'absent') {
+                if (pendingKind === 'templateSave') {
+                    const recovery = templateRecovery.resolveAbsent();
+                    if (recovery.status !== 'success') {
+                        recoveryWarning = true; setFeedback('unresolved'); render(); return;
+                    }
+                    draft = structuredClone(recovery.record.draft); baseline = JSON.stringify(recovery.record.baseline);
+                }
+                pending = null; setFeedback('absent'); render(); return;
+            }
             setFeedback('unresolved'); render();
         }, { allowPending: true });
     }
@@ -529,9 +682,17 @@ export function createNativeEditorWorkspace({
     function renderFeedback(container) {
         const line = el('p', feedbackText(), 'planner-feedback'); line.dataset.error = String(feedbackError);
         line.setAttribute('role', 'status'); line.setAttribute('aria-live', 'polite'); container.append(line);
+        if (recoveryNotice) {
+            const notice = el('p', t()[recoveryNotice], 'planner-feedback'); notice.dataset.error = 'true';
+            notice.setAttribute('role', 'alert'); container.append(notice);
+        }
         if (pending) {
             const control = button(t().recheck, recheck, 'primary'); control.dataset.nativeRecheck = '';
             container.append(control);
+        }
+        if (templateCompletion) {
+            const retry = button(t().recoverySavedRetry, retryTemplateCompletion, 'primary');
+            retry.dataset.templateSaveRetry = ''; container.append(retry);
         }
     }
     function heading(container) {
@@ -609,10 +770,56 @@ export function createNativeEditorWorkspace({
         body.append(el('p', t().exportAllHint, 'planner-hint'), button(t().exportAll, exportAll));
         details.id = 'data-backup'; details.append(body); container.append(details);
     }
+    function renderRecoveries(container) {
+        if (!templateRecovery || (!recoveryLoadError && !recoveryCandidates.length && !recoveryErrors.length)) return;
+        const section = el('section', undefined, 'data-backup'); section.dataset.templateRecoveries = '';
+        const title = el('h2', t().recoveryHeading); title.tabIndex = -1; title.dataset.recoveryHeading = ''; section.append(title);
+        if (recoveryLoadError) {
+            const error = el('p', t().recoveryLoadFailed, 'planner-feedback'); error.dataset.error = 'true'; error.setAttribute('role', 'alert');
+            section.append(error, button(t().recoveryRetry, retryRecoveryLoad, 'primary')); container.append(section); return;
+        }
+        const list = el('ul', undefined, 'template-library');
+        for (const candidate of recoveryCandidates) {
+            const { record, status } = candidate; const row = el('li'); row.dataset.recoveryId = record.recoveryId;
+            const detailId = `native-recovery-detail-${record.recoveryId}`;
+            const detailsOpen = recoveryDetailId === record.recoveryId;
+            const info = el('div'); info.append(el('h3', recoveryName(record)));
+            const kind = record.draft.mode === 'create' ? t().recoveryCreate : t().recoveryUpdate;
+            info.append(el('p', `${kind} · ${t().recoverySavedAt}: ${new Date(record.savedAt).toLocaleString(language)}`, 'planner-hint'));
+            info.append(el('p', t()[status === 'restorable' ? 'recoveryRestorable'
+                : status === 'pending' ? 'recoveryPending' : 'recoveryConflict'], 'planner-feedback'));
+            const actions = el('div', undefined, 'planner-actions');
+            if (status !== 'conflict') actions.append(button(t().recoveryRestore, () => restoreRecovery(candidate), 'primary'));
+            const review = button(t().recoveryReview, () => {
+                const open = recoveryDetailId !== record.recoveryId;
+                recoveryDetailId = open ? record.recoveryId : null; render();
+                const rendered = root.querySelector(`[data-recovery-id="${CSS.escape(record.recoveryId)}"]`);
+                (open ? rendered?.querySelector('textarea') : rendered?.querySelector('[data-recovery-review]'))
+                    ?.focus({ preventScroll: true });
+            });
+            review.dataset.recoveryReview = '';
+            review.setAttribute('aria-expanded', String(detailsOpen));
+            review.setAttribute('aria-controls', detailId);
+            actions.append(review, button(t().recoveryExport, () => exportRecovery(record)),
+                button(t().recoveryDiscard, () => discardRecovery(candidate)));
+            row.append(info, actions);
+            const detail = el('section'); detail.id = detailId; detail.hidden = !detailsOpen;
+            detail.append(el('h4', t().recoveryDetails));
+            const json = el('textarea'); json.rows = 8; json.readOnly = true; json.value = JSON.stringify(record, null, 2);
+            json.setAttribute('aria-label', t().recoveryDetails); detail.append(json); row.append(detail);
+            list.append(row);
+        }
+        for (const item of recoveryErrors) {
+            const row = el('li'); const error = el('p', `${t().recoveryCorrupt} (${item.code})`, 'planner-feedback');
+            error.dataset.error = 'true'; error.setAttribute('role', 'alert'); row.append(error); list.append(row);
+        }
+        section.append(list); container.append(section);
+    }
     function renderLibrary() {
         const section = el('section'); heading(section);
         const actions = el('div', undefined, 'planner-actions'); actions.append(button(t().create, () => beginTemplate(), 'primary')); section.append(actions);
         renderFeedback(section);
+        renderRecoveries(section);
         group(section, t().templates, workspace.templates, templateRow);
         for (const lifecycle of ['planned', 'active', 'suspended', 'completed']) {
             group(section, t()[lifecycle], workspace.executions.filter(entry => entry.execution.lifecycle === lifecycle), executionRow);
@@ -827,6 +1034,7 @@ export function createNativeEditorWorkspace({
         const saveButton = el('button', t().save, 'primary'); saveButton.type = 'submit'; saveButton.disabled = mutationBlocked();
         actions.append(saveButton, button(t().cancel, () => {
             if (mutationBlocked()) return;
+            if (!discardCurrentTemplateRecovery()) return;
             clearEditor(); setFeedback('cancelled', false); render(); focusHeading();
         }));
         form.append(actions); section.append(form); root.replaceChildren(section); renderDeleteDialog();
@@ -851,11 +1059,19 @@ export function createNativeEditorWorkspace({
         const remove = button(t().confirmDelete, confirmDelete, 'confirm-stop'); actions.append(keep, remove); form.append(actions); dialog.append(form);
         dialog.addEventListener('cancel', event => { event.preventDefault(); closeDeleteDialog(); }); root.append(dialog);
     }
+    function renderWorkspaceLoadError() {
+        const section = el('section'); heading(section); renderFeedback(section);
+        section.append(button(t().recoveryRetry, retryWorkspaceLoad, 'primary')); root.replaceChildren(section);
+    }
     function render() {
         if (!active) return;
         cancelPhaseTitleReveal();
         root.className = 'planner native-editor-workspace'; root.dataset.nativeEditorWorkspace = '';
-        if (!workspace) { root.replaceChildren(el('p', t().loading)); return; }
+        if (!workspace) {
+            if (workspaceLoadFailed) renderWorkspaceLoadError();
+            else root.replaceChildren(el('p', t().loading));
+            return;
+        }
         if (draft) renderEditor(); else if (archiveId) renderArchive(); else renderLibrary();
         renderLifecycleDialog();
         lockRenderedControls();

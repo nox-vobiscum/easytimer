@@ -54,9 +54,9 @@ test('internal Workspace uses reviewed native editing and portability boundaries
 test('Workspace retains reconciliation state and serializes local mutations', async () => {
     const workspace = await read('src/js/editor-workspace.mjs');
     assert.match(workspace, /let pending = null; let mutationBusy = false/);
-    assert.match(workspace, /if \(mutationBusy \|\| \(pending && !allowPending\)\) return false/);
+    assert.match(workspace, /if \(mutationBusy \|\| \(pending && !allowPending\) \|\| \(templateCompletion && !allowCompletion\)\) return false/);
     assert.match(workspace, /clearEditor\(\{ clearPending: true \}\)/);
-    assert.match(workspace, /if \(mutationBlocked\(\)\) return;\s*clearEditor\(\)/);
+    assert.match(workspace, /if \(mutationBlocked\(\)\) return;\s*if \(!discardCurrentTemplateRecovery\(\)\) return;\s*clearEditor\(\)/);
     assert.match(workspace, /data-native-recheck/);
     assert.match(workspace, /if \(mutationBlocked\(\)\)[\s\S]*return false/);
 });
@@ -93,7 +93,13 @@ test('Template draft recovery is injected, synchronous and central without a sec
     assert.match(workspace, /checkpointTemplateDraft\(insertNativeDraftPhase/);
     assert.match(workspace, /checkpointTemplateDraft\(editNativePhaseDraft/);
     assert.match(workspace, /dataset\.templateRecoveryWarning/);
-    assert.doesNotMatch(workspace, /templateRecovery\.(?:remove|discard|restore)/);
+    assert.match(workspace, /templateRecovery\.list\(workspace\)/);
+    assert.match(workspace, /templateRecovery\.adopt\(/);
+    assert.match(workspace, /templateRecovery\?\.checkpointPending\(pending\)/);
+    assert.match(workspace, /templateRecovery\.resolveAbsent\(\)/);
+    assert.match(workspace, /templateRecovery\.discardCurrent\(\)/);
+    assert.match(workspace, /templateRecovery\?\.cleanup\(\)/);
+    assert.doesNotMatch(workspace, /localStorage|sessionStorage|indexedDB|caches/);
 });
 
 test('public native entry and Picker orchestration retain identity, ownership and unresolved-operation guards', async () => {
@@ -130,11 +136,11 @@ test('central styles isolate hidden primary views and the app shell advances tog
     ]);
     assert.match(css, /\.native-editor-workspace/);
     assert.match(css, /\.timer\[hidden\]\s*{\s*display:\s*none;/);
-    assert.match(html, /css\/styles\.css\?v=81/);
-    assert.match(html, /js\/app\.js\?v=81/);
-    assert.match(worker, /easytimer-shell-v81/);
-    assert.match(worker, /css\/styles\.css\?v=81/);
-    assert.match(worker, /js\/app\.js\?v=81/);
+    assert.match(html, /css\/styles\.css\?v=82/);
+    assert.match(html, /js\/app\.js\?v=82/);
+    assert.match(worker, /easytimer-shell-v82/);
+    assert.match(worker, /css\/styles\.css\?v=82/);
+    assert.match(worker, /js\/app\.js\?v=82/);
     assert.match(worker, /js\/editor-workspace\.mjs/);
     assert.match(worker, /js\/editor-draft-recovery\.mjs/);
     assert.match(worker, /js\/editor-template-draft-recovery-service\.mjs/);

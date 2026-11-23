@@ -111,6 +111,9 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 key(index) { return [...f.recoveryValues.keys()][index] ?? null; },
                 getItem(key) {
                     f.recoveryCalls.push(['get', key]);
+                    if (f.recoveryReadFailures > 0) {
+                        f.recoveryReadFailures -= 1; throw new Error('recovery read failure');
+                    }
                     if (f.recoveryThrowReadback) { f.recoveryThrowReadback = false; throw new Error('recovery readback failure'); }
                     return f.recoveryValues.get(key) ?? null;
                 },
@@ -121,10 +124,19 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                         f.recoveryUnconfirmedOnSet = false; f.recoveryThrowReadback = true;
                     }
                 },
-                removeItem(key) { f.recoveryCalls.push(['remove', key]); f.recoveryValues.delete(key); },
+                removeItem(key) {
+                    f.recoveryCalls.push(['remove', key]);
+                    if (f.recoveryFailRemove) { f.recoveryFailRemove = false; throw new Error('recovery remove failure'); }
+                    f.recoveryValues.delete(key);
+                    if (f.recoveryUnconfirmedRemove) {
+                        f.recoveryUnconfirmedRemove = false; f.recoveryReadFailures = 2;
+                    }
+                },
             };
             f.recoveryErrors = [];
             const baseRecoveryStore = recoveryStoreModule.createEditorDraftRecoveryStore(recoveryStorage);
+            f.recoveryStore = baseRecoveryStore;
+            f.recoveryServiceFactory = recoveryServiceModule.createNativeTemplateDraftRecoveryService;
             const recoveryStore = {
                 create(record) {
                     try { return baseRecoveryStore.create(record); }
@@ -132,6 +144,18 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 },
                 update(record, expectedSavedAt) {
                     try { return baseRecoveryStore.update(record, expectedSavedAt); }
+                    catch (error) { f.recoveryErrors.push(error.message); throw error; }
+                },
+                read(recoveryId) {
+                    if (f.recoveryFailServiceReadOnce) {
+                        f.recoveryFailServiceReadOnce = false;
+                        throw new DOMException('Recovery storage access denied.', 'SecurityError');
+                    }
+                    return baseRecoveryStore.read(recoveryId);
+                },
+                list() { return baseRecoveryStore.list(); },
+                remove(recoveryId, expectedSavedAt) {
+                    try { return baseRecoveryStore.remove(recoveryId, expectedSavedAt); }
                     catch (error) { f.recoveryErrors.push(error.message); throw error; }
                 },
             };
@@ -168,6 +192,13 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             };
             f.planner = {
                 ...basePlanner,
+                async loadWorkspace() {
+                    if (f.failWorkspaceLoadOnce) {
+                        f.failWorkspaceLoadOnce = false;
+                        return { status: 'error', error: { type: 'storage', code: 'storageRead' } };
+                    }
+                    return basePlanner.loadWorkspace();
+                },
                 saveDraft: tracked(basePlanner, 'saveDraft', 'templateSave'),
                 deleteTemplate: tracked(basePlanner, 'deleteTemplate', 'delete'),
                 async reconcileSave(ticket) {
@@ -195,17 +226,21 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                     return baseImporter.reconcileImport(ticket);
                 },
             };
-            f.root = document.createElement('section'); f.root.id = 'native-editor-workspace-fixture';
-            document.querySelector('main').append(f.root);
-            f.workspace = workspaceModule.createNativeEditorWorkspace({
-                root: f.root, plannerService: f.planner, plannedExecutionService: f.planned,
-                launchService: f.launch, importService: f.importer,
-                templateRecovery: f.templateRecovery,
-                createPhaseId: () => 'phase-' + (++f.phase),
-                downloadTemplate: file => f.downloads.push(file),
-                onClose: options => f.closeCalls.push(options),
-            });
-            await f.workspace.open();
+            f.mountWorkspace = async () => {
+                f.root = document.createElement('section'); f.root.id = 'native-editor-workspace-fixture';
+                document.querySelector('main').append(f.root);
+                f.workspace = workspaceModule.createNativeEditorWorkspace({
+                    root: f.root, plannerService: f.planner, plannedExecutionService: f.planned,
+                    launchService: f.launch, importService: f.importer,
+                    templateRecovery: f.templateRecovery,
+                    createPhaseId: () => 'phase-' + (++f.phase),
+                    downloadTemplate: file => f.downloads.push(file),
+                    onClose: options => f.closeCalls.push(options),
+                });
+                await f.workspace.open();
+            };
+            f.reloadWorkspace = async () => { f.root.remove(); f.templateRecovery.deactivate(); await f.mountWorkspace(); };
+            await f.mountWorkspace();
         })()`);
 
         assert.deepEqual(await evaluate(`(() => {
@@ -231,13 +266,13 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             nativeWorkspaceFixture.closeCalls.length,
             nativeWorkspaceFixture.closeCalls[0]?.focus,
         ]`), [undefined, 1, 'menu'], 'Back from the Library closes through the host callback');
-        await evaluate(`nativeWorkspaceFixture.workspace.open()`);
+        await evaluate(`nativeWorkspaceFixture.workspace.open(); window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => true`);
         await action('Create template'); await action('Cancel'); await action('Back');
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.root.dataset.nativeEditorWorkspace,
             nativeWorkspaceFixture.closeCalls.length,
         ]`), [undefined, 2], 'Back closes after a cancelled new Template draft');
-        await evaluate(`nativeWorkspaceFixture.workspace.open()`);
+        await evaluate(`nativeWorkspaceFixture.workspace.open(); window.confirm = window.nativeWorkspaceConfirm`);
         await action('Create template'); await field('[data-field="name"]', 'Keep this draft');
         await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => false`);
         await action('Back');
@@ -259,7 +294,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             const record = JSON.parse([...f.recoveryValues.values()].at(-1));
             return [f.recoveryValues.size, record.draft.mode, record.draft.template.name,
                 record.baseline.template.name, record.state, f.writes];
-        })()`), [3, 'create', '', '', 'draft', 0],
+        })()`), [1, 'create', '', '', 'draft', 0],
         'new Template begin synchronously checkpoints the complete draft without an authoritative write');
         recoveryWritesBefore = await recoveryWriteCount();
         await field('[data-field="name"]', 'Independent workshop');
@@ -624,15 +659,37 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             const phase = f.root.querySelector('[data-native-phase-id="phase-1"]');
             const target = f.tickets.templateSave.target.templates.find(item => item.plan.name === 'Independent workshop');
             const targetPhase = target.plan.phases.find(item => item.id === 'phase-1');
+            const recovery = JSON.parse([...f.recoveryValues.values()].at(-1));
             return [f.writes, f.root.querySelector('[data-field="name"]').value,
                 f.root.textContent.includes('write acknowledgement is uncertain'),
                 Boolean([...f.root.querySelectorAll('button')].find(button => button.textContent === 'Recheck without writing')),
                 phase.querySelectorAll('[data-resource-index]').length,
                 phase.querySelector('[data-resource-index="1"] [data-resource-field="label"]').value,
                 phase.querySelector('[data-resource-index="1"] [data-resource-field="url"]').value,
-                targetPhase.resources.length];
-        })()`), [1, 'Independent workshop', true, true, 2, '   ', '  ', 1],
+                targetPhase.resources.length, recovery.state, recovery.pending.kind];
+        })()`), [1, 'Independent workshop', true, true, 2, '   ', '  ', 1, 'pending', 'templateSave'],
         'uncertain Create retains the original editable draft while its complete ticket contains the normalized target');
+        await evaluate(`nativeWorkspaceFixture.reloadWorkspace()`);
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-template-recoveries]') !== null`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.root.querySelector('[data-field="name"]'),
+            nativeWorkspaceFixture.root.querySelectorAll('[data-recovery-id]').length,
+            nativeWorkspaceFixture.root.textContent.includes('Save confirmation is pending'),
+        ]`), [null, 1, true], 'reload lists the Pending candidate without restoring it automatically');
+        await action('Restore', '[data-template-recoveries]');
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-recheck]') !== null`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
+            nativeWorkspaceFixture.root.querySelector('[data-native-recheck]').disabled,
+            [...nativeWorkspaceFixture.root.querySelectorAll('input,select,textarea')].every(control => control.disabled),
+        ]`), ['Independent workshop', false, true],
+        'explicit Pending restore preserves the draft and exposes only read-only Recheck');
         await evaluate(`(() => {
             const f = nativeWorkspaceFixture, divergent = structuredClone(f.tickets.templateSave.target);
             divergent.revision += 1; f.raw = JSON.stringify(divergent);
@@ -661,15 +718,18 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, record = JSON.parse(f.raw), saved = record.templates.find(item => item.plan.name === 'Independent workshop');
             return [f.writes, Boolean(saved), saved.plan.phases.map(phase => phase.id), saved.plan.phases[0].notes,
-                saved.plan.phases[0].resources.length, saved.plan.phases[0].resources[0], f.root.textContent.includes('Saved.')];
+                saved.plan.phases[0].resources.length, saved.plan.phases[0].resources[0], f.root.textContent.includes('Saved.'),
+                f.recoveryValues.size];
         })()`), [1, true, ['phase-1', 'phase-2'], 'Facilitator notes',
-            1, { label: 'Board', url: 'https://example.com/board' }, true],
-        'read-only reconciliation performs no duplicate write and persists no empty resource placeholders');
+            1, { label: 'Board', url: 'https://example.com/board' }, true, 0],
+        'confirmed read-only reconciliation performs no duplicate write and cleans the exact Recovery copy');
 
         await rowAction('Independent workshop', 'Edit');
         const writesBeforeCancel = await evaluate('nativeWorkspaceFixture.writes');
         await field('[data-field="name"]', 'Discarded title');
+        await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => true`);
         await action('Cancel');
+        await evaluate(`window.confirm = window.nativeWorkspaceConfirm; delete window.nativeWorkspaceConfirm`);
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.writes,
             JSON.parse(nativeWorkspaceFixture.raw).templates.find(item => item.plan.name === 'Independent workshop').plan.name,
@@ -710,10 +770,201 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 record.draft.template.name, f.root.querySelector('[data-field="name"]').value, f.writes];
         })()`), [false, 1, 1, '', 'Still editable after recovery failure', writesBeforeCancel],
         'a blocked Recovery session does not retry the unconfirmed write and retains its original candidate');
+        await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => true`);
         await action('Cancel');
+        await evaluate(`window.confirm = window.nativeWorkspaceConfirm; delete window.nativeWorkspaceConfirm`);
 
+        await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, record = JSON.parse(f.raw);
+            const restorable = f.recoveryServiceFactory({
+                store: f.recoveryStore,
+                createId: kind => kind + '-restorable',
+                now: () => 1900,
+            });
+            restorable.begin({
+                mode: 'create', expectedAggregateRevision: record.revision, expectedTemplateRevision: null,
+                template: {
+                    id: 'restorable-template', name: 'Restorable draft', category: 'workshop', transitionMode: 'manual',
+                    preparedInformation: 'Recovered content', phases: [],
+                },
+            });
+            const service = f.recoveryServiceFactory({
+                store: f.recoveryStore,
+                createId: kind => kind + '-conflict',
+                now: () => 2000,
+            });
+            service.begin({
+                mode: 'create', expectedAggregateRevision: record.revision - 1, expectedTemplateRevision: null,
+                template: {
+                    id: 'conflict-template', name: 'Conflict draft', category: 'workshop', transitionMode: 'manual',
+                    preparedInformation: 'Read-only content', phases: [],
+                },
+            });
+            f.recoveryValues.set('easyTimerEditorDraftRecovery.v1.corrupt', '{broken-json');
+        })()`);
+        await evaluate(`nativeWorkspaceFixture.failWorkspaceLoadOnce = true; nativeWorkspaceFixture.reloadWorkspace()`);
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.root.textContent.includes('could not be read'),
+            [...nativeWorkspaceFixture.root.querySelectorAll('button')].some(button => button.textContent === 'Retry loading'),
+        ]`), [true, true], 'authoritative Store load failure replaces indefinite Loading with an explicit Retry');
+        await action('Retry loading');
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-template-recoveries]') !== null`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            const conflict = f.root.querySelector('[data-recovery-id="recovery-conflict"]');
+            return [f.root.querySelectorAll('[data-recovery-id]').length,
+                f.root.textContent.includes('A local recovery entry could not be read'),
+                conflict.textContent.includes('saved library changed'),
+                [...conflict.querySelectorAll('button')].some(button => button.textContent === 'Restore')];
+        })()`), [2, true, true, false],
+        'reload lists separate valid and corrupt candidates while keeping a revision conflict read-only');
+        await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            f.recoveryFailServiceReadOnce = true;
+            const row = [...f.root.querySelectorAll('[data-recovery-id]')]
+                .find(item => item.dataset.recoveryId !== 'recovery-conflict');
+            [...row.querySelectorAll('button')].find(button => button.textContent === 'Restore').click();
+        })()`);
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.querySelector('[role="alert"]')?.textContent.includes('could not be read for restoration')`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, alert = f.root.querySelector('[role="alert"]');
+            return [f.root.querySelector('[data-field="name"]'), f.root.querySelectorAll('[data-recovery-id]').length,
+                alert.textContent.includes('could not be read for restoration'),
+                !alert.textContent.includes('saved library changed')];
+        })()`), [null, 2, true, true],
+        'a Restore storage read failure keeps the candidate and is not misreported as an authoritative conflict');
+        await evaluate(`(() => {
+            const row = nativeWorkspaceFixture.root.querySelector('[data-recovery-id="recovery-conflict"]');
+            [...row.querySelectorAll('button')].find(button => button.textContent === 'View draft').click();
+        })()`);
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, row = f.root.querySelector('[data-recovery-id="recovery-conflict"]');
+            const json = row.querySelector('textarea');
+            [...row.querySelectorAll('button')].find(button => button.textContent === 'Export recovery JSON').click();
+            const toggle = row.querySelector('[data-recovery-review]');
+            return [json.readOnly, JSON.parse(json.value).recoveryId, f.downloads.at(-1).recoveryId,
+                toggle.getAttribute('aria-expanded'), toggle.getAttribute('aria-controls') === json.parentElement.id,
+                !json.parentElement.hidden];
+        })()`), [true, 'recovery-conflict', 'recovery-conflict', 'true', true, true],
+        'conflicting drafts expose compact read-only details and complete Recovery JSON export');
+        assert.deepEqual(await evaluate(`(() => {
+            let row = nativeWorkspaceFixture.root.querySelector('[data-recovery-id="recovery-conflict"]');
+            row.querySelector('[data-recovery-review]').click();
+            row = nativeWorkspaceFixture.root.querySelector('[data-recovery-id="recovery-conflict"]');
+            const toggle = row.querySelector('[data-recovery-review]');
+            const detail = row.querySelector('#' + CSS.escape(toggle.getAttribute('aria-controls')));
+            return [toggle.getAttribute('aria-expanded'), detail.hidden, document.activeElement === toggle];
+        })()`), ['false', true, true],
+        'closing Recovery details preserves the stable ARIA relationship and restores keyboard focus to the toggle');
+        await evaluate(`(() => {
+            const row = [...nativeWorkspaceFixture.root.querySelectorAll('[data-recovery-id]')]
+                .find(item => item.dataset.recoveryId !== 'recovery-conflict');
+            [...row.querySelectorAll('button')].find(button => button.textContent === 'Restore').click();
+        })()`);
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-field="name"]') !== null`)) break;
+            await delay(20);
+        }
+        await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => false`);
+        await action('Cancel');
+        assert.equal(await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-field="name"]') !== null`), true,
+            'rejected Cancel confirmation retains the restored editor and Recovery copy');
+        await evaluate(`window.confirm = () => true`); await action('Cancel');
+        await evaluate(`window.confirm = window.nativeWorkspaceConfirm; delete window.nativeWorkspaceConfirm`);
+        assert.equal(await evaluate(`nativeWorkspaceFixture.root.querySelectorAll('[data-recovery-id]').length`), 1,
+            'accepted Cancel removes only the exact restored Recovery copy');
+
+        const writesBeforeSavedReload = await evaluate(`nativeWorkspaceFixture.writes`);
+        const savesBeforeSavedReload = await evaluate(`nativeWorkspaceFixture.calls.templateSave`);
+        await action('Create template');
+        await field('[data-field="name"]', 'Reload result test'); await action('Add phase');
+        const reloadPhaseId = await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id]').dataset.nativePhaseId`);
+        await field(`[data-native-phase-id="${reloadPhaseId}"] [data-field="title"]`, 'Reload phase');
+        await field(`[data-native-phase-id="${reloadPhaseId}"] [data-field="duration"]`, '10');
+        await evaluate(`nativeWorkspaceFixture.failWorkspaceLoadOnce = true; nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-template-save-retry]') !== null`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.writes,
+            nativeWorkspaceFixture.calls.templateSave,
+            nativeWorkspaceFixture.root.textContent.includes('Saved successfully'),
+            nativeWorkspaceFixture.root.querySelector('[data-template-save-retry]').disabled,
+        ]`), [writesBeforeSavedReload + 1, savesBeforeSavedReload + 1, true, false],
+        'post-Save Store load failure reports confirmed success and offers only a read/cleanup retry');
+        await action('Retry saved result');
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-field="name"]') === null`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.writes,
+            nativeWorkspaceFixture.calls.templateSave,
+            JSON.parse(nativeWorkspaceFixture.raw).templates.some(template => template.plan.name === 'Reload result test'),
+        ]`), [writesBeforeSavedReload + 1, savesBeforeSavedReload + 1, true],
+        'saved-result Retry performs no second authoritative Save');
+
+        const writesBeforeCleanupFailure = await evaluate(`nativeWorkspaceFixture.writes`);
+        await action('Create template');
+        await field('[data-field="name"]', 'Cleanup test'); await action('Add phase');
+        const cleanupPhaseId = await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id]').dataset.nativePhaseId`);
+        await field(`[data-native-phase-id="${cleanupPhaseId}"] [data-field="title"]`, 'Cleanup phase');
+        await field(`[data-native-phase-id="${cleanupPhaseId}"] [data-field="duration"]`, '10');
+        await evaluate(`nativeWorkspaceFixture.recoveryFailRemove = true; nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('separate local recovery copy could not be cleaned up')`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, record = JSON.parse(f.raw);
+            return [f.writes, record.templates.some(template => template.plan.name === 'Cleanup test'),
+                f.root.textContent.includes('Saved.'),
+                f.root.textContent.includes('separate local recovery copy could not be cleaned up'),
+                f.root.querySelector('[data-field="name"]'),
+                [...f.recoveryValues.values()].some(raw => JSON.parse(raw).draft.template.name === 'Cleanup test')];
+        })()`), [writesBeforeCleanupFailure + 1, true, true, true, null, true],
+        'confirmed Save remains successful when exact Recovery cleanup fails, with no second Save attempt');
+
+        const writesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.writes`);
+        const savesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.calls.templateSave`);
+        const removesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.recoveryCalls.filter(([operation]) => operation === 'remove').length`);
+        await action('Create template');
+        await field('[data-field="name"]', 'Unconfirmed cleanup test'); await action('Add phase');
+        const unconfirmedCleanupPhaseId = await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id]').dataset.nativePhaseId`);
+        await field(`[data-native-phase-id="${unconfirmedCleanupPhaseId}"] [data-field="title"]`, 'Cleanup uncertainty phase');
+        await field(`[data-native-phase-id="${unconfirmedCleanupPhaseId}"] [data-field="duration"]`, '10');
+        await evaluate(`nativeWorkspaceFixture.recoveryUnconfirmedRemove = true; nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
+        for (let i = 0; i < 50; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('could not be confirmed whether the local recovery copy was removed')`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, record = JSON.parse(f.raw);
+            return [f.writes, f.calls.templateSave,
+                f.recoveryCalls.filter(([operation]) => operation === 'remove').length,
+                record.templates.some(template => template.plan.name === 'Unconfirmed cleanup test'),
+                f.root.textContent.includes('Saved.'),
+                f.root.textContent.includes('could not be confirmed whether the local recovery copy was removed'),
+                !f.root.textContent.includes('copy could not be cleaned up and remains available'),
+                f.root.querySelector('[data-field="name"]'),
+                ![...f.recoveryValues.values()].some(raw => {
+                    try { return JSON.parse(raw).draft.template.name === 'Unconfirmed cleanup test'; }
+                    catch { return false; }
+                })];
+        })()`), [writesBeforeUnconfirmedCleanup + 1, savesBeforeUnconfirmedCleanup + 1,
+            removesBeforeUnconfirmedCleanup + 1, true, true, true, true, null, true],
+        'unconfirmed Recovery removal reports neutral cleanup uncertainty without retrying the confirmed Save or Remove');
+
+        const writesBeforeExecution = await evaluate('nativeWorkspaceFixture.writes');
         await rowAction('Independent workshop', 'Create planned execution');
-        assert.equal(await evaluate(`nativeWorkspaceFixture.writes`), writesBeforeCancel, 'new Execution remains local before Save');
+        assert.equal(await evaluate(`nativeWorkspaceFixture.writes`), writesBeforeExecution, 'new Execution remains local before Save');
         await field('[data-field="name"]', 'Independent execution');
         await field('[data-field="prepared"]', 'Execution-only information');
         await evaluate(`(() => {
@@ -725,7 +976,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             nativeWorkspaceFixture.calls.plan,
             nativeWorkspaceFixture.writes,
             nativeWorkspaceFixture.root.querySelector('button[type="submit"]').disabled,
-        ]`), [1, writesBeforeCancel, true], 'duplicate submit creates at most one Execution while planning is in flight');
+        ]`), [1, writesBeforeExecution, true], 'duplicate submit creates at most one Execution while planning is in flight');
         await evaluate(`nativeWorkspaceFixture.release('plan')`);
         for (let i = 0; i < 50; i++) {
             if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('write acknowledgement is uncertain')`)) break;
@@ -735,13 +986,13 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             nativeWorkspaceFixture.writes,
             nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
             nativeWorkspaceFixture.root.textContent.includes('write acknowledgement is uncertain'),
-        ]`), [writesBeforeCancel + 1, 'Independent execution', true], 'uncertain planning retains local plan edits');
+        ]`), [writesBeforeExecution + 1, 'Independent execution', true], 'uncertain planning retains local plan edits');
         await action('Recheck without writing');
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.writes,
             nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
             nativeWorkspaceFixture.root.textContent.includes('Execution creation is confirmed'),
-        ]`), [writesBeforeCancel + 1, 'Independent execution', true], 'planning recheck observes exact created identity without a write');
+        ]`), [writesBeforeExecution + 1, 'Independent execution', true], 'planning recheck observes exact created identity without a write');
         await action('Save');
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, record = JSON.parse(f.raw);
@@ -749,7 +1000,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             const execution = record.executions.find(item => item.execution.currentPlan.name === 'Independent execution').execution;
             return [f.writes, source.plan.preparedInformation, execution.source, execution.currentPlan.preparedInformation,
                 execution.lifecycle, record.activeRuntime.executionId];
-        })()`), [writesBeforeCancel + 2, 'Goals and **plain text**', { kind: 'template', id: 'template-1' },
+        })()`), [writesBeforeExecution + 2, 'Goals and **plain text**', { kind: 'template', id: 'template-1' },
             'Execution-only information', 'planned', 'active-seed'], 'Execution Save preserves source Template and active runtime');
         await rowAction('Independent execution', 'Edit');
         await field('[data-field="prepared"]', 'Edited planned information');
