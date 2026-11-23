@@ -204,7 +204,7 @@ export async function checkNativePhaseFields({ evaluate, click, cdp }) {
                 row.querySelector('[data-action="move-position"]').disabled,
                 getComputedStyle(popover).position, popover.getAttribute('style'),
                 f.draft.template.phases.map(phase => phase.id), f.repositions, f.writes];
-        })()`), ['true', 'Phase 01 – Change position', ['01 · Edited <safe>', '02 · phase-b'], '1', true,
+        })()`), ['true', 'Phase 01 – Position ändern', ['01 · Edited <safe>', '02 · phase-b'], '1', true,
             'absolute', null, ['phase-a', 'phase-b'], 0, 1],
         'opening uses central CSS, preserves disclosure and does not edit or persist');
         await field('phase-a', 'position', '2', 'change');

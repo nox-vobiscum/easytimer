@@ -6,7 +6,7 @@ import { join, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { checkNativePhaseFields } from './editor-phase-fields-browser.mjs';
-import { checkNativeEditorWorkspace } from './editor-workspace-browser.mjs';
+import { checkNativeEditorWorkspace, checkNativeDraftReload } from './editor-workspace-browser.mjs';
 import { checkMenuPolish } from './menu-browser.mjs';
 import { checkRecovery, checkRecoveryCorrections } from './recovery-browser.mjs';
 import { checkEditorRuntimeApp } from './editor-runtime-app-browser.mjs';
@@ -56,13 +56,36 @@ try {
     socket = new WebSocket(targets.find(target => target.type === 'page').webSocketDebuggerUrl);
     await new Promise((done, reject) => { socket.onopen = done; socket.onerror = reject; });
     let nextId = 0;
+    let draftReloadActive = false;
+    let expectedConfirm;
     const pending = new Map();
     socket.onmessage = ({ data }) => {
         const message = JSON.parse(data);
+        if (draftReloadActive && message.method === 'Page.javascriptDialogOpening' && message.params.type === 'beforeunload') {
+            void cdp('Page.handleJavaScriptDialog', { accept: true }).catch(error => errors.push(error));
+        }
+        if (message.method === 'Page.javascriptDialogOpening' && message.params.type === 'confirm'
+            && expectedConfirm?.messages.includes(message.params.message) && !expectedConfirm.response) {
+            expectedConfirm.response = cdp('Page.handleJavaScriptDialog', { accept: true })
+                .then(() => ({ accepted: true }), error => ({ error }));
+        }
         if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails);
         const request = pending.get(message.id);
         if (request) { clearTimeout(request.timeout); pending.delete(message.id); message.error ? request.reject(message.error) : request.resolve(message.result); }
     };
+    async function acceptExpectedConfirm(messages, action) {
+        assert.equal(expectedConfirm, undefined, 'confirm handlers must not overlap');
+        const expectation = { messages };
+        expectedConfirm = expectation;
+        try {
+            const value = await action();
+            const outcome = await expectation.response;
+            if (outcome?.error) throw outcome.error;
+            return { value, accepted: outcome?.accepted ?? false };
+        } finally {
+            expectedConfirm = undefined;
+        }
+    }
     function cdp(method, params = {}) {
         return new Promise((resolve, reject) => {
             const id = ++nextId;
@@ -159,6 +182,14 @@ try {
     }
     await cdp('Runtime.enable');
     await cdp('Page.enable');
+    if (!timeTravelOptions.names.length && process.env.EASYTIMER_NATIVE_PHASE_FIELDS_ONLY !== '1'
+        && process.env.EASYTIMER_EDITOR_RUNTIME_ONLY !== '1' && process.env.EASYTIMER_PUBLIC_CUTOVER_ONLY !== '1'
+        && process.env.EASYTIMER_UX011_ONLY !== '1') {
+        // Separate the fresh Draft Recovery scenario from the other tests' library and view state.
+        draftReloadActive = true;
+        try { await checkNativeDraftReload({ evaluate, cdp, origin: `http://localhost:${server.address().port}` }); }
+        finally { draftReloadActive = false; }
+    }
     await cdp('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/` });
     for (let i = 0; i < 100; i++) {
         if (await evaluate(`document.querySelector('#primary')?.title?.length > 0`)) break;
@@ -190,17 +221,41 @@ try {
     await click('.planner-back');
     assert.equal(await evaluate(`document.body.dataset.mode==='home'`),true,'Editor Back returns to its Home origin');
     await assertPrimaryView('home', 'Editor Back restores only Home');
-    await evaluate(`document.querySelector('#home-quick').focus()`);
+    assert.equal(await evaluate(`document.activeElement.id`), 'menu-toggle', 'Editor Back restores focus to the menu toggle');
+    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    assert.equal(await evaluate(`document.activeElement.id`), 'home-quick', 'Tab reaches the Quick Timer action');
+    assert.equal(await evaluate(`document.activeElement.matches(':focus-visible')`), true, 'Tab activates focus-visible');
     assert.notEqual(await evaluate(`getComputedStyle(document.activeElement).outlineStyle`),'none','Home action has visible keyboard focus');
-    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',text:'\r',unmodifiedText:'\r',windowsVirtualKeyCode:13});
     await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
     assert.equal(await evaluate(`document.body.dataset.mode==='quick'&&!document.querySelector('#timer-view').hidden`),true,'Home opens Quick Timer');
+    assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner']
+        .filter(selector => getComputedStyle(document.querySelector(selector)).display !== 'none')`), ['#timer-view']);
+    await evaluate(`(async () => {
+        const home = document.querySelector('#home-view');
+        for (let frame = 0; frame < 12 && home.contains(document.activeElement); frame++) {
+            await new Promise(requestAnimationFrame);
+        }
+    })()`);
     await assertPrimaryView('quick', 'Home to Quick exposes only the Timer');
     for (const [width,height] of [[1280,720],[320,568]]) {
         await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
         await assertPrimaryView('quick', `Quick remains isolated at ${width}x${height}`);
     }
     await cdp('Emulation.clearDeviceMetricsOverride');
+    assert.equal(await text('#time'), '00:00');
+    assert.equal(await evaluate(`document.querySelector('#primary').disabled`), true, 'Zero duration disables Start');
+    const preset = '[data-preset="60000"]';
+    for (let i = 0; i < 12 && !await evaluate(`document.activeElement.matches(${JSON.stringify(preset)})`); i++) {
+        await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    }
+    assert.equal(await evaluate(`document.activeElement.matches(${JSON.stringify(preset)})`), true, 'Tab reaches a duration preset at zero');
+    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',text:'\r',unmodifiedText:'\r',windowsVirtualKeyCode:13});
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    assert.equal(await text('#time'), '01:00');
+    assert.equal(await evaluate(`document.querySelector('#primary').disabled`), false, 'Positive duration enables Start');
     for (let index=0;index<2;index++) {
         await click('#menu-toggle');
         await evaluate(`document.querySelector('#open-home').click()`);
@@ -212,6 +267,7 @@ try {
         assert.equal(await evaluate(`document.activeElement===document.querySelector('#primary')`),true,
             'Quick navigation focuses its primary action');
     }
+    await click('#reset-timebox');
     if(timeTravelOptions.names.length) {
         await runTimeTravel({evaluate,click,text,cdp,configure},timeTravelOptions);
         assert.equal(errors.length,0,JSON.stringify(errors));
@@ -219,7 +275,7 @@ try {
         await checkNativePhaseFields({evaluate,click,cdp});
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_NATIVE_WORKSPACE_ONLY === '1') {
-        await checkNativeEditorWorkspace({evaluate,click,cdp});
+        await checkNativeEditorWorkspace({evaluate,click,cdp,acceptExpectedConfirm});
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_EDITOR_RUNTIME_ONLY === '1') {
         await checkEditorRuntimeApp({evaluate,click,text,cdp});
@@ -230,7 +286,7 @@ try {
     } else {
     assert.equal(await text('#time'), '00:00');
     await checkNativePhaseFields({evaluate,click,cdp});
-    await checkNativeEditorWorkspace({evaluate,click,cdp});
+    await checkNativeEditorWorkspace({evaluate,click,cdp,acceptExpectedConfirm});
     await checkRecovery({ evaluate, click, text, cdp, configure });
     await checkRecoveryCorrections({ evaluate, click, text, cdp, configure });
     await checkSubtraction({ evaluate, click, text, cdp, configure });
@@ -240,8 +296,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=82'&&js==='js/app.js?v=82'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'82','app.js':'82','info.js':'59','header.mjs':'59','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs','editor-phase-drag.mjs','editor-phase-dndkit-vendor.mjs','editor-draft-recovery.mjs','editor-template-draft-recovery-service.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=83'&&js==='js/app.js?v=83'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'83','app.js':'83','info.js':'59','header.mjs':'59','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs','editor-phase-drag.mjs','editor-phase-dndkit-vendor.mjs','editor-draft-recovery.mjs','editor-template-draft-recovery-service.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');

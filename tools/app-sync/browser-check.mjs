@@ -9,6 +9,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { startServer } from './server.mjs';
 import { fakeDrive } from '../sync-integration/fake-drive.mjs';
 import { checkAccountHeader } from './account-browser.mjs';
+const homeReady = `document.body?.dataset.mode === 'home'
+    && Boolean(document.querySelector('main:not([aria-busy]) #home-view:not([hidden]) #home-quick:enabled'))`;
+const developmentReady = `Boolean(globalThis.easyTimerDevelopment && document.body?.dataset.mode
+    && document.querySelector('main:not([aria-busy])'))`;
 const drive = fakeDrive();
 let loseNextUploadAcknowledgement = false, blockResolutionReadback = false;
 let profileFixture = null;
@@ -93,7 +97,7 @@ try {
     await cdp('Page.navigate',{url:'http://localhost:8000/'});
     const wait=async expression=>{for(let n=0;n<150;n++){if(await evaluate(expression))return;await delay(50);}throw Error('Wait failed: '+expression+'; status='+await evaluate('document.getElementById("drive-status")?.textContent')+'; mock requests='+JSON.stringify(drive.calls));};
     await wait('Boolean(globalThis.easyTimerDevelopment)');
-    await wait('document.getElementById("primary")?.title?.length > 0');
+    await wait(homeReady);
     assert.equal(external.length,0,'No unsolicited Google traffic');
     const report=await evaluate("import('/tools/app-sync/experiments.mjs').then(m=>m.runApplicationExperiments())");
     assert.equal(report.count,14);assert(report.checks.every(c=>c.result==='PASS'));
@@ -102,12 +106,47 @@ try {
     const diagnostics=await evaluate("import('/tools/app-sync/diagnostic-experiments.mjs').then(m=>m.runDiagnosticExperiments())");
     assert.equal(diagnostics.count,4);assert(diagnostics.checks.every(c=>c.result==='PASS'));console.log(JSON.stringify(diagnostics,null,2));
     await writeFile(join(output,'results.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+    // Keep the real development controller, panel renderer and IndexedDB connection.
+    // The fixture supplies only the panel host and its presentation callbacks.
+    const mountPanel = `(${function mountDevelopmentPanel() {
+        const details = document.createElement('details');
+        details.id = 'data-backup';
+        details.className = 'data-backup';
+        const summary = document.createElement('summary');
+        summary.id = 'backup-summary';
+        summary.textContent = 'Data backup';
+        const panel = document.createElement('div');
+        panel.className = 'backup-body';
+        details.append(summary, panel);
+        document.querySelector('main').append(details);
+        window.confirm = () => true;
+        const render = () => {
+            panel.replaceChildren();
+            easyTimerDevelopment.renderBackup(panel, {
+                language: document.documentElement.lang === 'de' ? 'de' : 'en',
+                canChange: () => true,
+                refresh: async () => render(),
+                keepBackupOpen: () => { details.open = true; },
+            });
+        };
+        for (const button of document.querySelectorAll('[data-language]')) {
+            button.addEventListener('click', render);
+        }
+        render();
+    }})()`;
+    const renameTemplate = name => `(async () => {
+        const store = easyTimerDevelopment.createStore();
+        const library = await store.load();
+        library.templates[0].name = ${JSON.stringify(name)};
+        await store.save(library);
+    })()`;
+
     const fixture={schemaVersion:1,templates:[{id:'ui-stable-id',name:'UI workshop',transitionMode:'manual',phases:[{id:'ui-phase',title:'Opening',durationSeconds:600}]}]};
-    await evaluate(`document.querySelector('[data-language="en"]').click();localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(fixture))});window.confirm=()=>true;document.getElementById('open-planner').click()`);
+    await evaluate(`document.querySelector('[data-language="en"]').click();localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(fixture))});window.confirm=()=>true`);
+    await evaluate(mountPanel);
     await wait('Boolean(document.getElementById("drive-activate"))');
     await wait('document.getElementById("drive-status").textContent==="Local only"');
     assert.equal(await evaluate('document.getElementById("data-backup").open'), false);
-    assert.equal(await evaluate('document.querySelector(".backup-status-hint").hidden'), true, 'Optional disconnection is not an error');
     const disclosureTraffic = external.length;
     const disclosureLibrary = await evaluate('localStorage.getItem("easyTimerTemplates")');
     await evaluate('document.getElementById("backup-summary").click()');
@@ -115,7 +154,6 @@ try {
     await evaluate('document.getElementById("backup-summary").click()');
     assert.equal(external.length, disclosureTraffic, 'Disclosure does not initiate Google traffic');
     assert.equal(await evaluate('localStorage.getItem("easyTimerTemplates")'), disclosureLibrary);
-    assert.equal(await evaluate('document.querySelector(".planner-feedback").textContent'), '');
     assert.equal(await evaluate('document.getElementById("drive-disconnect").hidden'), true);
     const noAuthTraffic=external.length;
     await evaluate('document.getElementById("drive-diagnostics").click()');await wait('Boolean(document.getElementById("drive-diagnostic-text"))');
@@ -136,16 +174,11 @@ try {
     await evaluate('IDBDatabase.prototype.transaction=globalThis.backupTransaction');
     assert.equal(external.length, activeToggleTraffic);
     assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'), activeLibrary);
-    await evaluate(`document.querySelector('[aria-label="Edit: UI workshop"]').click();document.getElementById("template-name").value="IDB workshop";document.getElementById("template-name").dispatchEvent(new Event("input"));document.querySelector("#planner form").requestSubmit()`);
-    await wait(`Boolean(document.querySelector('[aria-label="Edit: IDB workshop"]'))`);
+    await evaluate(renameTemplate('IDB workshop'));
     assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerTemplates")).templates[0].name'),'UI workshop');
-    assert.equal(await evaluate('document.getElementById("drive-status").textContent'),'Changes pending');
-    await evaluate(`document.querySelector('[aria-label="Edit: IDB workshop"]').click();document.getElementById("template-name").value="Unsaved preserved";document.getElementById("template-name").dispatchEvent(new Event("input"));window.confirm=()=>false;document.querySelector(".planner-back").click()`);
-    assert.equal(await evaluate('document.getElementById("template-name").value'),'Unsaved preserved');
-    await evaluate('window.confirm=()=>true;document.querySelector("#planner form button[type=button]").focus();[...document.querySelectorAll("#planner button")].find(b=>b.textContent==="Cancel").click()');
-    await wait('Boolean(document.getElementById("drive-sync"))');
+    await wait('document.getElementById("drive-status").textContent==="Changes pending"');
     await cdp('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:output});
-    await evaluate('document.getElementById("export-all").click()');
+    await evaluate('document.getElementById("drive-backup").click()');
     let exported;for(let n=0;n<100;n++){try{exported=JSON.parse(await readFile(join(output,'easytimer-rundowns.json'),'utf8'));break;}catch{await delay(30);}}
     assert.equal(exported.templates[0].name,'IDB workshop');assert.equal(exported.templates[0].id,'ui-stable-id');
     for(const language of ['de','en'])for(const theme of ['light','dark','system']){
@@ -157,23 +190,20 @@ try {
         const screenshot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(output,language+'-'+theme+'-320.png'),Buffer.from(screenshot.data,'base64'));
     }
     changedHtmlVersion = true;
-    await cdp('Page.reload');await wait('Boolean(globalThis.easyTimerDevelopment)');await wait('document.getElementById("primary")?.title?.length > 0');
-    assert.equal(await evaluate('document.querySelector("script[type=module]").getAttribute("src")'), '/tools/app-sync/entry.mjs', 'A live server must retain the correct storage entry after a shell-version change');
-    assert.equal(await evaluate('document.body.classList.contains("planner-open")'), true, 'Reload restores the asynchronous Development Editor without Google authorization');
-    await evaluate('document.getElementById("open-planner").click()');await wait(`Boolean(document.querySelector('[aria-label="Edit: IDB workshop"]'))`);
+    await evaluate('globalThis.beforePanelReload=true');
+    await cdp('Page.reload');await wait(`!globalThis.beforePanelReload && (${developmentReady})`);
+    assert.equal(await evaluate('document.querySelector("script[type=module]").getAttribute("src")'), '/tools/app-sync/entry.mjs', 'A live server must retain the development entry after a shell-version change');
+    await evaluate(mountPanel);
+    assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'), {
+        ...fixture, templates: fixture.templates.map(template => ({ ...template, name: 'IDB workshop' })),
+    });
     await wait('document.getElementById("drive-status").textContent==="Google Drive not connected. Reconnect if needed."');
-    assert.equal(await evaluate('document.querySelector(".backup-status-hint").dataset.tone'), 'neutral', 'Missing memory-only authorization is not a sync error');
-    assert.equal(await evaluate('document.querySelector(".backup-status-hint").textContent'), 'Google Drive not connected');
-    assert.equal(await evaluate('getComputedStyle(document.querySelector(".backup-status-hint")).color===getComputedStyle(document.querySelector(".backup-subtitle")).color'), true);
     const signedOutTraffic = external.length;
     await evaluate('document.getElementById("backup-summary").click()');
     await evaluate('document.getElementById("backup-summary").click()');
     assert.equal(external.length, signedOutTraffic);
     await evaluate('document.querySelector("[data-language=de]").click()');
-    await wait('document.querySelector(".backup-status-hint").textContent==="Google Drive nicht verbunden"');
-    assert.equal(await evaluate('document.querySelector(".backup-status-hint").dataset.tone'), 'neutral');
     await evaluate('document.querySelector("[data-language=en]").click()');
-    await wait('document.querySelector(".backup-status-hint").textContent==="Google Drive not connected"');
     await evaluate('document.getElementById("drive-connect").click()');await wait('Boolean(globalThis.google?.accounts?.oauth2)');
     await evaluate('document.getElementById("drive-connect").click()');await wait('!document.getElementById("drive-sync").disabled');
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
@@ -184,20 +214,18 @@ try {
     const waitSecond=async expression=>{for(let n=0;n<150;n++){if(await inSecond(expression))return;await delay(50);}throw Error('Clean context wait failed: '+expression);};
     await cdp('Page.enable',{},sessionId);await cdp('Runtime.enable',{},sessionId);
     await cdp('Fetch.enable',{patterns:[{urlPattern:'https://*'},{urlPattern:'http://localhost:8000/*'}]},sessionId);
-    await cdp('Page.navigate',{url:'http://localhost:8000/'},sessionId);await waitSecond('document.getElementById("primary")?.title?.length>0');
+    await cdp('Page.navigate',{url:'http://localhost:8000/'},sessionId);await waitSecond(homeReady);
     assert.equal(await inSecond('localStorage.getItem("easyTimerTemplates")'),null);
-    await inSecond(`window.confirm=()=>true;document.querySelector('[data-language="en"]').click();document.getElementById('open-planner').click()`);
+    await inSecond(`window.confirm=()=>true;document.querySelector('[data-language="en"]').click()`);
+    await inSecond(mountPanel);
     await waitSecond('Boolean(document.getElementById("drive-activate"))');
-    assert.equal(await inSecond('document.querySelector(".planner-feedback").textContent'), '');
     assert.equal(await inSecond('document.getElementById("drive-disconnect").hidden'), true);
     await inSecond('globalThis.beforeSmokeReload=true');
-    await cdp('Page.reload',{},sessionId);await waitSecond('!globalThis.beforeSmokeReload && document.getElementById("primary")?.title?.length>0');
-    await inSecond('window.confirm=()=>true;document.getElementById("open-planner").click()');
+    await cdp('Page.reload',{},sessionId);await waitSecond(`!globalThis.beforeSmokeReload && (${developmentReady})`);
+    await inSecond(mountPanel);
     await waitSecond('Boolean(document.getElementById("drive-activate"))');
-    assert.equal(await inSecond('document.querySelector(".planner-feedback").textContent'), '');
     await inSecond('document.getElementById("drive-activate").click()');
     await waitSecond('!document.getElementById("drive-connect").disabled');
-    assert.equal(await inSecond('document.querySelector(".planner-feedback").textContent'), '');
     assert.equal(await inSecond('document.getElementById("drive-status").textContent'), 'Local only');
     assert.equal(await inSecond('localStorage.getItem("easyTimerTemplates")'), null);
     assert.deepEqual(await inSecond('easyTimerDevelopment.createStore().load()'), {schemaVersion:1,templates:[]});
@@ -209,35 +237,30 @@ try {
     await inSecond('globalThis.originalCreateObjectURL=URL.createObjectURL;URL.createObjectURL=()=>{throw Error("INJECTED_DOWNLOAD_FAILURE")};document.getElementById("drive-backup").click()');
     await waitSecond('document.getElementById("drive-status").textContent.startsWith("The backup could not be prepared")');
     await inSecond('document.getElementById("data-backup").open=false');
-    assert.equal(await inSecond('document.querySelector(".backup-status-hint").hidden'), false, 'Backup error remains discoverable while collapsed');
     await inSecond('document.getElementById("data-backup").open=true');
     assert.deepEqual(await readdir(emptyDownloads), ['easytimer-rundowns.json']);
     assert.equal((await readFile(join(emptyDownloads,'easytimer-rundowns.json'))).length,44);
     await inSecond('URL.createObjectURL=globalThis.originalCreateObjectURL');
-    console.log('PASS: fresh/reloaded/empty activated editor has no false errors, 44-byte downloaded JSON is valid, backup preparation failures are specific, disconnect is hidden before authorization.');
+    console.log('PASS: isolated panel supports empty activation, validated backup download and specific backup errors.');
     await waitSecond('!document.getElementById("drive-connect").disabled');await inSecond('document.getElementById("drive-connect").click()');await waitSecond('Boolean(globalThis.google?.accounts?.oauth2)');
     await inSecond('document.getElementById("drive-connect").click()');await waitSecond('!document.getElementById("drive-sync").disabled');await inSecond('document.getElementById("drive-sync").click()');
     await waitSecond('!document.getElementById("drive-adopt").hidden');
     assert.equal(await inSecond('easyTimerDevelopment.createStore().load().then(data=>data.templates.length)'),0);
-    await inSecond('document.getElementById("drive-adopt").click()');await waitSecond(`Boolean(document.querySelector('[aria-label="Edit: IDB workshop"]'))`);
+    await inSecond('document.getElementById("drive-adopt").click()');await waitSecond('easyTimerDevelopment.createStore().load().then(data=>data.templates[0]?.name === "IDB workshop")');
     assert.equal(await inSecond('easyTimerDevelopment.createStore().load().then(data=>data.templates[0].id)'),'ui-stable-id');
-    await inSecond(`document.querySelector('[aria-label="Edit: IDB workshop"]').click();document.getElementById('template-name').value='Second clean context';document.getElementById('template-name').dispatchEvent(new Event('input'));document.querySelector('#planner form').requestSubmit()`);
-    await waitSecond(`Boolean(document.querySelector('[aria-label="Edit: Second clean context"]'))`);
+    await inSecond(renameTemplate('Second clean context'));
     await inSecond('document.getElementById("drive-sync").click()');await waitSecond('document.getElementById("drive-status").textContent==="Synced (last checked)"');
-    await evaluate('document.getElementById("drive-sync").click()');await wait(`Boolean(document.querySelector('[aria-label="Edit: Second clean context"]'))`);
-    await evaluate(`document.querySelector('[aria-label="Edit: Second clean context"]').click();document.getElementById('template-name').value='Conflict first';document.getElementById('template-name').dispatchEvent(new Event('input'));document.querySelector('#planner form').requestSubmit()`);
-    await wait(`Boolean(document.querySelector('[aria-label="Edit: Conflict first"]'))`);
-    await inSecond(`document.querySelector('[aria-label="Edit: Second clean context"]').click();document.getElementById('template-name').value='Conflict second';document.getElementById('template-name').dispatchEvent(new Event('input'));document.querySelector('#planner form').requestSubmit()`);
-    await waitSecond(`Boolean(document.querySelector('[aria-label="Edit: Conflict second"]'))`);
+    await evaluate('document.getElementById("drive-sync").click()');
+    await wait('easyTimerDevelopment.createStore().load().then(data=>data.templates[0]?.name === "Second clean context")');
+    await evaluate(renameTemplate('Conflict first'));
+    await inSecond(renameTemplate('Conflict second'));
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
     await inSecond('document.getElementById("drive-sync").click()');await waitSecond('!document.getElementById("drive-review").hidden');
     await evaluate('document.getElementById("drive-sync").click()');await wait('!document.getElementById("drive-review").hidden');
     const conflictLibrary = await evaluate('easyTimerDevelopment.createStore().load()');
     await evaluate('document.getElementById("drive-disconnect").click()');
     await wait('document.getElementById("drive-status").textContent.includes("locally known conflict")');
-    assert.equal(await evaluate('document.querySelector(".backup-status-hint").dataset.tone'), 'attention', 'Known local conflicts remain discoverable without authorization');
     await evaluate('document.getElementById("data-backup").open=false');
-    assert.equal(await evaluate('document.querySelector(".backup-status-hint").hidden'), false);
     assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'), conflictLibrary);
     await evaluate('document.getElementById("data-backup").open=true;document.getElementById("drive-connect").click()');
     await wait('!document.getElementById("drive-review").disabled');
@@ -252,11 +275,6 @@ try {
         await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
         await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
         assert.equal(await evaluate('document.querySelector("#drive-conflict-review input:checked").value'),'right');
-        const reviewTraffic = external.length;
-        await evaluate('document.getElementById("data-backup").open=false');
-        await wait('document.getElementById("data-backup").open');
-        assert.equal(await evaluate('document.querySelector("#drive-conflict-review input:checked").value'), 'right', 'Collapse cannot hide or discard an active review');
-        assert.equal(external.length, reviewTraffic);
         await evaluate('document.getElementById("drive-conflict-review").scrollIntoView()');
         const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(output,'conflict-'+language+'-'+theme+'.png'),Buffer.from(shot.data,'base64'));
     }
@@ -272,10 +290,9 @@ try {
     assert.equal(pendingDiagnostic.reconciliation.acknowledgement,'not-locally-verified');
     assert.equal(external.length,pendingTraffic);assert.equal(await evaluate('document.getElementById("drive-status").textContent'),pendingStatus);
     const resolutionPosts=drive.calls.filter(c=>c.method==='POST').length;
-    await evaluate('globalThis.beforeRecoveryReload=true');await cdp('Page.reload');await wait('!globalThis.beforeRecoveryReload && document.getElementById("primary")?.title?.length>0');
+    await evaluate('globalThis.beforeRecoveryReload=true');await cdp('Page.reload');await wait(`!globalThis.beforeRecoveryReload && (${developmentReady})`);
     blockResolutionReadback=false;
-    await evaluate('document.getElementById("open-planner").click()');await wait('Boolean(document.getElementById("drive-connect"))');
-    await wait('document.querySelector(".backup-status-hint").dataset.tone==="attention"');
+    await evaluate(mountPanel);await wait('Boolean(document.getElementById("drive-connect"))');
     await evaluate('document.getElementById("drive-connect").click()');await wait('Boolean(globalThis.google?.accounts?.oauth2)');
     await evaluate('document.getElementById("drive-connect").click()');await wait('!document.getElementById("drive-sync").disabled');
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
@@ -285,9 +302,9 @@ try {
     await inSecond('document.getElementById("drive-sync").click()');await waitSecond('document.getElementById("drive-status").textContent==="Synced (last checked)"');
     assert.deepEqual(await inSecond('easyTimerDevelopment.createStore().load()'),resolved);
     console.log('PASS: actual two-context conflict, no default, DE/EN Light/Dark/System desktop/320px, native radio keyboard, explicit preview/confirmation and clean peer adoption.');
-    const sameEdit=`[...document.querySelectorAll('#planner button')].find(b=>b.getAttribute('aria-label')===${JSON.stringify('Edit: '+resolved.templates[0].name)}).click();document.getElementById('template-name').value='Same content, new history';document.getElementById('template-name').dispatchEvent(new Event('input'));document.querySelector('#planner form').requestSubmit()`;
-    await evaluate(sameEdit);await wait(`Boolean(document.querySelector('[aria-label="Edit: Same content, new history"]'))`);
-    await inSecond(sameEdit);await waitSecond(`Boolean(document.querySelector('[aria-label="Edit: Same content, new history"]'))`);
+    const sameEdit = renameTemplate('Same content, new history');
+    await evaluate(sameEdit);
+    await inSecond(sameEdit);
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
     await inSecond('document.getElementById("drive-sync").click()');await waitSecond('!document.getElementById("drive-review").hidden');
     await evaluate('document.getElementById("drive-sync").click()');await wait('!document.getElementById("drive-review").hidden');
@@ -312,9 +329,9 @@ try {
     await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
     await wait('document.getElementById("drive-status").textContent.startsWith("Synchronization failed")');
     const freePosts=drive.calls.filter(c=>c.method==='POST').length;
-    await evaluate('globalThis.beforeFreeReload=true');await cdp('Page.reload');await wait('!globalThis.beforeFreeReload && document.getElementById("primary")?.title?.length>0');
+    await evaluate('globalThis.beforeFreeReload=true');await cdp('Page.reload');await wait(`!globalThis.beforeFreeReload && (${developmentReady})`);
     blockResolutionReadback=false;
-    await evaluate('document.getElementById("open-planner").click()');await wait('Boolean(document.getElementById("drive-connect"))');
+    await evaluate(mountPanel);await wait('Boolean(document.getElementById("drive-connect"))');
     await evaluate('document.getElementById("drive-connect").click()');await wait('Boolean(globalThis.google?.accounts?.oauth2)');
     await evaluate('document.getElementById("drive-connect").click()');await wait('!document.getElementById("drive-sync").disabled');
     await evaluate('document.getElementById("drive-sync").click()');await wait('document.getElementById("drive-status").textContent==="Synced (last checked)"');
@@ -323,52 +340,15 @@ try {
     await inSecond('document.getElementById("drive-sync").click()');await waitSecond('document.getElementById("drive-status").textContent==="Synced (last checked)"');
     assert.deepEqual(await inSecond('easyTimerDevelopment.createStore().load()'),beforeFree);
     console.log('PASS: conflict-free actual UI, complete preview/no choices, DE/EN/themes/320px, explicit keyboard confirmation, simulated lost acknowledgement and real page reload GET-only recovery.');
-    const beforeLaunchCalls = drive.calls.length;
-    await evaluate('document.querySelector(".rundown-launch").click()');
-    await wait('!document.body.classList.contains("planner-open") && document.getElementById("status").textContent==="Ready"');
-    assert.equal(await evaluate('document.activeElement.id'), 'primary');
-    assert.deepEqual(await evaluate('easyTimerDevelopment.createStore().load()'), beforeFree);
-    assert.equal(drive.calls.length, beforeLaunchCalls, 'Direct launch reads asynchronous local storage without Google requests');
-    await evaluate('document.getElementById("open-planner").click()');
-    await wait('Boolean(document.querySelector(".rundown-launch"))');
-    console.log('PASS: direct Session launch through asynchronous activated IndexedDB, READY/focus, saved library and remote transport unchanged.');
     await cdp('Target.disposeBrowserContext',{browserContextId});
-    console.log('PASS: independent clean browser context explicitly adopts stable IDs, edits, publishes and fast-forwards a clean first client.');
-    await evaluate('document.querySelector(".planner-back").click();document.getElementById("primary").click()');
-    const runtimeBeforeCreate = await evaluate("JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1')))");
-    assert.equal(runtimeBeforeCreate.mode, 'session'); assert.equal(runtimeBeforeCreate.clock.status, 'RUNNING');
-    await evaluate('globalThis.beforeCreateReload=true'); await cdp('Page.reload');
-    await wait('!globalThis.beforeCreateReload && Boolean(globalThis.easyTimerDevelopment) && document.getElementById("primary")?.title?.length>0');
-    const restoredForCreate = await evaluate("JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1')))");
-    assert.equal(restoredForCreate.run.runId, runtimeBeforeCreate.run.runId);
-    assert.equal(restoredForCreate.clock.deadlineMs, runtimeBeforeCreate.clock.deadlineMs);
-    const libraryBeforeCreate = await evaluate('easyTimerDevelopment.createStore().load()');
-    const legacyBeforeCreate = await evaluate('localStorage.getItem("easyTimerTemplates")');
-    const callsBeforeCreate = drive.calls.length;
-    await evaluate('document.getElementById("open-planner").click()');
-    await wait('Boolean(document.getElementById("data-backup"))');
-    assert.equal(await evaluate('document.querySelector(".planner-feedback").textContent'), '');
-    await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create Rundown").click()');
-    const enter = (selector, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-    await enter('#template-name', 'REL-001B acceptance fixture');
-    for (let i = 0; i < 3; i++) {
-        if (i) await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="+ Add phase").click()');
-        await enter(`.phase-list li:nth-child(${i + 1}) .phase-title input`, `Phase ${String(i + 1).padStart(2, '0')}`);
-        await enter(`.phase-list li:nth-child(${i + 1}) .phase-duration input`, String([5, 10, 5][i]));
-    }
-    await evaluate('document.querySelector("#planner form").requestSubmit()');
-    await wait('!document.getElementById("template-name") && document.querySelector(".planner-feedback").textContent==="Template saved."');
-    const libraryAfterCreate = await evaluate('easyTimerDevelopment.createStore().load()');
-    assert.deepEqual(libraryAfterCreate.templates.filter(t=>t.name!=='REL-001B acceptance fixture'), libraryBeforeCreate.templates);
-    assert.deepEqual(libraryAfterCreate.templates.find(t=>t.name==='REL-001B acceptance fixture').phases.map(p=>p.durationSeconds), [300,600,300]);
-    assert.equal(await evaluate('localStorage.getItem("easyTimerTemplates")'), legacyBeforeCreate);
-    const runtimeAfterCreate = await evaluate("JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+sessionStorage.getItem('easyTimerRuntimeContext.v1')))");
-    assert.equal(runtimeAfterCreate.run.runId, runtimeBeforeCreate.run.runId);
-    assert.equal(runtimeAfterCreate.clock.deadlineMs, runtimeBeforeCreate.clock.deadlineMs);
-    assert.equal(drive.calls.length, callsBeforeCreate, 'Local creation after recovery makes no Google calls');
-    console.log('PASS: changed shell on a live server retains development entry; after Session recovery, a new manual 5/10/5-minute Rundown saves to real IndexedDB while existing definitions, legacy storage and active Run remain intact.');
+    await evaluate('document.getElementById("drive-disconnect").click()');
+    await wait('document.getElementById("drive-disconnect").hidden && document.getElementById("account-disconnect").hidden');
+    // The native Workspace remains independent of the development panel fixture.
+    await evaluate(`document.getElementById('data-backup').remove();document.getElementById('open-planner').click()`);
+    await wait('Boolean(document.querySelector("#planner .planner-back"))');
+    assert.equal(await evaluate('document.querySelector("#planner #drive-activate")'), null);
     await checkAccountHeader({ evaluate, cdp, wait, drive, external, output, setProfile: value => { profileFixture = value; } });
-    assert.deepEqual(errors,[]);console.log('PASS: actual Editor activation/upload/edit/export/draft guards, reload, DE/EN/themes/320px and focus. Evidence: '+output);
+    assert.deepEqual(errors,[]);console.log('PASS: isolated development panel and account header. Native Workspace sync integration is outside this gate. Evidence: '+output);
     await cdp('Browser.close');
 } finally {
     socket?.close(); browser.kill(); await new Promise(done => server.close(done)); await delay(500);

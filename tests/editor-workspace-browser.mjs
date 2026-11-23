@@ -1,20 +1,123 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
+import { EDITOR_DRAFT_RECOVERY_PREFIX, validateEditorDraftRecoveryRecord } from '../src/js/editor-draft-recovery.mjs';
+import { EDITOR_STORAGE_KEY, validateEditorStoreRecord } from '../src/js/editor-storage.mjs';
 
-export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
+export async function checkNativeDraftReload({ evaluate, cdp, origin }) {
+    async function wait(expression) {
+        for (let i = 0; i < 100; i++) {
+            if (await evaluate(expression)) return;
+            await delay(50);
+        }
+        assert.fail('Draft reload wait failed: ' + expression);
+    }
+    const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+    const action = (label, container = '#planner') => evaluate(`(() => {
+        const button = [...document.querySelectorAll(${JSON.stringify(container + ' button')})]
+            .find(node => node.getClientRects().length && node.textContent.trim() === ${JSON.stringify(label)});
+        if (!button) throw Error('Missing draft action: ' + ${JSON.stringify(label)});
+        button.click();
+    })()`);
+    const field = (selector, value) => evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify('#planner ' + selector)});
+        input.value = ${JSON.stringify(value)};
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    const readStore = () => evaluate(`localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})`);
+    const recoveryKeys = () => evaluate(`Object.keys(localStorage).filter(key => key.startsWith(${JSON.stringify(EDITOR_DRAFT_RECOVERY_PREFIX)}))`);
+    const readRecovery = async key => validateEditorDraftRecoveryRecord(JSON.parse(
+        await evaluate(`localStorage.getItem(${JSON.stringify(key)})`)));
+    const phases = '#planner [data-native-phase-id]';
+    const phase = index => `.phase-list > li:nth-child(${index})`;
+    const reloadLibrary = async () => {
+        const previous = await evaluate('performance.timeOrigin');
+        await cdp('Page.reload');
+        await wait(`performance.timeOrigin !== ${previous} && document.querySelector('main:not([aria-busy])')
+            && document.querySelector('body.planner-open #planner .planner-top')`);
+        await wait(`Array.from(document.querySelectorAll('#planner button')).some(b => b.textContent === 'Create template')`);
+    };
+    await cdp('Page.navigate', { url: origin + '/' });
+    await wait(`location.origin === ${JSON.stringify(origin)} && document.body?.dataset.mode === 'home'
+        && document.querySelector('main:not([aria-busy]) #home-view:not([hidden])')`);
+    await click('[data-language="en"]');
+    assert.deepEqual(await recoveryKeys(), []);
+    const initialStore = await readStore();
+    const initialRevision = initialStore === null ? 0 : validateEditorStoreRecord(JSON.parse(initialStore)).revision;
+    await click('#home-editor');
+    await wait(`Array.from(document.querySelectorAll('#planner button')).some(b => b.textContent === 'Create template')`);
+    await action('Create template');
+    await field('[data-field="name"]', 'Native draft reload');
+    for (const [index, title, duration] of [[1, 'Welcome', '5'], [2, 'Discussion', '12']]) {
+        await action('Add phase');
+        await field(phase(index) + ' [data-field="title"]', title);
+        await field(phase(index) + ' [data-field="duration"]', duration);
+    }
+    await click('#planner ' + phase(2) + ' [data-action="details"]');
+    await field(phase(2) + ' [data-field="notes"]', 'Capture decisions and open questions');
+    const keys = await recoveryKeys();
+    assert.equal(keys.length, 1);
+    const [key] = keys, before = await readRecovery(key);
+    const expectedPhases = [['Welcome', 300, ''], ['Discussion', 720, 'Capture decisions and open questions']];
+    assert.deepEqual(before.draft.template.phases.map(p => [p.title, p.durationSeconds, p.notes]), expectedPhases);
+    assert.equal(before.draft.template.name, 'Native draft reload');
+    assert.equal(before.state, 'draft');
+    assert.equal(await readStore(), initialStore, 'Draft checkpoint makes no authoritative write');
+
+    await reloadLibrary();
+    const row = `#planner [data-recovery-id="${before.recoveryId}"]`;
+    await wait(`Boolean(document.querySelector(${JSON.stringify(row)}))`);
+    assert.equal(await evaluate(`Boolean(document.querySelector('#planner [data-field="name"]'))`), false);
+    assert.deepEqual(await readRecovery(key), before);
+    await action('Restore', row);
+    await wait(`Boolean(document.querySelector('#planner [data-field="name"]'))`);
+    assert.equal(await evaluate(`document.querySelector('#planner [data-field="name"]').value`), before.draft.template.name);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll(${JSON.stringify(phases)})].map(p => [
+        p.dataset.nativePhaseId, p.querySelector('[data-field="title"]').value,
+        Number(p.querySelector('[data-field="duration"]').value) * 60, p.querySelector('[data-field="notes"]').value
+    ])`), before.draft.template.phases.map(p => [p.id, p.title, p.durationSeconds, p.notes]));
+    await field('[data-field="name"]', 'Native draft reload, continued');
+    const continued = await readRecovery(key);
+    assert.deepEqual(await recoveryKeys(), [key]);
+    assert.equal(continued.recoveryId, before.recoveryId);
+    assert.equal(continued.contextId, before.contextId);
+    assert.ok(continued.savedAt > before.savedAt);
+    assert.equal(await readStore(), initialStore);
+    await action('Save');
+    await wait(`document.querySelector('#planner').textContent.includes('Saved.') &&
+        !document.querySelector('#planner [data-field="name"]')`);
+    const savedRaw = await readStore(), saved = validateEditorStoreRecord(JSON.parse(savedRaw));
+    assert.equal(saved.revision, initialRevision + 1, 'Exactly one authoritative revision was added');
+    assert.equal(saved.templates.length, 1);
+    const [template] = saved.templates;
+    const { id, ...plan } = continued.draft.template;
+    assert.equal(template.id, id);
+    assert.equal(template.revision, 1);
+    assert.deepEqual(template.plan, plan);
+    assert.deepEqual(await recoveryKeys(), []);
+    await reloadLibrary();
+    assert.equal(await evaluate(`Boolean(document.querySelector(${JSON.stringify(row)}))`), false);
+    assert.equal(await readStore(), savedRaw);
+    console.log('PASS: native draft checkpoints, reloads, restores explicitly, continues under the same recovery ID and saves exactly once.');
+}
+
+export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptExpectedConfirm }) {
+    const recoveryDiscardConfirm = 'Discard this unsaved draft and its local recovery copy? This cannot be undone.';
     const press = async (key, code, virtualKey) => {
         await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: virtualKey });
         await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: virtualKey });
     };
     const action = (label, within = '#native-editor-workspace-fixture') => evaluate(`(() => {
         const root = document.querySelector(${JSON.stringify(within)});
-        const button = [...root.querySelectorAll('button')].find(node => node.textContent.trim() === ${JSON.stringify(label)});
+        const button = [...root.querySelectorAll('button')].find(node =>
+            node.getClientRects().length && node.textContent.trim() === ${JSON.stringify(label)});
         if (!button) throw new Error('Missing action: ' + ${JSON.stringify(label)});
         button.click();
     })()`);
-    const rowAction = (heading, label) => evaluate(`(() => {
+    const rowAction = (heading, label, id = null) => evaluate(`(() => {
+        const id = ${JSON.stringify(id)};
         const row = [...document.querySelectorAll('#native-editor-workspace-fixture .template-library li')]
-            .find(node => node.querySelector('h3')?.textContent === ${JSON.stringify(heading)});
+            .find(node => node.querySelector('h3')?.textContent === ${JSON.stringify(heading)}
+                && (id === null || node.querySelector('h3 + p')?.textContent.startsWith('ID: ' + id + ' · ')));
         const button = [...row.querySelectorAll('button')].find(node => node.textContent.trim() === ${JSON.stringify(label)});
         if (!button) throw new Error('Missing row action'); button.click();
     })()`);
@@ -37,6 +140,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         assert.deepEqual(project(state.record.draft.template), expected, message);
     };
     let recoveryWritesBefore;
+    let testFailed = false;
     try {
         await cdp('Emulation.setDeviceMetricsOverride', {
             width: 1280, height: 800, screenWidth: 1280, screenHeight: 800, mobile: false, deviceScaleFactor: 1,
@@ -246,7 +350,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         assert.deepEqual(await evaluate(`(() => {
             const root = nativeWorkspaceFixture.root;
             return [root.dataset.nativeEditorWorkspace === '', root.querySelector('h1').textContent,
-                [...root.querySelectorAll('h2')].map(node => node.textContent),
+                [...root.querySelectorAll('h2')].filter(node => !node.closest('dialog:not([open])')).map(node => node.textContent),
                 root.textContent.includes('Lifecycle actions are intentionally unavailable'),
                 document.querySelector('#open-planner').textContent.includes('Native')];
         })()`), [true, 'Session Editor', ['Templates', 'Planned executions', 'Active in Timer', 'Suspended', 'Completed'], false, false]);
@@ -262,17 +366,23 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
 
         await action('Back');
         assert.deepEqual(await evaluate(`[
-            nativeWorkspaceFixture.root.dataset.nativeEditorWorkspace,
+            nativeWorkspaceFixture.root.hasAttribute('data-native-editor-workspace'),
             nativeWorkspaceFixture.closeCalls.length,
             nativeWorkspaceFixture.closeCalls[0]?.focus,
-        ]`), [undefined, 1, 'menu'], 'Back from the Library closes through the host callback');
-        await evaluate(`nativeWorkspaceFixture.workspace.open(); window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => true`);
+        ]`), [false, 1, 'menu'], 'Back from the Library closes through the host callback');
+        await evaluate(`(async () => {
+            await nativeWorkspaceFixture.workspace.open();
+            window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => true;
+        })()`);
         await action('Create template'); await action('Cancel'); await action('Back');
         assert.deepEqual(await evaluate(`[
-            nativeWorkspaceFixture.root.dataset.nativeEditorWorkspace,
+            nativeWorkspaceFixture.root.hasAttribute('data-native-editor-workspace'),
             nativeWorkspaceFixture.closeCalls.length,
-        ]`), [undefined, 2], 'Back closes after a cancelled new Template draft');
-        await evaluate(`nativeWorkspaceFixture.workspace.open(); window.confirm = window.nativeWorkspaceConfirm`);
+        ]`), [false, 2], 'Back closes after a cancelled new Template draft');
+        await evaluate(`(async () => {
+            await nativeWorkspaceFixture.workspace.open();
+            window.confirm = window.nativeWorkspaceConfirm;
+        })()`);
         await action('Create template'); await field('[data-field="name"]', 'Keep this draft');
         await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => false`);
         await action('Back');
@@ -283,9 +393,9 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         ]`), ['Keep this draft', 2, ''], 'rejected Back confirmation preserves the complete draft and view');
         await evaluate(`window.confirm = () => true`); await action('Back');
         assert.deepEqual(await evaluate(`[
-            nativeWorkspaceFixture.root.dataset.nativeEditorWorkspace,
+            nativeWorkspaceFixture.root.hasAttribute('data-native-editor-workspace'),
             nativeWorkspaceFixture.closeCalls.length,
-        ]`), [undefined, 3], 'accepted Back confirmation closes the dirty Workspace');
+        ]`), [false, 3], 'accepted Back confirmation closes the dirty Workspace');
         await evaluate(`window.confirm = window.nativeWorkspaceConfirm; delete window.nativeWorkspaceConfirm; nativeWorkspaceFixture.workspace.open()`);
 
         await action('Create template');
@@ -524,6 +634,13 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         assert.equal(await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-resource-index="1"] [data-resource-field="url"]').parentElement.textContent.includes('Eine gültige HTTP- oder HTTPS-URL eingeben.')`), true,
             'resource URL validation is localized in German');
         await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('en')`);
+        // Restore both disclosures after the language rerender before editing and removing resources.
+        await evaluate(`(() => {
+            for (const id of ['phase-1', 'phase-2']) {
+                const details = nativeWorkspaceFixture.root.querySelector('[data-native-phase-id="' + id + '"] [data-action="details"]');
+                if (details.getAttribute('aria-expanded') === 'false') details.click();
+            }
+        })()`);
         await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="label"]', '   ');
         await field('[data-native-phase-id="phase-1"] [data-resource-index="1"] [data-resource-field="url"]', '  ');
         await action('Add resource', '[data-native-phase-id="phase-1"]');
@@ -549,7 +666,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 [...root.querySelectorAll('[data-native-phase-id]')].map(node => node.dataset.nativePhaseId),
                 [...root.querySelectorAll('[data-action="details"]')].map(button => button.getAttribute('aria-expanded')),
                 f.writes];
-        })()`), ['Phase 02 – Change position', ['01 · Opening', '02 · Work'], '2', true,
+        })()`), ['Phase 02 – Change position', ['01 · First phase', '02 · Second phase'], '2', true,
             ['phase-1', 'phase-2'], ['true', 'true'], 0], 'position menu is complete, preselected and disclosure-neutral');
         await field('[data-native-phase-id="phase-2"] [data-field="position"]', '1', 'change');
         assert.deepEqual(await evaluate(`(() => {
@@ -700,14 +817,18 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             await delay(20);
         }
         await action('Cancel');
+        const [recheckedTicket, originalTicket] = await evaluate(`[
+            nativeWorkspaceFixture.recheckTickets.template, nativeWorkspaceFixture.tickets.templateSave,
+        ]`);
+        assert.deepEqual(recheckedTicket, originalTicket, 'Reloaded Recheck uses the complete original source and target ticket');
         assert.deepEqual(await evaluate(`(() => {
-            const f = nativeWorkspaceFixture, cancel = [...f.root.querySelectorAll('button')]
+            const f = nativeWorkspaceFixture, cancel = [...f.root.querySelectorAll('.native-workspace-save-actions button')]
                 .find(button => button.textContent === 'Cancel');
-            return [f.writes, f.calls.templateRecheck, f.recheckTickets.template === f.tickets.templateSave,
+            return [f.writes, f.calls.templateRecheck,
                 f.root.querySelector('[data-field="name"]').value, cancel.disabled,
                 !f.root.textContent.includes('Unsaved changes discarded.'),
                 !f.workspace.close(), f.root.dataset.nativeEditorWorkspace === ''];
-        })()`), [1, 1, true, 'Independent workshop', true, true, true, true],
+        })()`), [1, 1, 'Independent workshop', true, true, true, true],
         'unresolved Template Save blocks Cancel/unmount and preserves the exact draft and ticket');
         await evaluate(`nativeWorkspaceFixture.raw = JSON.stringify(nativeWorkspaceFixture.tickets.templateSave.target)`);
         await action('Recheck without writing');
@@ -848,10 +969,14 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             const json = row.querySelector('textarea');
             [...row.querySelectorAll('button')].find(button => button.textContent === 'Export recovery JSON').click();
             const toggle = row.querySelector('[data-recovery-review]');
+            const expected = f.recoveryStore.read('recovery-conflict');
             return [json.readOnly, JSON.parse(json.value).recoveryId, f.downloads.at(-1).recoveryId,
                 toggle.getAttribute('aria-expanded'), toggle.getAttribute('aria-controls') === json.parentElement.id,
-                !json.parentElement.hidden];
-        })()`), [true, 'recovery-conflict', 'recovery-conflict', 'true', true, true],
+                !json.parentElement.hidden, JSON.parse(f.downloads.at(-1).text), expected];
+        })()`).then(result => {
+            assert.deepEqual(result.pop(), result.pop(), 'Download contains the complete recovery record');
+            return result;
+        }), [true, 'recovery-conflict', 'recovery-conflict', 'true', true, true],
         'conflicting drafts expose compact read-only details and complete Recovery JSON export');
         assert.deepEqual(await evaluate(`(() => {
             let row = nativeWorkspaceFixture.root.querySelector('[data-recovery-id="recovery-conflict"]');
@@ -917,6 +1042,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         const cleanupPhaseId = await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id]').dataset.nativePhaseId`);
         await field(`[data-native-phase-id="${cleanupPhaseId}"] [data-field="title"]`, 'Cleanup phase');
         await field(`[data-native-phase-id="${cleanupPhaseId}"] [data-field="duration"]`, '10');
+        const cleanupKey = await evaluate(`nativeWorkspaceFixture.recoveryCalls.filter(([operation]) => operation === 'set').at(-1)[1]`);
         await evaluate(`nativeWorkspaceFixture.recoveryFailRemove = true; nativeWorkspaceFixture.root.querySelector('form').requestSubmit()`);
         for (let i = 0; i < 50; i++) {
             if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('separate local recovery copy could not be cleaned up')`)) break;
@@ -928,8 +1054,9 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 f.root.textContent.includes('Saved.'),
                 f.root.textContent.includes('separate local recovery copy could not be cleaned up'),
                 f.root.querySelector('[data-field="name"]'),
-                [...f.recoveryValues.values()].some(raw => JSON.parse(raw).draft.template.name === 'Cleanup test')];
-        })()`), [writesBeforeCleanupFailure + 1, true, true, true, null, true],
+                JSON.parse(f.recoveryValues.get(${JSON.stringify(cleanupKey)})).draft.template.name,
+                f.recoveryValues.get('easyTimerEditorDraftRecovery.v1.corrupt')];
+        })()`), [writesBeforeCleanupFailure + 1, true, true, true, null, 'Cleanup test', '{broken-json'],
         'confirmed Save remains successful when exact Recovery cleanup fails, with no second Save attempt');
 
         const writesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.writes`);
@@ -963,6 +1090,8 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         'unconfirmed Recovery removal reports neutral cleanup uncertainty without retrying the confirmed Save or Remove');
 
         const writesBeforeExecution = await evaluate('nativeWorkspaceFixture.writes');
+        const sourceTemplateId = await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates
+            .find(item => item.plan.name === 'Independent workshop').id`);
         await rowAction('Independent workshop', 'Create planned execution');
         assert.equal(await evaluate(`nativeWorkspaceFixture.writes`), writesBeforeExecution, 'new Execution remains local before Save');
         await field('[data-field="name"]', 'Independent execution');
@@ -993,53 +1122,183 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
             nativeWorkspaceFixture.root.textContent.includes('Execution creation is confirmed'),
         ]`), [writesBeforeExecution + 1, 'Independent execution', true], 'planning recheck observes exact created identity without a write');
+        const executionId = await evaluate("'execution-' + nativeWorkspaceFixture.execution");
+        const savedExecution = `record.executions.find(item => item.execution.id === ${JSON.stringify(executionId)}).execution`;
+        const editableExecutionButton = revision => `(() => {
+            const row = [...nativeWorkspaceFixture.root.querySelectorAll('.template-library li')].find(row =>
+                row.querySelector('h3')?.textContent === 'Independent execution' &&
+                row.querySelector('h3 + p')?.textContent === ${JSON.stringify(`ID: ${executionId} · Revision: ${revision}`)});
+            return [...(row?.querySelectorAll('button') ?? [])].find(button =>
+                button.textContent.trim() === 'Edit' && !button.disabled && button.getClientRects().length);
+        })()`;
+        const waitForEditableExecution = async revision => {
+            for (let i = 0; i < 100; i++) {
+                if (await evaluate(`Boolean(${editableExecutionButton(revision)})`)) return;
+                await delay(20);
+            }
+            assert.fail(`Save did not return to editable Execution ${executionId} at revision ${revision}`);
+        };
         await action('Save');
+        await waitForEditableExecution(2);
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, record = JSON.parse(f.raw);
             const source = record.templates.find(item => item.plan.name === 'Independent workshop');
-            const execution = record.executions.find(item => item.execution.currentPlan.name === 'Independent execution').execution;
+            const execution = ${savedExecution};
             return [f.writes, source.plan.preparedInformation, execution.source, execution.currentPlan.preparedInformation,
-                execution.lifecycle, record.activeRuntime.executionId];
-        })()`), [writesBeforeExecution + 2, 'Goals and **plain text**', { kind: 'template', id: 'template-1' },
-            'Execution-only information', 'planned', 'active-seed'], 'Execution Save preserves source Template and active runtime');
-        await rowAction('Independent execution', 'Edit');
+                execution.lifecycle, record.activeRuntime.executionId, execution.revision, execution.currentPlan.name];
+        })()`), [writesBeforeExecution + 2, 'Goals and **plain text**', { kind: 'template', id: sourceTemplateId },
+            'Execution-only information', 'planned', 'active-seed', 2, 'Independent execution'],
+        'Execution Save preserves source Template and active runtime');
+        await evaluate(`${editableExecutionButton(2)}.click()`);
         await field('[data-field="prepared"]', 'Edited planned information');
-        await action('Save');
-        assert.equal(await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).executions
-            .find(item => item.execution.currentPlan.name === 'Independent execution').execution.currentPlan.preparedInformation`),
-        'Edited planned information');
+        const revisionBeforeEditSave = await evaluate('JSON.parse(nativeWorkspaceFixture.raw).revision');
+        await evaluate("nativeWorkspaceFixture.hold('executionSave')");
+        try {
+            await action('Save');
+            assert.deepEqual(await evaluate(`(() => {
+                const f = nativeWorkspaceFixture, record = JSON.parse(f.raw), execution = ${savedExecution};
+                return [f.calls.executionSave, f.writes, record.revision, execution.revision,
+                    execution.currentPlan.preparedInformation, f.root.querySelector('button[type="submit"]')?.disabled,
+                    Boolean(${editableExecutionButton(3)})];
+            })()`), [2, writesBeforeExecution + 2, revisionBeforeEditSave, 2, 'Execution-only information', true, false],
+            'held Execution Save leaves the authoritative record unchanged and the editor in flight');
+        } finally {
+            await evaluate("nativeWorkspaceFixture.release('executionSave')");
+        }
+        await waitForEditableExecution(3);
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture, record = JSON.parse(f.raw), execution = ${savedExecution};
+            return [f.calls.executionSave, f.writes, record.revision, execution.revision, execution.lifecycle,
+                execution.currentPlan.preparedInformation];
+        })()`), [2, writesBeforeExecution + 3, revisionBeforeEditSave + 1, 3, 'planned', 'Edited planned information'],
+        'confirmed Execution Edit persists the new information exactly once');
+        console.log('PASS: both PLANNED Saves advance the same Execution revision with exactly one write each.');
 
         await rowAction('Independent workshop', 'Edit');
         const writesBeforeInvalid = await evaluate('nativeWorkspaceFixture.writes');
-        await field('[data-field="name"]', ''); await action('Save');
+        const savesBeforeInvalid = await evaluate('nativeWorkspaceFixture.calls.templateSave');
+        await field('[data-field="name"]', '');
+        assert.equal(await evaluate(`nativeWorkspaceFixture.root.querySelector('form').checkValidity()`), false);
+        await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            f.invalidNameSubmits = 0;
+            f.root.querySelector('form').addEventListener('submit', () => { f.invalidNameSubmits += 1; }, { once: true });
+        })()`);
+        await action('Save');
         assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.invalidNameSubmits,
+            nativeWorkspaceFixture.calls.templateSave,
             nativeWorkspaceFixture.writes,
             nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
+            nativeWorkspaceFixture.root.querySelector('[data-field="prepared"]').value,
+        ]`), [0, savesBeforeInvalid, writesBeforeInvalid, '', 'Goals and **plain text**'],
+        'native required validation blocks submission and retains the draft without writing');
+
+        await field('[data-field="name"]', '   ');
+        assert.equal(await evaluate(`nativeWorkspaceFixture.root.querySelector('form').checkValidity()`), true);
+        await action('Save');
+        for (let i = 0; i < 100 && !await evaluate(`nativeWorkspaceFixture.root.textContent.includes('invalid fields')`); i++) {
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.invalidNameSubmits,
+            nativeWorkspaceFixture.calls.templateSave,
+            nativeWorkspaceFixture.writes,
+            nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
+            nativeWorkspaceFixture.root.querySelector('[data-field="prepared"]').value,
             nativeWorkspaceFixture.root.textContent.includes('invalid fields'),
             [...nativeWorkspaceFixture.root.querySelectorAll('button')].find(button => button.textContent === 'Save').disabled,
-            [...nativeWorkspaceFixture.root.querySelectorAll('button')].find(button => button.textContent === 'Cancel').disabled,
-        ]`), [writesBeforeInvalid, '', true, false, false],
+            [...nativeWorkspaceFixture.root.querySelectorAll('.native-workspace-save-actions button')].find(button => button.textContent === 'Cancel').disabled,
+        ]`), [1, savesBeforeInvalid + 1, writesBeforeInvalid, '   ', 'Goals and **plain text**', true, false, false],
         'known validation failure retains the draft and releases the local mutation guard');
         await field('[data-field="name"]', 'Stale retained title');
         await evaluate(`nativeWorkspaceFixture.writer.write(record => ({ ...record, revision: record.revision + 1 }))`);
+        const conflictState = () => evaluate(`(() => {
+            const f = nativeWorkspaceFixture, form = f.root.querySelector('form');
+            return {
+                raw: f.raw, revision: JSON.parse(f.raw).revision, writes: f.writes, saves: f.calls.templateSave,
+                fields: [...form.querySelectorAll('input, select, textarea')].map(field => [
+                    field.closest('[data-native-phase-id]')?.dataset.nativePhaseId ?? null,
+                    field.dataset.field ?? null, field.value, field.checked ?? null,
+                ]),
+                recoveries: [...f.recoveryValues].filter(([, raw]) => {
+                    try { return JSON.parse(raw).draft.template.name === 'Stale retained title'; }
+                    catch { return false; }
+                }),
+            };
+        })()`);
+        const beforeConflict = await conflictState();
+        assert.equal(beforeConflict.recoveries.length, 1, 'the stale edit has a local recovery copy');
         await action('Save');
+        for (let i = 0; i < 100; i++) {
+            if (await evaluate(`(() => {
+                const root = nativeWorkspaceFixture.root;
+                const save = root.querySelector('form button[type="submit"]');
+                const cancel = [...root.querySelectorAll('.native-workspace-save-actions button')]
+                    .find(button => button.textContent.trim() === 'Cancel');
+                return root.textContent.includes('changed elsewhere') && save?.disabled === false && cancel?.disabled === false;
+            })()`)) break;
+            if (i === 99) assert.fail('Conflict feedback and editable draft did not return after Save');
+            await delay(20);
+        }
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
             nativeWorkspaceFixture.root.textContent.includes('changed elsewhere'),
         ]`), ['Stale retained title', true], 'stale aggregate cannot overwrite newer data');
-        await action('Cancel');
+        assert.deepEqual(await conflictState(), { ...beforeConflict, saves: beforeConflict.saves + 1 },
+            'the conflict preserves the complete draft and authoritative record without retrying Save');
+        const { accepted } = await acceptExpectedConfirm([recoveryDiscardConfirm], () => action('Cancel'));
+        assert.equal(accepted, true, 'Cancel explicitly confirms discarding the draft and recovery copy');
+        for (let i = 0; i < 100; i++) {
+            if (await evaluate(`(() => {
+                const root = nativeWorkspaceFixture.root;
+                return !root.querySelector('[data-field="name"]') &&
+                    Boolean(root.querySelector('.template-library')?.getClientRects().length);
+            })()`)) break;
+            if (i === 99) assert.fail('Confirmed Cancel did not return to the visible library');
+            await delay(20);
+        }
+        const [[discardedRecoveryKey]] = beforeConflict.recoveries;
+        assert.deepEqual(await evaluate(`(() => {
+            const f = nativeWorkspaceFixture;
+            return [f.recoveryValues.has(${JSON.stringify(discardedRecoveryKey)}), f.raw, f.writes, f.calls.templateSave];
+        })()`), [false, beforeConflict.raw, beforeConflict.writes, beforeConflict.saves + 1],
+        'confirmed Cancel removes the recovery copy without writing to the authoritative store');
+        console.log('PASS: stale Template Save preserves the draft and Store; the expected native confirm discards only the recovery draft.');
 
-        await rowAction('Independent workshop', 'Export JSON');
-        assert.deepEqual(await evaluate(`(() => {
-            const file = nativeWorkspaceFixture.downloads[0], parsed = JSON.parse(file.text);
-            return [file.name, parsed.kind, parsed.template.id, parsed.template.plan.name];
-        })()`), ['Independent-workshop.json', 'editor-template', 'template-1', 'Independent workshop']);
-        await action('Export all local data');
-        assert.deepEqual(await evaluate(`(() => {
-            const file = nativeWorkspaceFixture.downloads[1], parsed = JSON.parse(file.text);
-            return [file.name, parsed.kind, parsed.record.schemaVersion,
-                nativeWorkspaceFixture.root.textContent.includes('Full backup restore is not yet supported.')];
-        })()`), ['easytimer-local-data.json', 'editor-backup', 1, true],
+        await action('Back');
+        assert.equal(await evaluate(`nativeWorkspaceFixture.root.hasAttribute('data-native-editor-workspace')`), false,
+            'Back closes the Workspace after discarding the conflicting draft');
+        await evaluate('nativeWorkspaceFixture.workspace.open()');
+        assert.equal(await evaluate(`Boolean(nativeWorkspaceFixture.root.querySelector('.template-library')?.getClientRects().length)`),
+            true, 'reopening loads the visible library before preparing a new Import');
+
+        const downloadFor = async exportAction => {
+            const count = await evaluate('nativeWorkspaceFixture.downloads.length');
+            await exportAction();
+            for (let i = 0; i < 100; i++) {
+                const downloads = await evaluate(`nativeWorkspaceFixture.downloads.slice(${count})`);
+                if (downloads.length) {
+                    assert.equal(downloads.length, 1, 'each export produces exactly one download');
+                    return downloads[0];
+                }
+                await delay(20);
+            }
+            assert.fail('Export produced no download');
+        };
+        const sourceTemplate = await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates
+            .find(item => item.id === ${JSON.stringify(sourceTemplateId)})`);
+        assert.equal(sourceTemplate.plan.name, 'Independent workshop');
+        const templateDownload = await downloadFor(() => rowAction('Independent workshop', 'Export JSON', sourceTemplateId));
+        const exportedTemplate = JSON.parse(templateDownload.text);
+        assert.deepEqual([templateDownload.name, exportedTemplate.kind, exportedTemplate.template.id],
+            ['Independent-workshop.json', 'editor-template', sourceTemplateId]);
+        assert.deepEqual(exportedTemplate.template, sourceTemplate, 'export preserves the complete authoritative Template');
+        const backupDownload = await downloadFor(() => action('Export all local data'));
+        const exportedBackup = JSON.parse(backupDownload.text);
+        assert.deepEqual([backupDownload.name, exportedBackup.kind, exportedBackup.record.schemaVersion,
+            await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Full backup restore is not yet supported.')`)],
+        ['easytimer-local-data.json', 'editor-backup', 1, true],
         'complete native local-data export is accurately labelled and does not expose restore');
         await evaluate(`(() => {
             const input = nativeWorkspaceFixture.root.querySelector('input[type="file"]');
@@ -1054,7 +1313,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         assert.equal(await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Choose a JSON file')`), true, 'invalid JSON is rejected');
         await evaluate(`(() => {
             const input = nativeWorkspaceFixture.root.querySelector('input[type="file"]');
-            const transfer = new DataTransfer(); transfer.items.add(new File([nativeWorkspaceFixture.downloads[0].text], 'valid.json', { type: 'application/json' }));
+            const transfer = new DataTransfer(); transfer.items.add(new File([${JSON.stringify(templateDownload.text)}], 'valid.json', { type: 'application/json' }));
             Object.defineProperty(input, 'files', { configurable: true, value: transfer.files });
             input.dispatchEvent(new Event('change', { bubbles: true }));
         })()`);
@@ -1066,7 +1325,9 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         await evaluate(`nativeWorkspaceFixture.uncertainOnSet = true`);
         await action('Import copy');
         for (let i = 0; i < 50; i++) {
-            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('write acknowledgement is uncertain')`)) break;
+            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('write acknowledgement is uncertain') &&
+                Boolean(nativeWorkspaceFixture.tickets.import)`)) break;
+            if (i === 49) assert.fail('Import did not report an uncertain write with a reconciliation ticket');
             await delay(20);
         }
         await evaluate(`(() => {
@@ -1096,7 +1357,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
         assert.equal(await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates.filter(item => item.plan.name === 'Independent workshop').length`), 2,
             'single-template import creates an independent copy');
 
-        await rowAction('Independent workshop', 'Delete');
+        await rowAction('Independent workshop', 'Delete', sourceTemplateId);
         assert.equal(await evaluate(`document.activeElement.textContent.trim()`), 'Keep Template', 'dialog focuses safe action');
         await press('Escape', 'Escape', 27);
         assert.deepEqual(await evaluate(`(() => {
@@ -1104,7 +1365,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             return [dialog.open, document.activeElement.textContent.trim()];
         })()`), [false, 'Delete'], 'Escape closes dialog and restores trigger focus');
         const writesBeforeDelete = await evaluate('nativeWorkspaceFixture.writes');
-        await rowAction('Independent workshop', 'Delete');
+        await rowAction('Independent workshop', 'Delete', sourceTemplateId);
         await evaluate(`nativeWorkspaceFixture.uncertainOnSet = true`);
         await action('Delete Template', '[data-native-dialog]');
         for (let i = 0; i < 50; i++) {
@@ -1134,15 +1395,16 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
             if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Template deleted.')`)) break;
             await delay(20);
         }
-        assert.equal(await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates.some(item => item.id === 'template-1')`), false,
+        assert.equal(await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates.some(item => item.id === ${JSON.stringify(sourceTemplateId)})`), false,
             'confirmed delete removes only selected Template');
-        assert.equal(await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).executions.some(item => item.execution.source?.id === 'template-1')`), true,
+        assert.equal(await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).executions.some(item => item.execution.id === ${JSON.stringify(executionId)}
+            && item.execution.source?.id === ${JSON.stringify(sourceTemplateId)})`), true,
             'existing Execution remains independent after source deletion');
 
         await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('de')`);
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.root.querySelector('h1').textContent,
-            [...nativeWorkspaceFixture.root.querySelectorAll('h2')].map(node => node.textContent).slice(0, 5),
+            [...nativeWorkspaceFixture.root.querySelectorAll('h2.rundown-list-heading')].map(node => node.textContent),
         ]`), ['Session-Editor', ['Vorlagen', 'Geplante Durchführungen', 'Im Timer aktiv', 'Unterbrochen', 'Abgeschlossen']]);
         await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('en')`);
 
@@ -1167,21 +1429,37 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp }) {
                 document.body.classList.contains('planner-open'), localStorage.getItem('easyTimerTemplates') === f.publicState.v1];
         })()`), [0, false, 'quick', '00:00', false, true], 'fixture unmount preserves the public Quick state and unrelated legacy data');
         console.log('PASS: native Workspace; shared lifecycle library, Template CRUD, planned Execution creation/editing, phase content, single-template and full-data export, explicit-only persistence, stale/uncertain reconciliation safety, DE/EN, dialog focus/Escape and mobile portrait/landscape.');
+    } catch (error) {
+        testFailed = true;
+        throw error;
     } finally {
-        await cdp('Emulation.clearDeviceMetricsOverride').catch(() => {});
-        await evaluate(`(() => {
-            const f = window.nativeWorkspaceFixture;
-            const probe = f?.phaseFocusProbe;
-            if (probe) {
-                document.removeEventListener('focusin', probe.resizeDuringFocus);
-                window.scrollBy = probe.scrollBy; HTMLElement.prototype.getBoundingClientRect = probe.bounds;
-                if (probe.viewportDescriptor) Object.defineProperty(window, 'visualViewport', probe.viewportDescriptor);
-                else delete window.visualViewport;
-                delete f.phaseFocusProbe;
-            }
-            if (window.nativeWorkspaceConfirm) window.confirm = window.nativeWorkspaceConfirm;
-            delete window.nativeWorkspaceConfirm;
-            f?.workspace?.close(); f?.root?.remove(); delete window.nativeWorkspaceFixture;
-        })()`).catch(() => {});
+        try {
+            await cdp('Emulation.clearDeviceMetricsOverride');
+            const { value: closed } = await acceptExpectedConfirm([
+                recoveryDiscardConfirm,
+                'Diesen ungespeicherten Entwurf und seine lokale Wiederherstellungskopie verwerfen? Dies kann nicht rückgängig gemacht werden.',
+                'Discard this unsaved draft?',
+                'Diesen ungespeicherten Entwurf verwerfen?',
+            ], () => evaluate(`(() => {
+                const f = window.nativeWorkspaceFixture;
+                const probe = f?.phaseFocusProbe;
+                if (probe) {
+                    document.removeEventListener('focusin', probe.resizeDuringFocus);
+                    window.scrollBy = probe.scrollBy; HTMLElement.prototype.getBoundingClientRect = probe.bounds;
+                    if (probe.viewportDescriptor) Object.defineProperty(window, 'visualViewport', probe.viewportDescriptor);
+                    else delete window.visualViewport;
+                    delete f.phaseFocusProbe;
+                }
+                if (window.nativeWorkspaceConfirm) window.confirm = window.nativeWorkspaceConfirm;
+                delete window.nativeWorkspaceConfirm;
+                const closed = f?.workspace?.close() ?? true;
+                f?.root?.remove(); delete window.nativeWorkspaceFixture;
+                return closed;
+            })()`));
+            assert.equal(closed, true, 'Workspace fixture refused to close during cleanup');
+        } catch (cleanupError) {
+            if (!testFailed) throw cleanupError;
+            console.error('Workspace fixture cleanup failed:', cleanupError);
+        }
     }
 }

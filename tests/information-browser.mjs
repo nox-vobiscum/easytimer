@@ -3,14 +3,68 @@ import { configureQuickTimebox } from './quick-timebox.mjs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createVirtualClock } from './virtual-clock.mjs';
+import { validateTemplate } from '../src/js/editor-domain.mjs';
+import { EDITOR_STORAGE_KEY, insertTemplateInRecord, validateEditorStoreRecord } from '../src/js/editor-storage.mjs';
+
+const nativeKey = JSON.stringify(EDITOR_STORAGE_KEY);
+const nativeRuntime = `JSON.parse(localStorage.getItem(${nativeKey}))?.activeRuntime`;
+const quickRuntime = 'JSON.parse(localStorage.getItem("easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1")))';
+const appReady = 'Boolean(document.body?.dataset.mode && document.querySelector("main:not([aria-busy])"))';
+
+async function seedInformationTemplate(evaluate, { id, name, transitionMode, phases }) {
+    const original = await evaluate(`localStorage.getItem(${nativeKey})`);
+    const record = validateEditorStoreRecord(original ? JSON.parse(original) : {
+        schemaVersion: 1, revision: 0, templates: [], executions: [], activeRuntime: null,
+    });
+    assert.equal(record.activeRuntime, null, 'Information fixture starts without an active Session');
+    const template = validateTemplate({
+        schemaVersion: 2, kind: 'template', id, revision: 1,
+        plan: {
+            name, transitionMode, category: 'workshop', preparedInformation: '',
+            phases: phases.map(phase => ({ ...phase, category: 'presentation', notes: '', resources: [] })),
+        },
+    });
+    const seeded = insertTemplateInRecord(record, { template, expectedAggregateRevision: record.revision });
+    await evaluate(`localStorage.setItem(${nativeKey}, ${JSON.stringify(JSON.stringify(seeded))})`);
+    return original;
+}
+
+async function launchInformationTemplate(evaluate, wait, id, name) {
+    const value = JSON.stringify('template:' + id);
+    await wait(`[...document.querySelector('#session-template').options].some(option => option.value === ${value})`);
+    await evaluate(`(() => {
+        const select = document.querySelector('#session-template');
+        select.value = ${value};
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        document.querySelector('#prepare-session').click();
+    })()`);
+    await wait(`document.body.dataset.mode === 'session' && (${nativeRuntime})?.clock.status === 'READY'
+        && document.querySelector('#workshop-name').textContent === ${JSON.stringify(name)}`);
+}
+
+async function discardInformationSession(evaluate, wait) {
+    await evaluate(`document.querySelector('#stop').click()`);
+    await wait(`document.querySelector('#native-lifecycle-dialog').open`);
+    await evaluate(`document.querySelector('#native-discard').click()`);
+    await wait(`document.body.dataset.mode === 'home' && (${nativeRuntime}) === null`);
+    await evaluate(`document.querySelector('#home-quick').click()`);
+    await wait(`document.body.dataset.mode === 'quick'`);
+}
+
+async function restoreInformationStore(evaluate, original) {
+    if (original === undefined) return;
+    await evaluate(original === null ? `localStorage.removeItem(${nativeKey})`
+        : `localStorage.setItem(${nativeKey}, ${JSON.stringify(original)})`);
+}
 
 export async function checkHeaderIntents({ cdp, evaluate, wait, setConfirmation, confirmations }) {
-    const savedLibrary = await evaluate('localStorage.getItem("easyTimerTemplates")');
-    const record = () => evaluate('JSON.parse(localStorage.getItem("easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1")))');
+    let savedLibrary;
+    const record = () => evaluate(quickRuntime);
+    const sessionRecord = () => evaluate(nativeRuntime);
     const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
     const navigate = async (selector, info) => {
         const before = await evaluate('performance.timeOrigin'); await click(selector);
-        await wait(`performance.timeOrigin!==${before} && document.readyState==='complete' && ${info ? 'Boolean(document.querySelector(".info-return")&&document.querySelector("[data-language]"))' : 'Boolean(document.querySelector("#primary")?.title) && document.body?.dataset.mode'}`);
+        await wait(`performance.timeOrigin!==${before} && document.readyState==='complete' && ${info ? 'Boolean(document.querySelector(".info-return")&&document.querySelector("[data-language]"))' : appReady}`);
     };
     const enter = async () => {
         await evaluate('if(document.querySelector("#preferences").hidden)document.querySelector("#menu-toggle").click()');
@@ -25,9 +79,11 @@ export async function checkHeaderIntents({ cdp, evaluate, wait, setConfirmation,
     };
     const reload = async () => {
         const before = await evaluate('performance.timeOrigin'); await cdp('Page.reload');
-        await wait(`performance.timeOrigin!==${before} && Boolean(document.querySelector('#primary')?.title)`);
+        await wait(`performance.timeOrigin!==${before} && ${appReady}`);
     };
     try {
+        if (await evaluate('document.body.dataset.mode === "home"')) await click('#home-quick');
+        await configureQuickTimebox(evaluate, 60000);
         await click('#primary'); await click('#primary');
         const quick = await record(); assert.equal(quick.clock.status, 'PAUSED');
         const initialCount = confirmations();
@@ -50,24 +106,30 @@ export async function checkHeaderIntents({ cdp, evaluate, wait, setConfirmation,
         assert.deepEqual((await record()).clock, quick.clock, 'Same-mode intent reveals the existing timer from Editor');
 
         setConfirmation(true);
-        const library = { schemaVersion:1, templates:[{ id:'header-intent', name:'Header intent', transitionMode:'manual', phases:[{ id:'header-phase', title:'Header phase', durationSeconds:60 }] }] };
-        await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(library))})`);
+        savedLibrary = await seedInformationTemplate(evaluate, {
+            id: 'header-intent', name: 'Header intent', transitionMode: 'manual',
+            phases: [{ id:'header-phase', title:'Header phase', durationSeconds:60 }],
+        });
         await enter(); await request('session');
         await wait('!document.querySelector("#session-picker").hidden');
-        await evaluate('const select=document.querySelector("#session-template");select.value="header-intent";select.dispatchEvent(new Event("change"));document.querySelector("#prepare-session").click()');
-        await wait('document.querySelector("#workshop-name").textContent==="Header intent"');
-        await click('#primary'); await click('#primary');
-        const session = await record();
+        await launchInformationTemplate(evaluate, wait, 'header-intent', 'Header intent');
+        await click('#primary'); await wait(`(${nativeRuntime})?.clock.status === 'RUNNING'`);
+        await click('#primary'); await wait(`(${nativeRuntime})?.clock.status === 'PAUSED'`);
+        const session = await sessionRecord();
         const beforeSame = confirmations(); await enter(); await request('session');
-        assert.deepEqual((await record()).run, session.run);
-        assert.deepEqual((await record()).clock, session.clock);
+        assert.deepEqual((await sessionRecord()).run, session.run);
+        assert.deepEqual((await sessionRecord()).clock, session.clock);
         assert.equal(confirmations(), beforeSame, 'Same-mode Session never enters the replacement path');
         setConfirmation(false); await enter(); await request('quick');
-        assert.equal((await record()).run.runId, session.run.runId);
+        assert.equal((await sessionRecord()).run.runId, session.run.runId);
         assert.equal(await evaluate('document.body.dataset.mode'), 'session');
         const beforeReload = confirmations(); await reload();
-        assert.equal(confirmations(), beforeReload); assert.equal((await record()).run.runId, session.run.runId);
-        setConfirmation(true); await enter(); await request('quick');
+        assert.equal(confirmations(), beforeReload); assert.equal((await sessionRecord()).run.runId, session.run.runId);
+        await click('#stop'); await wait('document.querySelector("#native-lifecycle-dialog").open');
+        await click('#native-lifecycle-cancel');
+        assert.equal((await sessionRecord()).run.runId, session.run.runId);
+        setConfirmation(true);
+        await discardInformationSession(evaluate, wait);
         assert.equal(await evaluate('document.body.dataset.mode'), 'quick');
 
         await evaluate('const key="easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1");const pending=JSON.parse(localStorage.getItem(key));pending.recoveryPending=true;localStorage.setItem(key,JSON.stringify(pending))');
@@ -83,7 +145,7 @@ export async function checkHeaderIntents({ cdp, evaluate, wait, setConfirmation,
         console.log('PASS: shared menu handoff, same-mode Quick/Session identity, Editor return, accepted/cancelled replacement, one-time consumption and pending-recovery intent discard.');
     } finally {
         setConfirmation(true);
-        await evaluate(`if(${JSON.stringify(savedLibrary)}===null)localStorage.removeItem('easyTimerTemplates');else localStorage.setItem('easyTimerTemplates',${JSON.stringify(savedLibrary)})`);
+        await restoreInformationStore(evaluate, savedLibrary);
     }
 }
 
@@ -198,9 +260,11 @@ export async function checkInformation({ cdp, evaluate, wait, origin, screenshot
 // actual recovery deadlines across real document navigations, not display text.
 export async function checkInformationContinuity({ cdp, evaluate, wait }) {
     const clock = createVirtualClock(evaluate);
-    const savedLibrary = await evaluate('localStorage.getItem("easyTimerTemplates")');
+    let savedLibrary;
     const originKey = 'easyTimerInformationOrigin.v1';
-    const readRecord = () => evaluate('JSON.parse(localStorage.getItem("easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1")))');
+    const readRecord = () => evaluate(quickRuntime);
+    const readSession = () => evaluate(nativeRuntime);
+    const readStoredState = () => evaluate(`[(${quickRuntime}), localStorage.getItem(${nativeKey})]`);
     let bootstrap;
     const syncClock = async () => {
         const now = await evaluate('Date.now()');
@@ -211,7 +275,7 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
         await syncClock();
         const before = await evaluate('performance.timeOrigin');
         await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
-        await wait(`performance.timeOrigin!==${before} && document.readyState==='complete' && ${info ? 'Boolean(document.querySelector(".info-return"))' : 'Boolean(document.querySelector("#primary")?.title) && document.body?.dataset.mode'}`);
+        await wait(`performance.timeOrigin!==${before} && document.readyState==='complete' && ${info ? 'Boolean(document.querySelector(".info-return"))' : appReady}`);
     };
     const menu = async selector => {
         await evaluate('if(document.querySelector("#preferences").hidden)document.querySelector("#menu-toggle").click()');
@@ -229,7 +293,7 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
             assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("[data-info-back]"),a=>a.getAttribute("href"))'), hrefs, 'Label changes never alter return destinations');
         }
     };
-    const excursion = async (view, duration, reload = false) => {
+    const excursion = async (view, duration, reload = false, beforeReturn = undefined) => {
         const context = await evaluate('sessionStorage.getItem("easyTimerRuntimeContext.v1")');
         await evaluate('if(document.querySelector("#preferences").hidden)document.querySelector("#menu-toggle").click()');
         await navigate('[data-information=about]', true);
@@ -246,15 +310,16 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
             await assertReturnLabels(view);
         }
         assert.equal(await evaluate(`sessionStorage.getItem('${originKey}')`), origin);
-        const recordWhileAway = await readRecord();
+        const recordWhileAway = await readStoredState();
         await clock.advance(duration); await syncClock();
-        assert.deepEqual(await readRecord(), recordWhileAway, 'Information pages never tick or write runtime storage');
+        assert.deepEqual(await readStoredState(), recordWhileAway, 'Information pages never tick or write Quick or native Session storage');
         if (view === 'editor') {
             // Prove return uses the retained origin, not merely the ordinary last-view fallback.
             await evaluate('sessionStorage.setItem("easyTimerView.v1","quick")');
         }
         await evaluate('document.querySelector(".info-return").focus()');
         assert.equal(await evaluate('getComputedStyle(document.activeElement).outlineStyle'), 'solid');
+        if (beforeReturn) await beforeReturn();
         await navigate('.info-return', false);
         assert.equal(await evaluate('sessionStorage.getItem("easyTimerRuntimeContext.v1")'), context);
         assert.equal(await evaluate(`sessionStorage.getItem('${originKey}')`), null, 'Origin is consumed on application return');
@@ -288,38 +353,66 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
         assert.equal(await evaluate('document.querySelector("#time").textContent'), '+00:30');
         await evaluate('document.querySelector("#stop").click()');
 
-        const library = { schemaVersion:1, templates:[{ id:'information-run', name:'Information continuity', transitionMode:'automatic',
-            phases:[{ id:'info-first', title:'First', durationSeconds:60 }, { id:'info-second', title:'Second', durationSeconds:120 }] }] };
-        await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(JSON.stringify(library))})`);
+        savedLibrary = await seedInformationTemplate(evaluate, {
+            id: 'information-run', name: 'Information continuity', transitionMode: 'automatic',
+            phases: [{ id:'info-first', title:'First', durationSeconds:60 }, { id:'info-second', title:'Second', durationSeconds:120 }],
+        });
         await evaluate('window.confirm=()=>true'); await menu('#open-session');
-        await evaluate('const s=document.querySelector("#session-template");s.value="information-run";s.dispatchEvent(new Event("change"));document.querySelector("#prepare-session").click()');
-        await wait('document.querySelector("#workshop-name").textContent === "Information continuity" && document.querySelector("#status").textContent === "Ready"');
+        await launchInformationTemplate(evaluate, wait, 'information-run', 'Information continuity');
         await evaluate('document.querySelector("#primary").click()');
-        const session = await readRecord();
+        await wait(`(${nativeRuntime})?.clock.status === 'RUNNING'`);
+        const session = await readSession();
         await excursion('session', '70s');
-        const reached = await readRecord();
+        const reached = await readSession();
         assert.equal(reached.run.runId, session.run.runId);
-        assert.equal(reached.run.currentIndex, 1);
-        assert.equal(reached.clock.deadlineMs, session.clock.deadlineMs + 120000);
+        assert.equal(reached.executionId, session.executionId);
+        assert.equal(reached.attemptId, session.attemptId);
+        // Adoption projects elapsed time locally. The next authoritative action persists that projection.
+        const projectedDeadline = session.clock.deadlineMs + 120000;
+        assert.equal(projectedDeadline - await evaluate('Date.now()'), 110000);
+        assert.equal(await evaluate('document.querySelector("#current-phase").textContent'), 'Second');
         assert.equal(await evaluate('document.querySelector("#time").textContent'), '01:50');
         await evaluate('document.querySelector("#primary").click()');
-        const sessionPaused = await readRecord();
+        await wait(`(${nativeRuntime})?.clock.status === 'PAUSED'`);
+        const sessionPaused = await readSession();
+        assert.equal(sessionPaused.run.currentIndex, 1);
+        assert.equal(sessionPaused.clock.remainingMs, projectedDeadline - await evaluate('Date.now()'));
         await excursion('session', '3m');
-        assert.deepEqual((await readRecord()).run, sessionPaused.run);
-        assert.deepEqual((await readRecord()).clock, sessionPaused.clock);
+        assert.equal(await evaluate('document.body.classList.contains("planner-open")'), false,
+            'Returning from a Session origin does not open the Editor');
+        assert.deepEqual((await readSession()).run, sessionPaused.run);
+        assert.deepEqual((await readSession()).clock, sessionPaused.clock);
         await menu('#open-planner');
         await excursion('editor', '10s', true);
         assert(await evaluate('document.body.classList.contains("planner-open")'));
-        assert.equal((await readRecord()).run.runId, session.run.runId);
-        await evaluate('document.querySelector(".planner-back").click()');
+        const editorReturn = await readSession();
+        assert.equal(editorReturn.executionId, sessionPaused.executionId);
+        assert.equal(editorReturn.attemptId, sessionPaused.attemptId);
+        assert.deepEqual(editorReturn.run, sessionPaused.run);
+        assert.deepEqual(editorReturn.clock, sessionPaused.clock);
+        assert.equal(await evaluate('sessionStorage.getItem("easyTimerView.v1")'), 'editor');
+        await evaluate(`sessionStorage.setItem('${originKey}', JSON.stringify({view:'editor'}))`);
+        assert.equal(await evaluate('new URL(location.href).searchParams.has("from")'), false);
+        await syncClock();
+        const editorDocument = await evaluate('performance.timeOrigin');
+        await cdp('Page.reload');
+        await wait(`performance.timeOrigin !== ${editorDocument} && ${appReady}`);
+        assert.deepEqual(await evaluate(`[document.body.dataset.mode,
+            document.querySelector('#planner').hidden,
+            document.body.classList.contains('planner-open'),
+            document.querySelector('#status').textContent]`), ['session', true, false, 'Paused'],
+        'Ordinary reload adopts a paused Session without opening an Editor from saved navigation metadata');
+        assert.deepEqual(await readSession(), editorReturn);
         // A durable unresolved choice must win over any remembered return view.
-        await evaluate('window.confirm=()=>true'); await menu('#open-quick');
+        await discardInformationSession(evaluate, wait);
         await evaluate('const k="easyTimerRuntime.v1."+sessionStorage.getItem("easyTimerRuntimeContext.v1");const r=JSON.parse(localStorage.getItem(k));r.recoveryPending=true;localStorage.setItem(k,JSON.stringify(r))');
         await syncClock();
         const before = await evaluate('performance.timeOrigin'); await cdp('Page.reload');
         await wait(`performance.timeOrigin!==${before} && document.querySelector('#runtime-recovery')?.hidden===false`);
-        await excursion('quick', '10s', true);
+        await excursion('quick', '10s', true, () => evaluate(`sessionStorage.setItem('${originKey}', JSON.stringify({view:'editor'}))`));
         assert.equal(await evaluate('document.querySelector("#runtime-recovery").hidden'), false);
+        assert.equal(await evaluate('document.body.classList.contains("planner-open")'), false,
+            'Unresolved Quick Recovery takes precedence over an Editor return origin');
         assert.equal(await evaluate('document.querySelector("#recovery-select").value'), '');
         await evaluate('document.querySelector("#recovery-dismiss").click()');
         // With no known origin, even repeated direct visits use the normal entry.
@@ -337,9 +430,9 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
     } finally {
         if (bootstrap) await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier:bootstrap });
         await clock.restore();
-        await evaluate(`if(${JSON.stringify(savedLibrary)}===null)localStorage.removeItem('easyTimerTemplates');else localStorage.setItem('easyTimerTemplates',${JSON.stringify(savedLibrary)})`);
+        await restoreInformationStore(evaluate, savedLibrary);
         // Leave the injected clock behind before another scenario starts a timer.
         const realTimeOrigin = await evaluate('performance.timeOrigin'); await cdp('Page.reload');
-        await wait(`performance.timeOrigin!==${realTimeOrigin} && Boolean(document.querySelector('#primary')?.title)`);
+        await wait(`performance.timeOrigin!==${realTimeOrigin} && ${appReady}`);
     }
 }

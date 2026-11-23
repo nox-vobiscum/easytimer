@@ -8,6 +8,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { packageProduction, verifyArtifact } from '../tools/release/package.mjs';
 import { checkInformation, checkInformationContinuity, checkHeaderIntents } from './information-browser.mjs';
 
+const homeReady = `document.body?.dataset.mode === 'home'
+    && Boolean(document.querySelector('main:not([aria-busy]) #home-view:not([hidden]) #home-quick:enabled'))`;
+
 const artifact = await packageProduction();
 await verifyArtifact(artifact.directory);
 for (const negativeControl of [false, true]) await checkOffline(negativeControl);
@@ -21,7 +24,7 @@ async function checkOffline(negativeControl) {
             // Serve only the generated artifact, never the repository or tools.
             assert(artifact.inventory.files.some(file => file.path === 'src/' + relative));
             const path = resolve(artifact.webRoot, relative), body = await readFile(path);
-            res.writeHead(200, { 'Content-Type': ({ '.html':'text/html', '.js':'text/javascript', '.mjs':'text/javascript', '.css':'text/css', '.webmanifest':'application/manifest+json', '.png':'image/png', '.ico':'image/x-icon' })[extname(path)] });
+            res.writeHead(200, { 'Content-Type': ({ '.html':'text/html', '.js':'text/javascript', '.mjs':'text/javascript', '.css':'text/css', '.webmanifest':'application/manifest+json', '.png':'image/png', '.ico':'image/x-icon', '.txt':'text/plain' })[extname(path)] });
             res.end(body);
         } catch { res.writeHead(404); res.end(); }
     });
@@ -70,12 +73,18 @@ async function checkOffline(negativeControl) {
         const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
         await cdp('Page.enable'); await cdp('Runtime.enable'); await cdp('Network.enable');
         await cdp('Page.navigate', { url: origin + '/' });
-        await wait('Boolean(document.getElementById("primary")?.title)&&Boolean(navigator.serviceWorker.controller)');
+        await wait(homeReady);
+        await wait('Boolean(navigator.serviceWorker.controller)');
+        await click('#home-quick');
+        await wait('document.body.dataset.mode === "quick" && !document.getElementById("timer-view").hidden && document.getElementById("primary").dataset.action === "start"');
         assert.equal(await evaluate('document.getElementById("time").textContent'), '00:00');
         assert.deepEqual(await evaluate('Promise.all(["/tools/app-sync/account.mjs","/tools/sync-poc/index.html","/tests/browser-check.mjs","/docs/backlog.md"].map(url=>fetch(url).then(r=>r.status)))'), [404,404,404,404]);
         assert.equal(await evaluate('document.querySelectorAll("#account-toggle,#account-menu-entry,.development-sync").length'), 0);
         assert.equal(await evaluate('typeof globalThis.easyTimerDevelopment'), 'undefined');
         if (!negativeControl) {
+            await click('#menu-toggle');
+            await click('#open-home');
+            await wait(homeReady);
             await checkInformation({ cdp, evaluate, wait, origin, screenshots:profile });
             await checkInformationContinuity({ cdp, evaluate, wait });
             await checkHeaderIntents({ cdp, evaluate, wait, setConfirmation: value => { acceptConfirmation = value; }, confirmations: () => dialogs.filter(type => type === 'confirm').length });
@@ -134,14 +143,35 @@ async function checkOffline(negativeControl) {
             await wait('document.body.dataset.mode === "session"');
             assert.equal(await evaluate('document.body.dataset.mode'), 'session');
             assert.equal(await evaluate('document.getElementById("status").textContent'), 'Ready');
-            await click('#primary'); await click('#primary');
-            const run = await evaluate('JSON.parse(localStorage.getItem("easyTimerEditor.v1"))');
+            const storedSession = 'JSON.parse(localStorage.getItem("easyTimerEditor.v1"))';
+            const sessionIdentity = ({ activeRuntime, executions }) => [
+                activeRuntime.run.runId, activeRuntime.executionId,
+                executions.find(entry => entry.execution.id === activeRuntime.executionId).execution.attempt.id,
+                activeRuntime.run.currentIndex,
+            ];
+            await click('#primary');
+            await wait(`${storedSession}.activeRuntime.clock.status === "RUNNING" &&
+                document.getElementById("status").textContent === "Running" &&
+                Boolean(document.querySelector("#primary:enabled")?.getClientRects().length)`);
+            const running = await evaluate(storedSession);
+            assert.ok(Number.isFinite(running.activeRuntime.clock.deadlineMs), 'RUNNING persists a deadline');
+            await click('#primary');
+            await wait(`${storedSession}.activeRuntime.clock.status === "PAUSED" &&
+                document.getElementById("status").textContent === "Paused"`);
+            const run = await evaluate(storedSession);
             assert.equal(run.activeRuntime.clock.status, 'PAUSED');
+            assert.deepEqual(sessionIdentity(run), sessionIdentity(running), 'Pause preserves Session identity and phase progress');
+            assert.equal(run.activeRuntime.clock.deadlineMs, null, 'Pause clears the running deadline');
+            assert.ok(run.activeRuntime.clock.remainingMs > 0 &&
+                run.activeRuntime.clock.remainingMs <= running.activeRuntime.clock.remainingMs);
             const pausedOrigin = await evaluate('performance.timeOrigin');
             await cdp('Page.reload'); await wait(`performance.timeOrigin!==${pausedOrigin} && document.body?.dataset.mode==="session" && document.getElementById("status")?.textContent==="Paused"`);
             assert.equal(await evaluate('document.body.dataset.mode'), 'session');
             assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerEditor.v1")).templates[0].id'), library.templates[0].id);
             assert.equal(await evaluate('JSON.parse(localStorage.getItem("easyTimerEditor.v1")).activeRuntime.run.runId'), run.activeRuntime.run.runId);
+            const reloaded = await evaluate(storedSession);
+            assert.deepEqual(sessionIdentity(reloaded), sessionIdentity(run), 'Reload preserves paused Session identity and phase progress');
+            assert.deepEqual(reloaded.activeRuntime.clock, run.activeRuntime.clock, 'Reload preserves the paused clock');
             await checkInformation({ cdp, evaluate, wait, origin, screenshots:profile, offline:true });
             assert.deepEqual(exceptions, []);
             console.log('PASS: packaged production cold-starts with server stopped and HTTP cache disabled; Quick, Editor save, Session READY/pause and reload recovery work offline.');

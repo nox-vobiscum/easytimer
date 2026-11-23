@@ -1486,6 +1486,7 @@ let savedView;
 try { savedView = sessionStorage.getItem(VIEW_KEY); } catch { /* Use the recovered runtime view. */ }
 const returnURL = new URL(location.href);
 let informationIntent = null;
+let returningToInformationEditor = false;
 if (returnURL.searchParams.get('from') === 'information') {
     const intent = returnURL.searchParams.get('open');
     if (['home', 'quick', 'session', 'editor'].includes(intent)) informationIntent = intent;
@@ -1494,6 +1495,7 @@ if (returnURL.searchParams.get('from') === 'information') {
     try {
         const origin = JSON.parse(sessionStorage.getItem(INFORMATION_ORIGIN_KEY));
         if (['home', 'quick', 'session', 'editor'].includes(origin?.view)) savedView = origin.view;
+        returningToInformationEditor = origin?.view === 'editor' && informationIntent === null;
     } catch { /* Invalid/missing navigation metadata does not affect recovery. */ }
     returnURL.searchParams.delete('from');
     history.replaceState(null, '', returnURL);
@@ -1503,7 +1505,7 @@ const unresolvedRecovery = legacyCurrentRecovery || Boolean(nativeStartupFeedbac
     || (mode === 'quick' && recovery.pending) || (!recovery.restored && recovery.error);
 if (!unresolvedRecovery && !nativeRuntime && savedView === 'home' && !recovery.restored) {
     homeOpen = true;
-} else if (!unresolvedRecovery && !nativeRuntime && savedView === 'editor') {
+} else if (!unresolvedRecovery && savedView === 'editor' && (!nativeRuntime || returningToInformationEditor)) {
     await openEditor();
 } else if (!unresolvedRecovery && !nativeRuntime && savedView === 'session' && mode !== 'session' && !recovery.restored) {
     // No accessible Run: restore the existing picker, never an empty Session screen.
