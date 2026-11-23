@@ -1116,13 +1116,23 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
             nativeWorkspaceFixture.root.textContent.includes('write acknowledgement is uncertain'),
         ]`), [writesBeforeExecution + 1, 'Independent execution', true], 'uncertain planning retains local plan edits');
+        const executionId = await evaluate("'execution-' + nativeWorkspaceFixture.execution");
+        const storeBeforePlanningRecheck = await evaluate('nativeWorkspaceFixture.raw');
         await action('Recheck without writing');
+        for (let i = 0; i < 100; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Execution creation is confirmed') &&
+                nativeWorkspaceFixture.root.querySelector('button[type="submit"]')?.disabled === false`)) break;
+            if (i === 99) assert.fail('Planning Recheck did not confirm the created Execution and release Save');
+            await delay(20);
+        }
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.writes,
             nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
             nativeWorkspaceFixture.root.textContent.includes('Execution creation is confirmed'),
-        ]`), [writesBeforeExecution + 1, 'Independent execution', true], 'planning recheck observes exact created identity without a write');
-        const executionId = await evaluate("'execution-' + nativeWorkspaceFixture.execution");
+            nativeWorkspaceFixture.root.querySelector('[data-field="prepared"]').value,
+            nativeWorkspaceFixture.raw,
+        ]`), [writesBeforeExecution + 1, 'Independent execution', true, 'Execution-only information', storeBeforePlanningRecheck],
+        'planning recheck observes exact created identity without a write');
         const savedExecution = `record.executions.find(item => item.execution.id === ${JSON.stringify(executionId)}).execution`;
         const editableExecutionButton = revision => `(() => {
             const row = [...nativeWorkspaceFixture.root.querySelectorAll('.template-library li')].find(row =>
@@ -1412,14 +1422,29 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             await cdp('Emulation.setDeviceMetricsOverride', {
                 width, height, screenWidth: width, screenHeight: height, mobile, deviceScaleFactor: 1,
             });
-            assert.equal(await evaluate(`(() => {
+            const violations = await evaluate(`(() => {
                 const root = nativeWorkspaceFixture.root;
-                return document.documentElement.scrollWidth <= innerWidth
-                    && [...root.querySelectorAll('button,input,select,textarea')].filter(node => !node.hidden).every(node => {
-                        const rect = node.getBoundingClientRect();
-                        return rect.width >= 44 && rect.height >= 44 && rect.left >= 0 && rect.right <= innerWidth;
-                    });
-            })()`), true, `Workspace controls fit ${width}x${height}`);
+                const violations = [];
+                const pageWidth = document.documentElement.scrollWidth;
+                if (pageWidth > innerWidth) {
+                    violations.push({ element: 'html', criterion: 'no horizontal page overflow', pageWidth, viewportWidth: innerWidth });
+                }
+                for (const node of root.querySelectorAll('button,input,select,textarea')) {
+                    if (!node.getClientRects().length || !node.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
+                    const closedDetails = node.closest('details:not([open])');
+                    if (closedDetails && !closedDetails.querySelector(':scope > summary')?.contains(node)) continue;
+                    const { width, height, left, right } = node.getBoundingClientRect();
+                    const element = { tag: node.localName, id: node.id, label: node.getAttribute('aria-label') || node.textContent.trim(),
+                        field: node.dataset.field, action: node.dataset.action, width, height, left, right };
+                    if (width < 44 || height < 44) violations.push({ ...element, criterion: 'minimum 44 × 44 CSS pixels' });
+                    if (left < 0 || right > innerWidth) {
+                        violations.push({ ...element, criterion: 'inside horizontal viewport', viewportWidth: innerWidth });
+                    }
+                }
+                return violations;
+            })()`);
+            assert.deepEqual(violations, [], `Workspace controls fit ${width}x${height}: ${JSON.stringify(violations)}`);
+            console.log(`PASS: Workspace controls fit ${width}x${height}.`);
         }
         await cdp('Emulation.clearDeviceMetricsOverride');
         assert.deepEqual(await evaluate(`(() => {
