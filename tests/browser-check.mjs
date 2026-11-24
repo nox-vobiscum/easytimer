@@ -95,6 +95,9 @@ try {
     function acceptExpectedConfirm(messages, action, { accept = true } = {}) {
         return withExpectedDialog(event => event.type === 'confirm' && messages.includes(event.message), accept, action);
     }
+    function acceptExpectedUnload(action) {
+        return withExpectedDialog(event => event.type === 'beforeunload', true, action);
+    }
     function cdp(method, params = {}) {
         const error = new Error(`Browser command timed out: ${method}`);
         return new Promise((resolve, reject) => {
@@ -227,11 +230,114 @@ try {
         assert.equal(await text('#time-budget'),before.budget,'Menu preserves budget');
         if(state==='READY'||state==='PAUSED') assert.equal(await text('#time'),before.time,'Menu preserves frozen time');
     }
+    async function waitForBrowserState(expression, message) {
+        for (let attempt = 0; attempt < 100; attempt++) {
+            const value = await evaluate(expression);
+            if (value) return value;
+            await delay(50);
+        }
+        assert.fail(message);
+    }
+    function waitForWorkspaceLibrary() {
+        return waitForBrowserState("Boolean(document.querySelector('#planner:not([hidden]) > section > .planner-actions'))",
+            'The Event Editor did not render its Template library');
+    }
+    async function checkWorkspaceBack() {
+        await click('#menu-toggle'); await click('#open-session');
+        assert.equal(await evaluate(`document.querySelector('#open-session').getAttribute('aria-pressed')==='true'&&document.querySelector('#open-quick').getAttribute('aria-pressed')==='false'`),true,'Session picker marks Session active');
+        const origin = await evaluate('performance.timeOrigin');
+        const history = await cdp('Page.getNavigationHistory');
+        await click('#menu-toggle');
+        const opening = await evaluate(`(() => {
+            document.querySelector('#open-planner').click();
+            return {
+                mode:document.body.dataset.mode, view:sessionStorage.getItem('easyTimerView.v1'),
+                visible:['#home-view','#timer-view','#session-picker','#planner'].filter(selector =>
+                    getComputedStyle(document.querySelector(selector)).display !== 'none'),
+                back:!!document.querySelector('#planner .planner-back'),
+                content:document.querySelector('#planner').textContent.slice(0,160)
+            };
+        })()`);
+        assert.equal(await evaluate(`!document.querySelector('#planner').hidden&&document.querySelector('#open-session').getAttribute('aria-pressed')==='true'&&!document.querySelector('#open-planner').hasAttribute('aria-pressed')`),true,'Planner does not become a third mode');
+        if (process.env.EASYTIMER_WORKSPACE_BACK_ONLY === '1') {
+            console.log('Workspace opening:', opening, 'history index:', history.currentIndex);
+        }
+        await waitForWorkspaceLibrary();
+        await assertPrimaryView('editor', 'The rendered Workspace is the only primary view');
+        await click('#planner .planner-back');
+        await assertPrimaryView('picker', 'Workspace Back restores only the Event Picker');
+        assert.equal(await evaluate('performance.timeOrigin'), origin, 'Workspace navigation stays in the same document');
+        assert.deepEqual(await cdp('Page.getNavigationHistory'), history, 'Workspace navigation leaves browser history unchanged');
+        await click('#menu-toggle'); await click('#open-quick');
+        assert.equal(await text('#time'),'05:00'); await checkTitle('READY');
+        console.log('PASS: Event Picker to Workspace and Back preserves the active mode and the Quick Timer.');
+    }
+    async function checkOfflineFirstStart() {
+        await click('[data-language="en"]');
+        await configure(0, 5, 0);
+        await click('#menu-toggle'); await click('#open-planner');
+        await waitForWorkspaceLibrary();
+        await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='New Event Template').click()`);
+        await evaluate(`(()=>{const input=document.querySelector('#planner [data-field="name"]');input.value='Offline workshop';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+        await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Add phase').click()`);
+        await evaluate(`(()=>{const title=document.querySelector('#planner [data-field="title"]');title.value='Offline phase';title.dispatchEvent(new Event('input',{bubbles:true}));const duration=document.querySelector('#planner [data-field="duration"]');duration.value='1';duration.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+        await evaluate(`document.querySelector('#planner form').requestSubmit()`);
+        for (let i=0;i<100&&!await evaluate(`document.querySelector('#planner').textContent.includes('Saved.')`);i++) await delay(20);
+        assert.match(await text('#planner'), /Saved\./, 'The offline fixture saves before leaving the Editor');
+        const offlineTemplateId = await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).templates.find(item=>item.plan.name==='Offline workshop').id`);
+        await click('.planner-back');
+        await waitForBrowserState('Boolean(navigator.serviceWorker.controller)', 'The service worker did not take control before going offline');
+        await cdp('Network.enable');
+        await cdp('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
+        await reloadReady();
+        assert.equal(await text('#time'), '05:00');
+        assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
+        await click('#menu-toggle'); await click('#open-planner');
+        await waitForWorkspaceLibrary();
+        assert.match(await text('.template-library'), /Offline workshop/, 'Native Templates and Workspace modules survive an offline reload');
+        await reloadReady();
+        assert.equal(await evaluate("document.body.classList.contains('planner-open')"), true, 'Offline refresh restores the Editor view');
+        assert.match(await text('.template-library'), /Offline workshop/);
+        await click('.planner-back');
+        await click('#menu-toggle'); await click('#open-session');
+        await waitForBrowserState(`Array.from(document.querySelector('#session-template').options)
+            .some(option => option.value === 'template:' + ${JSON.stringify(offlineTemplateId)})`,
+            'The Event Picker did not load the offline Template');
+        await evaluate(`(()=>{const select=document.querySelector('#session-template');select.value='template:'+${JSON.stringify(offlineTemplateId)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+        await click('#prepare-session');
+        await waitForBrowserState(`document.querySelector('#session-picker').hidden
+            && document.querySelector('#status').textContent === 'Ready'
+            && JSON.parse(localStorage.getItem('easyTimerEditor.v1')).activeRuntime?.clock.status === 'READY'`,
+            'Start Event did not install the authoritative READY timer offline');
+        assert.equal(await text('#status'), 'Ready', 'A saved Session template prepares offline using cached engine/modules');
+        const readyRecord = await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1'))`);
+        const offlineRunId = readyRecord.activeRuntime.run.runId;
+        assert.equal(readyRecord.activeRuntime.clock.status, 'READY');
+        assert.equal(readyRecord.activeRuntime.attemptId, null);
+        await click('#primary');
+        const startedRecord = await waitForBrowserState(`(() => {
+            const record = JSON.parse(localStorage.getItem('easyTimerEditor.v1'));
+            return record.activeRuntime?.clock.status === 'RUNNING' && record.activeRuntime.attemptId !== null ? record : null;
+        })()`, 'First Start did not persist the authoritative RUNNING timer offline');
+        assert.equal(startedRecord.activeRuntime.clock.status, 'RUNNING', 'First Start is confirmed before offline reload');
+        assert.notEqual(startedRecord.activeRuntime.attemptId, null);
+        assert.equal(startedRecord.activeRuntime.run.runId, offlineRunId);
+        assert.equal(startedRecord.revision, readyRecord.revision + 1, 'First Start performs exactly one authoritative write');
+        await reloadReady('session');
+        assert.equal(await evaluate('document.body.dataset.mode'), 'session', 'Session runtime is restored during offline PWA reload');
+        assert.equal(await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).activeRuntime.run.runId`), offlineRunId);
+        assert.deepEqual(await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1'))`), startedRecord,
+            'Offline recovery preserves the exact Event store without extra writes');
+        assert.equal(await text('#status'), 'Running');
+        await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
+        console.log(`PASS: offline first Start writes RUNNING once (revision ${readyRecord.revision} → ${startedRecord.revision}) and reload preserves the same Run and exact store.`);
+    }
     await cdp('Runtime.enable');
     await cdp('Page.enable');
     if (!timeTravelOptions.names.length && process.env.EASYTIMER_NATIVE_PHASE_FIELDS_ONLY !== '1'
         && process.env.EASYTIMER_EDITOR_RUNTIME_ONLY !== '1' && process.env.EASYTIMER_PUBLIC_CUTOVER_ONLY !== '1'
-        && process.env.EASYTIMER_UX011_ONLY !== '1') {
+        && process.env.EASYTIMER_UX011_ONLY !== '1' && process.env.EASYTIMER_WORKSPACE_BACK_ONLY !== '1'
+        && process.env.EASYTIMER_OFFLINE_FIRST_START_ONLY !== '1') {
         // Separate the fresh Draft Recovery scenario from the other tests' library and view state.
         draftReloadActive = true;
         try { await checkNativeDraftReload({ evaluate, cdp, origin: `http://localhost:${server.address().port}` }); }
@@ -246,10 +352,20 @@ try {
     await assertPrimaryView('home', 'Fresh ordinary visit exposes only Home');
     assert.equal(await evaluate(`document.querySelector('#home-stopwatch').disabled&&document.querySelector('#home-stopwatch').getAttribute('aria-describedby')?.split(' ').includes('home-stopwatch-note')`),true,'Stopwatch is visible and accessibly unavailable');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.home-action .navigation-icon')).length===4`),true,'Landing actions reuse the established menu icon artwork');
-    await click('[data-language="de"]');
-    assert.equal(await text('#home-heading'),'Timing is everything.');
-    await click('[data-language="en"]');
-    assert.equal(await text('#home-heading'),'Timing is everything.');
+    for (const language of ['de', 'en']) {
+        await click(`[data-language="${language}"]`);
+        assert.equal(await text('#home-heading'), 'Timing is everything.');
+        assert.equal(await text('.home-introduction > p'), 'Apparently.');
+        assert.equal(await evaluate(`(() => {
+            const heading = document.querySelector('#home-heading');
+            const suffix = document.querySelector('.home-introduction > p');
+            const style = getComputedStyle(suffix);
+            return style.fontWeight === '400' && parseFloat(style.fontSize) < parseFloat(getComputedStyle(heading).fontSize)
+                && suffix.getBoundingClientRect().top >= heading.getBoundingClientRect().bottom;
+        })()`), true, 'The fixed suffix is smaller, regular weight, and on a separate line');
+    }
+    assert.equal(await evaluate("document.querySelector('.home-actions').nextElementSibling.matches('.home-about')"), true,
+        'No redundant copy appears between the mode tiles and the disclosure');
     const homeDisclosure = '.home-about summary';
     assert.equal(await evaluate("document.querySelector('.home-about').open"), false);
     for (const [width,height] of [[1280,720],[600,720],[320,568]]) {
@@ -301,6 +417,7 @@ try {
     await assertPrimaryView('home', 'Picker to Home hides the Picker and Timer');
     await click('#home-editor');
     assert.equal(await evaluate(`document.body.classList.contains('planner-open')&&!document.querySelector('#planner').hidden`),true,'Home opens the native Editor Workspace');
+    await waitForWorkspaceLibrary();
     await assertPrimaryView('editor', 'Editor navigation exposes only the Workspace');
     await click('.planner-back');
     assert.equal(await evaluate(`document.body.dataset.mode==='home'`),true,'Editor Back returns to its Home origin');
@@ -362,10 +479,17 @@ try {
         await checkWorkspaceInDisposableDocument();
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_EDITOR_RUNTIME_ONLY === '1') {
-        await checkEditorRuntimeApp({evaluate,click,text,cdp,acceptExpectedConfirm});
+        await checkEditorRuntimeApp({evaluate,click,text,cdp,acceptExpectedConfirm,acceptExpectedUnload});
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_PUBLIC_CUTOVER_ONLY === '1' || process.env.EASYTIMER_UX011_ONLY === '1') {
         await checkPublicEditorCutover({evaluate,click,text,cdp});
+        assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_WORKSPACE_BACK_ONLY === '1') {
+        await checkSubtraction({ evaluate, click, text, cdp, configure });
+        await checkWorkspaceBack();
+        assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_OFFLINE_FIRST_START_ONLY === '1') {
+        await checkOfflineFirstStart();
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else {
     assert.equal(await text('#time'), '00:00');
@@ -386,12 +510,7 @@ try {
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
     await checkMenu('READY');
-    await click('#menu-toggle'); await click('#open-session');
-    assert.equal(await evaluate(`document.querySelector('#open-session').getAttribute('aria-pressed')==='true'&&document.querySelector('#open-quick').getAttribute('aria-pressed')==='false'`),true,'Session picker marks Session active');
-    await click('#menu-toggle'); await click('#open-planner');
-    assert.equal(await evaluate(`!document.querySelector('#planner').hidden&&document.querySelector('#open-session').getAttribute('aria-pressed')==='true'&&!document.querySelector('#open-planner').hasAttribute('aria-pressed')`),true,'Planner does not become a third mode');
-    await click('.planner-back'); await click('#menu-toggle'); await click('#open-quick');
-    assert.equal(await text('#time'),'05:00'); await checkTitle('READY');
+    await checkWorkspaceBack();
     await checkMenuPolish({evaluate,click,text,cdp});
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.brand-logo')).every(image => image.complete && image.naturalWidth === 96)`), true);
     assert.equal(await evaluate(`document.querySelector('link[rel="icon"]').getAttribute('href')`), 'assets/branding/favicon.ico');
@@ -1048,40 +1167,8 @@ try {
     await click('#stop');
     assert.equal(await evaluate(`(document.querySelector('#time').dataset.visualState !== 'EXPIRED')`),true);
     await checkPublicEditorCutover({ evaluate, click, text, cdp });
-    await click('[data-language="en"]');
-    await configure(0, 5, 0);
-    await click('#menu-toggle'); await click('#open-planner');
-    await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='New Event Template').click()`);
-    await evaluate(`(()=>{const input=document.querySelector('#planner [data-field="name"]');input.value='Offline workshop';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Add phase').click()`);
-    await evaluate(`(()=>{const title=document.querySelector('#planner [data-field="title"]');title.value='Offline phase';title.dispatchEvent(new Event('input',{bubbles:true}));const duration=document.querySelector('#planner [data-field="duration"]');duration.value='1';duration.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    await evaluate(`document.querySelector('#planner form').requestSubmit()`);
-    for (let i=0;i<100&&!await evaluate(`document.querySelector('#planner').textContent.includes('Saved.')`);i++) await delay(20);
-    const offlineTemplateId = await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).templates.find(item=>item.plan.name==='Offline workshop').id`);
-    await click('.planner-back');
-    await cdp('Network.enable');
-    await cdp('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
-    await reloadReady();
-    assert.equal(await text('#time'), '05:00');
-    assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true);
-    await click('#menu-toggle'); await click('#open-planner');
-    assert.match(await text('.template-library'), /Offline workshop/, 'Native Templates and Workspace modules survive an offline reload');
-    await reloadReady();
-    assert.equal(await evaluate("document.body.classList.contains('planner-open')"), true, 'Offline refresh restores the Editor view');
-    assert.match(await text('.template-library'), /Offline workshop/);
-    await click('.planner-back');
-    await click('#menu-toggle'); await click('#open-session');
-    await evaluate(`(()=>{const select=document.querySelector('#session-template');select.value='template:'+${JSON.stringify(offlineTemplateId)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-    await click('#prepare-session');
-    assert.equal(await text('#status'), 'Ready', 'A saved Session template prepares offline using cached engine/modules');
-    await click('#primary');
-    const offlineRunId = await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).activeRuntime.run.runId`);
-    await reloadReady('session');
-    assert.equal(await evaluate('document.body.dataset.mode'), 'session', 'Session runtime is restored during offline PWA reload');
-    assert.equal(await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).activeRuntime.run.runId`), offlineRunId);
-    assert.equal(await text('#status'), 'Running');
-    await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
-    await checkEditorRuntimeApp({ evaluate, click, text, cdp, acceptExpectedConfirm });
+    await checkOfflineFirstStart();
+    await checkEditorRuntimeApp({ evaluate, click, text, cdp, acceptExpectedConfirm, acceptExpectedUnload });
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');
     }

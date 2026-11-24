@@ -1,6 +1,6 @@
 # easyTimer — Future Backlog
 
-> **Terminology and Home follow-up (2026-11-24):** Package 01 passed independent static review and PWA v86 is on staging. The owner reported a positive iPhone 15 Safari DE/Dark initial Home fit; full acceptance and browser stabilization remain open. See the [handover](PACKAGE_01_HANDOVER.md), [checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md) and [terminology mapping](TERMINOLOGY_MAPPING.md). B2, Facilitator Panel, NANO-001 and Stopwatch scheduling remain in place.
+> **Terminology and Home follow-up (2026-11-24):** Package 01 passed independent static review, and PWA v86 is on staging. Independent review accepted the automated browser regression gate, completing browser stabilization. The owner reported a positive iPhone 15 Safari DE/Dark initial Home fit. Final Product Owner acceptance and production release remain pending. See the [handover](PACKAGE_01_HANDOVER.md), [checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md) and [terminology mapping](TERMINOLOGY_MAPPING.md). B2, Facilitator Panel, NANO-001 and Stopwatch scheduling remain in place.
 
 > **Deferred Home polish:** Reduce claim-line size contrast, tighten line spacing
 > and balance vertical spacing while preserving readable text, touch targets
@@ -42,7 +42,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | PLAN-001 | Insert a new phase directly at a chosen position | Released in PWA v63 | Compact Session Planner finalized |
 | PLAN-002 | Friendlier planned-total formatting | Released in PWA v65 | Presentation-only refinement |
 | PLAN-003 | Optional target total duration for Rundowns | Later / Future idea | Planning aid only; no automatic duration allocation |
-| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — public Schema-2 cutover implemented locally; independent review and real-browser acceptance open | One native public Editor/library, lifecycle and archive implemented; Facilitator Panel remains open |
+| EDITOR-001 | Session Editor Evolution & Facilitator Panel | High / Near-term — public Schema-2 cutover on staging; Package 01 automated browser gate accepted | Final Product Owner acceptance and production release for Package 01 remain pending; Facilitator Panel remains open |
 | NANO-001 | Nano-View – Always-on-Top Timer View | Next feature after EDITOR-001 is complete, accepted and production-released; before SW-001 | Secondary Document Picture-in-Picture view of the authoritative active timer; separate approval required |
 | EDITOR-002 | Restore unsaved Workshop-Notizen after reload/crash | Someday / Spike — „für lange Winternächte“ | Explicitly deferred; at most a tiny feasibility spike if a safe, simple approach appears |
 | SYNC-001 | Optional Google Drive template sync | Immutable snapshot PoC validated; production NO-GO | DATA-001; isolated SYNC-002C real Drive acceptance; iOS/PWA and production gates open |
@@ -112,8 +112,9 @@ target and interaction with deliberately unlimited phases.
 ### EDITOR-001 — Session Editor Evolution & Facilitator Panel
 
 **Priority:** High / Near-term — strategic product direction. **Status:** The
-coordinated public Schema-2 cutover is implemented locally and remains unreleased
-pending independent review and mandatory real-browser acceptance. One native
+coordinated public Schema-2 cutover is implemented on staging. Package 01's
+automated browser gate is accepted following independent review. Final Product
+Owner acceptance and production release for Package 01 remain pending. One native
 Workspace is the public Editor; one native aggregate supplies Templates and
 PLANNED, ACTIVE, SUSPENDED and COMPLETED Executions to the Workspace and Picker.
 Direct launch, activation, ownership-safe entry, checkpoint-preserving resume,
@@ -123,8 +124,8 @@ engine. The Facilitator Panel remains open and requires separate approval.
 Targeted integration review corrections now scope delayed Picker reads to their
 originating navigation, make unchanged-language Workspace updates non-rendering,
 retain late Activation/Resume lock failures for read-only reconciliation, and
-enforce monotonic active Runtime installation without clock rewind. Mandatory
-real-browser acceptance remains open.
+enforce monotonic active Runtime installation without clock rewind. Final
+Product Owner acceptance remains open.
 
 The focused native Editor interaction correction is implemented for review:
 Library Back and post-Cancel Back share the guarded close path, dirty and pending

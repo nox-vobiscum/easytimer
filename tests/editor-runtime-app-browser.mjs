@@ -108,7 +108,7 @@ function startedAutomaticRecord() {
     });
 }
 
-export async function checkEditorRuntimeApp({ evaluate, click, text, cdp, acceptExpectedConfirm }) {
+export async function checkEditorRuntimeApp({ evaluate, click, text, cdp, acceptExpectedConfirm, acceptExpectedUnload }) {
     let clockScript;
     let scenarioFailed = false;
     async function cleanup(action, failed) {
@@ -129,11 +129,15 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp, accept
         if (clockScript) await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: clockScript });
         clockScript = (await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `Date.now=()=>${now};` })).identifier;
     };
-    const reload = async (expectedMode, now) => {
+    const reload = async (expectedMode, now, expectedView = 'timer') => {
         await setClock(now);
         const origin = await evaluate('performance.timeOrigin');
         await cdp('Page.reload');
-        await wait(`performance.timeOrigin!==${origin}&&document.body?.dataset.mode===${JSON.stringify(expectedMode)}&&Boolean(document.querySelector('#primary')?.title)`);
+        // The Picker deliberately has no timer and never initializes its primary button.
+        const rendered = expectedView === 'picker'
+            ? "Boolean(document.querySelector('main:not([aria-busy]) #session-picker:not([hidden])'))"
+            : "Boolean(document.querySelector('#primary')?.title)";
+        await wait(`performance.timeOrigin!==${origin}&&document.body?.dataset.mode===${JSON.stringify(expectedMode)}&&${rendered}`);
     };
     const menuAction = async selector => {
         if (await evaluate(`document.querySelector('#preferences').hidden`)) await click('#menu-toggle');
@@ -613,18 +617,25 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp, accept
                 assert.equal(await evaluate(`exitProbe.writes`), 1, 'Reconciliation never repeats persistence');
                 assert.equal(await evaluate(`exitProbe.events.includes('legacy-session-write')`), false);
             }
+            const unresolved = await raw();
+            const guardedReload = await acceptExpectedUnload(async () => {
+                await install(startedRecord()); await reload('session', 12_000);
+            });
+            assert.equal(guardedReload.handled, true, 'Leaving an unresolved lifecycle operation requires beforeunload confirmation');
+            assert.notEqual(unresolved, null, 'The unresolved scenario retained its authoritative record');
+            assert.equal(await raw(), JSON.stringify(startedRecord()), 'The next scenario starts with its exact fixture');
             for (const mode of ['quota', 'cleanup', 'release', 'late']) {
                 await install(startedRecord()); await reload('session', 12_000);
                 await evaluate(`exitProbe.armed=true;exitProbe.mode=${JSON.stringify(mode)};
                     exitProbe.releaseFailure=${mode === 'release'};exitProbe.lateFailure=${mode === 'late'}`);
                 const result = await call('exitNativeExecution', exitOptions('complete'));
                 assert.equal(result.status, mode === 'quota' ? 'error' : mode === 'late' ? 'exited' : 'handoffFailed');
-                assert.equal(await evaluate(`document.body.dataset.mode`), mode === 'late' ? 'quick' : 'session');
+                assert.equal(await evaluate(`document.body.dataset.mode`), mode === 'late' ? 'home' : 'session');
                 if (mode === 'quota') {
                     assert.equal(await held(), true); assert.equal(await raw(), JSON.stringify(startedRecord()));
                 } else if (mode !== 'late') {
                     assert.equal(result.persisted, true);
-                    assert.match(await text('#recovery-feedback'), /exit is saved/);
+                    assert.match(await text('#recovery-feedback'), /action for this event is saved.*timer handoff could not finish/);
                     assert.equal(JSON.parse(await raw()).executions[0].execution.lifecycle, 'completed');
                     await click('#open-quick');
                     assert.equal(await evaluate(`document.body.dataset.mode`), 'session');
@@ -661,12 +672,29 @@ export async function checkEditorRuntimeApp({ evaluate, click, text, cdp, accept
             await evaluate(`exitProbe.armed=true;exitProbe.mode='cleanup'`);
             assert.equal((await call('exitNativeExecution', exitOptions('complete'))).status, 'handoffFailed');
             const persistedExit = await raw();
-            await reload('session', 14_000);
+            const completed = JSON.parse(persistedExit);
+            assert.equal(completed.revision, startedRecord().revision + 1);
+            assert.equal(completed.activeRuntime, null);
+            assert.equal(completed.executions[0].execution.lifecycle, 'completed');
+            const historyIdentity = async () => {
+                const { currentIndex, entries } = await cdp('Page.getNavigationHistory');
+                return { currentIndex, entries: entries.map(({ id, url }) => ({ id, url })) };
+            };
+            const history = await historyIdentity();
+            const cleanupReload = await acceptExpectedUnload(() => reload('session', 14_000, 'picker'));
+            assert.equal(cleanupReload.handled, true, 'A pending handoff protects the confirmed exit before reload');
             assert.equal(await raw(), persistedExit, 'Reload after confirmation cannot restore the old native run');
-            assert.equal(await evaluate(`!document.querySelector('#session-picker').hidden`), true,
+            assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner'].filter(selector =>
+                getComputedStyle(document.querySelector(selector)).display !== 'none')`), ['#session-picker'],
                 'Session view metadata may reopen only the native Picker after a native exit');
+            assert.deepEqual(await historyIdentity(), history, 'Protected reload stays on the same history entry');
+            assert.equal(await evaluate('document.title'), 'easyTimer', 'The Picker clears the old timer title');
+            assert.equal(await evaluate("sessionStorage.getItem('easyTimerView.v1')"), 'session');
+            assert.equal(await evaluate("document.querySelector('#runtime-recovery').hidden"), true,
+                'A confirmed exit does not reopen a recovery prompt');
             assert.equal(await evaluate(`Object.keys(localStorage).filter(key=>key.startsWith('easyTimerRuntime.v1.'))
                 .every(key=>!JSON.parse(localStorage.getItem(key)).run)`), true);
+            console.log('PASS: protected reload after confirmed exit restores only the Picker, with unchanged completed Event and no runtime recovery prompt.');
             for (const intent of ['suspend', 'retainPlan', 'discard', 'complete']) {
                 await install(readyRecord()); await reload('session', 12_000);
                 const result = await call('exitNativeExecution', { ...exitOptions(intent), attemptId: null });

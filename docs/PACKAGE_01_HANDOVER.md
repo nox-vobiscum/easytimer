@@ -3,8 +3,8 @@
 ## Verified state
 
 The verified staging application source is
-`ebb0039ddaa096ab968554d62fcedfc6a499d7d6`, PWA v86. Later
-documentation-only commits advance `develop` without changing that source.
+`ebb0039ddaa096ab968554d62fcedfc6a499d7d6`, PWA v86. Subsequent test and
+documentation commits advance `develop` without changing that source.
 The [staging workflow](https://github.com/nox-vobiscum/easytimer/actions/runs/45396888619)
 completed successfully. The staging service worker was checked again at this
 checkpoint. The owner authorized intermediate staging for manual UX and device
@@ -27,42 +27,67 @@ tighten their line spacing and balance the vertical spacing. A randomized
 humorous suffix is an optional, unprioritized future Easter egg, without
 controls, notifications or animation. Neither item is implementation approval.
 
-## Verification and paused browser work
+## Browser stabilization and review checkpoint
 
-The previous verification passed 577 tracked Node tests, packaging with 41
-files at v85, and the offline artifact suite. The v86 welcome change was
-staged after the owner requested no test execution. The focused browser
-cutover run passed before the later welcome change. Static review accepted the
-Package 01 scope. Browser regression stabilization remains paused and the
-complete browser gate remains open.
+**Complete.** Independent review passed, and the automated browser regression
+gate for Package 01 / PWA v86 is accepted. Final Product Owner acceptance and
+production release remain pending.
 
-The approved test-only corrections isolate simulated Workspace reloads in a
-disposable document with explicitly handled expected unload confirmations,
-and test the exact Quick Timer departure confirmation after recovery. Verify
-both cancellation, preserving the recovered running Quick Timer and
-authoritative Event record, and acceptance, opening the Event Picker. Preserve
-dirty-state, unresolved-mutation, recovery, timing, identity, persistence,
-ownership and lifecycle assertions. Do not weaken the production unload guard,
-increase timeouts, suppress assertions, skip scenarios or use blanket dialog
-handlers. Keep cleanup failures subordinate to the initial failure.
+The reviewed test corrections were verified on `develop` at
+`d7b6c32dc29061d45d94d41ed3d752f632e87479`. Verification
+passed the isolated Runtime suite, the complete aggregate browser suite
+(20 logged checkpoints), and three separate offline first-Start runs in fresh
+headless Edge profiles. All 577 Node tests in 37 tracked files passed. The
+41-file v86 package and its offline artifact checks passed. Syntax and diff
+checks passed. The product files match the staged v86 Git baseline. The
+checkpoint closeout preserves the reviewed tests and relies on those results.
 
-After those corrections, the Runtime suite passed the Quick departure checks
-but encountered an unanswered beforeunload confirmation during a later reload
-after an unresolved lifecycle conflict. The aggregate passed the Workspace,
-Quick Recovery, subtraction, menu and public-cutover checkpoints. One run saw
-READY instead of RUNNING after an offline Start/reload; a repeat passed that
-check and reached the later Runtime blocker. Whether the intermittent result
-is a test synchronization issue or product defect remains unproven. Investigate
-both without assuming cause. Obtain separate approval for any further
-substantive test-contract or product changes.
+- The Runtime test now expects the scoped `beforeunload` confirmation when
+  leaving the intentionally unresolved lifecycle conflict. Its conflict,
+  reconciliation, ownership, identity and write-count assertions remain.
+  During the separate cleanup-failure case, a confirmed exit followed by a
+  protected reload displayed only the Event Picker, with Session navigation
+  metadata and the same browser history entry. The Event was completed at
+  revision 5, its active runtime was cleared, and no recovery prompt was
+  visible. The former wait for a timer button title could never succeed in
+  this view. The test now waits for the rendered Picker and checks the
+  completed record, navigation and absence of a recovered legacy Run.
+- The aggregate Back check used a visible Workspace shell as a readiness
+  signal. The focused reproduction observed only the Editor, Session still
+  marked active, Editor view metadata, and the loading message with no Back
+  button. The test waits for the loaded library, checks that Back restores
+  only the Picker in the same document and history entry, and checks the
+  original five-minute Quick Timer state. The Home navigation check uses
+  the same readiness condition.
+- Starting an Event prepares a READY Run with an ID before starting any
+  countdown. The offline test waits for the selected Template and READY
+  runtime, then for the authoritative RUNNING record and its Attempt. It
+  verifies exactly one revision advance for first Start, stable Run identity,
+  and the same complete store and Running UI after offline reload. The three
+  focused runs and the aggregate run passed these assertions.
+- The Home browser check verifies both fixed claim lines in DE and EN, the
+  smaller regular-weight suffix on a separate line, and the disclosure
+  directly after the tiles. Existing target, overflow, keyboard and touch
+  checks remain.
 
-On explicit resumption, run the isolated Runtime suite, complete aggregate
-browser regression, all tracked Node test files, packaging, offline artifact
-verification and `git diff --check`. Verify product files against the
-reviewed package, account for the subsequent approved v86 Home change, and
-report exact commands, exit codes, counts and remaining blockers. Update review
-evidence. No browser run on v84 was performed; its comparison was static.
-The local review ZIPs contain detailed logs and are untracked artifacts.
+The earlier v85 CDP traces identified two distinct harness problems: a
+detached Workspace fixture left an active unload listener, and the recovered
+Quick Timer departure test left an expected confirmation unanswered. The
+approved correction runs the Workspace fixture in a disposable document and
+verifies its scoped guarded unload. The Quick departure test checks the exact
+confirmation and both answers: cancellation preserves the running Quick
+Timer and Event record, and acceptance opens the Event Picker. Cleanup
+failures remain subordinate to the original test failure. The v84 comparison
+was static. The v86 welcome change originally went to staging under a
+separate instruction to skip test execution.
+
+The stabilized tests preserve dirty-state, unresolved-mutation, recovery,
+timing, identity, persistence, ownership and lifecycle guarantees. Keep
+production guards and existing timeouts. Use scoped expected dialogs and
+retain assertions and scenarios. Substantive test contract or product changes
+require separate approval. The untracked
+`review-package-01-v86-browser-checkpoint.zip` records the exact commands,
+exit codes, logs, packaging results and source comparison for this checkpoint.
 
 ## Original IST/SOLL findings
 
@@ -109,11 +134,10 @@ approved sequence. Each implementation requires its own scoped approval.
 
 Packages 02, 03, 06, 09 and 10 require smaller technical slices before
 implementation. Package 01 was subsequently implemented and deployed to
-staging as v85; the fixed Home claim followed in v86. Its browser regression
-gate remains open.
+staging as v85; the fixed Home claim followed in v86. The automated browser
+gate is accepted. Final Product Owner acceptance and production release are
+pending. Further implementation requires separate Product Owner approval.
 
-Resume the paused browser stabilization described above before further
-implementation unless the Product Owner explicitly authorizes another sequence.
 Responsive finishing work remains scheduled after the Facilitator Panel, within
 EDITOR-001 before closure. NANO-001 remains the next separate feature after
 EDITOR-001 is completed, accepted and released to production. The
