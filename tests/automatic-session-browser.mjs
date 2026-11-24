@@ -57,10 +57,10 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
         await clock.advance('1h');assert.equal(await text('#time'),'02:00');
         await click('#primary');await clock.advance('2m');
         assert.equal(await text('#phase-number'),'Phase 3 of 3');assert.equal(await text('#time'),'01:00');
-        assert.equal(await text('#automatic-next-label'),'Workshop ends automatically');
+        assert.equal(await text('#automatic-next-label'),'Rundown ends automatically');
         await click('[data-language="de"]');assert.equal(await text('#automatic-next-label'),'Workshop endet automatisch');await click('[data-language="en"]');
         await click('#next');assert.equal(await text('#status'),'Running','No early automatic completion');
-        await clock.advance('1m');assert.equal(await text('#status'),'Workshop complete');assert.equal(await text('#time'),'+00:00');
+        await clock.advance('1m');assert.equal(await text('#status'),'Rundown finished');assert.equal(await text('#time'),'+00:00');
         await click('#primary');await clock.advance('1h');assert.equal(await text('#time'),'+00:00');
         await click('#primary');await clock.advance('7s');await click('#stop-overtime');await clock.advance('1h');
         assert.equal(await text('#time'),'+00:07');assert.equal(await evaluate(`document.querySelector('#automatic-preview').hidden&&document.querySelector('#next').hidden`),true);
@@ -70,10 +70,10 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
         assert.deepEqual(await evaluate('window.autoRenderTimes'),['00:40']);
         assert.deepEqual(await evaluate('window.autoRenderPhases'),[template.phases[2].title]);
         await evaluate('window.autoTimeObserver.disconnect();window.autoPhaseObserver.disconnect()');
-        assert.equal(await text('#workshop-remaining-label'),'Workshop remaining');
+        assert.equal(await text('#workshop-remaining-label'),'Event time remaining');
         assert.equal(await text('#time-budget-value'),'00:40');
         await evaluate(`const stored=JSON.parse(localStorage.getItem('easyTimerTemplates'));stored.templates[0].transitionMode='manual';stored.templates[0].phases[2].durationSeconds=600;localStorage.setItem('easyTimerTemplates',JSON.stringify(stored))`);
-        await clock.advance('40s');assert.equal(await text('#status'),'Workshop complete','Stored template edits cannot change the active automatic snapshot');
+        await clock.advance('40s');assert.equal(await text('#status'),'Rundown finished','Stored template edits cannot change the active automatic snapshot');
         await evaluate(`localStorage.setItem('easyTimerTemplates',${JSON.stringify(saved)})`);
 
         await prepare();await click('#primary');await menu('#open-planner');
@@ -131,7 +131,7 @@ export async function checkAutomaticSession({evaluate,click,text,cdp}) {
                 assert.equal(await text('#time'),'+00:05');assert.equal(await evaluate(`document.body.classList.contains('clock-only')`),true);
                 await capture(`clock-only-complete-${theme}`);await key('Escape','Escape',27);
             } else await clock.advance('185s');
-            assert.equal(await text('#status'),'Workshop complete');await capture(`completion-${width}-${theme}`);
+            assert.equal(await text('#status'),'Rundown finished');await capture(`completion-${width}-${theme}`);
             await click('#stop-overtime');await clock.advance('1h');assert.equal(await text('#time'),'+00:05');
         }
         assert.equal(await evaluate(`localStorage.getItem('easyTimerTemplates')`),saved,'All runtime actions preserve saved templates');

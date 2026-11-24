@@ -6,6 +6,13 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- **Package 01 — Event terminology and Home usability:** public DE/EN copy uses
+  Event, Event Template, Event Timer and Event Editor. Home explains all four
+  modes and includes an optional information disclosure. The FAQ explains
+  Rundowns, reusable templates and prepared information versus occurrence notes.
+  Start Event still prepares the countdown in READY. The local PWA shell is v85.
+  Independent review and Product Owner acceptance are pending.
+
 - **EDITOR-001 / UX-001 native phase drag-and-drop:** the accepted framework-free
   dnd-kit interaction is integrated into the Schema-2 Editor with a dedicated
   six-dot handle, full-card feedback, neighboring-row displacement and the

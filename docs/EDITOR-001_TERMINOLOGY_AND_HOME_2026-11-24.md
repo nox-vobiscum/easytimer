@@ -137,4 +137,51 @@ Additional novice acceptance objective (proposed in simulation and owner request
 
 ## 7. Handoff and scheduling
 
-Concept accepted; no implementation performed here. Home descriptions/disclosure are a candidate small, separately testable Quick Win; terminology affects more surfaces and should be inventoried before estimating or slicing. Avoid partial inconsistent naming in a public release; coordinate visible copy with the approved Editor design and actual feature availability. The owner did not authorize a new release, decide new backlog ordering or authorize an immediate patch. Existing B2 / Facilitator Panel scheduling and NANO-001 priority remain intact unless explicitly revised. Proceed with the planned IST/SOLL audit using the latest glossary and this targeted Home addendum, propose implementation slices and dependencies, and obtain scoped GO. Preserve all genuine open decisions; final text/placement/accessibility and code feasibility are verification points, not excuses to reopen approved terminology.
+Package 01 implements the approved wording, Home descriptions and disclosure,
+and contextual help in the local v85 shell. See the maintained
+[terminology mapping](TERMINOLOGY_MAPPING.md) for the code and data counterparts.
+B2, Facilitator Panel, NANO-001 and Stopwatch scheduling remain in place.
+
+**Automated verification:** All 577 tests from the 37 tracked Node test files
+passed. Headless Edge verified Home
+in DE/EN, at 320px and wider sizes, with Light, Dark and System settings, keyboard
+disclosure activation and an emulated touch tap. The workspace passed the DE/EN
+320px and EN landscape target and overflow checks. The focused public cutover
+run passed READY launch, lifecycle guards, archive, draft preservation, and
+explicit legacy recovery discard. The 41-file v85 package passed offline
+cold-start and recovery checks and the missing-cache negative control.
+
+The approved test corrections isolate the Workspace fixture in a disposable
+document and exercise both answers to the expected Quick Timer departure
+confirmation. Both checkpoints pass. The full browser gate remains open.
+The native runtime suite reaches the separate unresolved-exit scenario and
+stops when a guarded reload awaits an unanswered `beforeunload` dialog.
+The aggregate suite proceeds through Quick Recovery, subtraction, menu,
+and public cutover. One run observed READY where its offline reload requires
+a running Event Timer. The repeat passed that assertion and reached the
+runtime scenario. The standalone offline artifact suite passes.
+The product files were verified byte-for-byte against the independently
+reviewed v85 package. No v84 browser run was performed.
+
+**Acceptance:** Independent review, real-device checks and Product Owner
+acceptance remain open. Package 01 is unreleased.
+
+**Intermediate staging authorization (2026-11-24):** The Product Owner
+authorized committing and pushing the reviewed Package 01 / PWA v85 to
+`develop` for staging-only manual UX and real-device evaluation while the
+browser regression gate remains open. This is not final acceptance or
+authorization for production, a main merge, or Package 02.
+
+**Browser stabilization paused:** Preserve the approved Workspace fixture
+isolation with scoped unload confirmation and the exact Quick departure
+confirmation checks for both cancellation and acceptance. Preserve the
+dirty-draft, unresolved-mutation, recovery, timing, identity, persistence,
+ownership and lifecycle assertions. Keep cleanup failures secondary to
+the initial failure, with existing timeouts and no blanket dialog handlers
+or skipped assertions. On explicit resumption, investigate the outstanding
+unresolved-exit reload guard and intermittent aggregate offline START/reload
+result. Obtain separate approval for any additional test-contract or product
+changes. Rerun isolated Runtime, aggregate browser, all tracked Node tests,
+packaging, the offline artifact checks and `git diff --check`. Verify product
+byte identity against the reviewed package and record exact commands, results,
+remaining blockers and review evidence. The v84 comparison was static only.

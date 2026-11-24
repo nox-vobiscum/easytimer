@@ -1,5 +1,10 @@
 # easyTimer — Developer Briefing
 
+**Mandatory contributor and coding-agent reading:** Use the
+[terminology mapping](TERMINOLOGY_MAPPING.md) for public DE/EN copy and its
+technical counterparts. Update it alongside any change to product terminology
+or the corresponding technical concepts.
+
 > **Terminology and Home follow-up (2026-11-24):** Binding [Event terminology and Home usability checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md): Event / Event Template / Rundown / Phase, Event Timer / Event Editor, symmetric Event/Phase Information versus Notes, full Event Template label, four-mode Home with brief task descriptions and optional information disclosure. Later user-visible wording supersedes older labels; no internal rename, schema or lifecycle changes. Include this in IST/SOLL and scope proposals.
 
 > **Responsive design closure (2026-11-24):** The 24 November UX checkpoint is now conceptually complete, including §§10–14 (three selectable library layouts, adaptive two-column Editor and overlay, phase disclosure truth table, persistent read-only phase context, existing theme identity). Next step is evidence-based IST/SOLL and small implementation proposals, not coding. Preserve scoped approval and priority gates. [Decision record §§10–14](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#10-responsive-library-and-session-editor--confirmed-design).
@@ -106,8 +111,8 @@ due to intentional changes in behavior, UI, formatting, timing, or interaction.
 - Source code, technical comments and repository documentation are English.
 - The application is German and English. UI changes must keep both languages
   semantically consistent.
-- Reuse established product terminology, including Quick Timer, Session Timer,
-  Rundown, Session Editor and Timebox.
+- Use the terminology mapping for public labels, including Quick Timer,
+  Event Timer, Rundown, Event Editor and Timebox.
 
 ## Current project state and reconstruction
 

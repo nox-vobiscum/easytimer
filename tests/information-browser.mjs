@@ -157,7 +157,7 @@ export async function checkInformation({ cdp, evaluate, wait, origin, screenshot
             await wait(`document.querySelector('[data-info-language="${language}"]:not([hidden])') && document.documentElement.lang === '${language}'`);
             assert.equal(await evaluate('document.querySelectorAll("article:not([hidden])").length'), 1);
             assert.equal(await evaluate('document.querySelectorAll("#time, #primary, #account-toggle, .development-sync").length'), 0);
-            assert.equal(await evaluate('document.querySelector("script").getAttribute("src")'), 'js/info.js?v=59');
+            assert.equal(await evaluate('document.querySelector("script").getAttribute("src")'), 'js/info.js?v=85');
             assert(await evaluate('Boolean(document.querySelector("header .brand .brand-mark")) && Boolean(document.querySelector("#menu-toggle"))'));
             assert.equal(await evaluate('document.querySelector("header").outerHTML'), appHeader, 'The exact application header markup is shared');
             assert.equal(await evaluate('document.querySelectorAll(".info-navigation a").length'), 4);
@@ -166,17 +166,17 @@ export async function checkInformation({ cdp, evaluate, wait, origin, screenshot
             assert.equal(await evaluate('document.querySelectorAll(".info-draft, article [style]").length'), 0, 'No internal draft notice or inline styling enters public content');
             if (page === 'faq') {
                 const questions = language === 'de' ? [
-                    'Wofür ist der Session-Editor da?',
-                    'Was unterscheidet eine Vorlage von einer Durchführung?',
-                    'Kann ich Phasen, Notizen und Links vorbereiten?',
+                    'Wofür ist der Event-Editor da?',
+                    'Was unterscheidet ein Event-Template von einem Event?',
+                    'Was unterscheidet Informationen von Notizen?',
                     'Kann ich ungespeicherte Änderungen nach dem Neuladen wiederherstellen?',
-                    'Was kann ich während einer laufenden Session bearbeiten?',
+                    'Was kann ich während eines laufenden Events bearbeiten?',
                 ] : [
-                    'What is the Session Editor for?',
-                    'What is the difference between a template and an execution?',
-                    'Can I prepare phases, notes and links?',
+                    'What is the Event Editor for?',
+                    'What is the difference between an Event Template and an Event?',
+                    'How do Information and Notes differ?',
                     'Can I recover unsaved changes after a reload?',
-                    'What can I edit during a running session?',
+                    'What can I edit during a running event?',
                 ];
                 const answered = await evaluate(`[...document.querySelectorAll('article:not([hidden]) h2')]
                     .filter(heading => heading.nextElementSibling?.matches('p') && heading.nextElementSibling.textContent.trim())
@@ -302,8 +302,8 @@ export async function checkInformationContinuity({ cdp, evaluate, wait }) {
     };
     const assertReturnLabels = async view => {
         const expected = {
-            de: { home:'Zurück zur Startseite', quick:'Zurück zum Timer', session:'Zurück zur Session', editor:'Zurück zum Session-Editor', direct:'Zur Startseite' },
-            en: { home:'Back to Home', quick:'Back to Timer', session:'Back to Session', editor:'Back to Session Editor', direct:'Go to Home' },
+            de: { home:'Zurück zur Startseite', quick:'Zurück zum Timer', session:'Zurück zum Event-Timer', editor:'Zurück zum Event-Editor', direct:'Zur Startseite' },
+            en: { home:'Back to Home', quick:'Back to Timer', session:'Back to Event Timer', editor:'Back to Event Editor', direct:'Go to Home' },
         };
         const hrefs = await evaluate('Array.from(document.querySelectorAll("[data-info-back]"),a=>a.getAttribute("href"))');
         for (const language of ['de', 'en']) {

@@ -19,7 +19,7 @@ const timeTravelOptions=parseTimeTravelOptions(process.argv.slice(2));
 if(timeTravelOptions.help||timeTravelOptions.list) {console.log(timeTravelHelp());process.exit(0);}
 
 const root = resolve(process.env.EASYTIMER_WEB_ROOT || 'src');
-const server = createServer(async (req, res) => {
+const serveApp = async (req, res) => {
     try {
         const requestPath = new URL(req.url, 'http://localhost').pathname;
         const path = resolve(root, '.' + (requestPath === '/' ? '/index.html' : requestPath));
@@ -34,7 +34,8 @@ const server = createServer(async (req, res) => {
         }
         res.end(await readFile(path));
     } catch { res.writeHead(404); res.end(); }
-});
+};
+const server = createServer(serveApp);
 await new Promise(done => server.listen(0, '127.0.0.1', done));
 const profile = await mkdtemp(join(tmpdir(), 'easytimer-browser-'));
 const browser = spawn(process.env.EASYTIMER_BROWSER || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -57,39 +58,52 @@ try {
     await new Promise((done, reject) => { socket.onopen = done; socket.onerror = reject; });
     let nextId = 0;
     let draftReloadActive = false;
-    let expectedConfirm;
+    let expectedDialog;
+    let openDialog;
     const pending = new Map();
     socket.onmessage = ({ data }) => {
         const message = JSON.parse(data);
+        if (message.method === 'Page.javascriptDialogOpening') openDialog = message.params;
+        if (message.method === 'Page.javascriptDialogClosed') openDialog = undefined;
         if (draftReloadActive && message.method === 'Page.javascriptDialogOpening' && message.params.type === 'beforeunload') {
             void cdp('Page.handleJavaScriptDialog', { accept: true }).catch(error => errors.push(error));
         }
-        if (message.method === 'Page.javascriptDialogOpening' && message.params.type === 'confirm'
-            && expectedConfirm?.messages.includes(message.params.message) && !expectedConfirm.response) {
-            expectedConfirm.response = cdp('Page.handleJavaScriptDialog', { accept: true })
-                .then(() => ({ accepted: true }), error => ({ error }));
+        if (message.method === 'Page.javascriptDialogOpening' && expectedDialog
+            && !expectedDialog.response && expectedDialog.matches(message.params)) {
+            const { accept } = expectedDialog;
+            expectedDialog.response = cdp('Page.handleJavaScriptDialog', { accept })
+                .then(() => ({ handled: true, accepted: accept }), error => ({ error }));
         }
         if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails);
         const request = pending.get(message.id);
         if (request) { clearTimeout(request.timeout); pending.delete(message.id); message.error ? request.reject(message.error) : request.resolve(message.result); }
     };
-    async function acceptExpectedConfirm(messages, action) {
-        assert.equal(expectedConfirm, undefined, 'confirm handlers must not overlap');
-        const expectation = { messages };
-        expectedConfirm = expectation;
+    async function withExpectedDialog(matches, accept, action) {
+        assert.equal(expectedDialog, undefined, 'dialog expectations must not overlap');
+        const { frameTree: { frame } } = await cdp('Page.getFrameTree');
+        const expectation = { matches: event => event.frameId === frame.id && event.url === frame.url && matches(event), accept };
+        expectedDialog = expectation;
         try {
             const value = await action();
             const outcome = await expectation.response;
             if (outcome?.error) throw outcome.error;
-            return { value, accepted: outcome?.accepted ?? false };
+            return { value, handled: outcome?.handled ?? false, accepted: outcome?.accepted ?? false };
         } finally {
-            expectedConfirm = undefined;
+            expectedDialog = undefined;
         }
     }
+    function acceptExpectedConfirm(messages, action, { accept = true } = {}) {
+        return withExpectedDialog(event => event.type === 'confirm' && messages.includes(event.message), accept, action);
+    }
     function cdp(method, params = {}) {
+        const error = new Error(`Browser command timed out: ${method}`);
         return new Promise((resolve, reject) => {
             const id = ++nextId;
-            const timeout = setTimeout(() => { pending.delete(id); reject(new Error(`Browser command timed out: ${method}`)); }, 10000);
+            const timeout = setTimeout(() => {
+                pending.delete(id);
+                if (openDialog) error.message += ` (open ${openDialog.type} dialog at ${openDialog.url}: ${JSON.stringify(openDialog.message)})`;
+                reject(error);
+            }, 10000);
             pending.set(id, { resolve, reject, timeout });
             socket.send(JSON.stringify({ id, method, params }));
         });
@@ -101,6 +115,39 @@ try {
     }
     const click = selector => evaluate(`(()=>{const target=document.querySelector(${JSON.stringify(selector)});const preference=target.closest('#preferences');const wasHidden=preference?.hidden;if(wasHidden)document.querySelector('#menu-toggle').click();target.click();if(wasHidden)document.querySelector('#menu-toggle').click();})()`);
     const text = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent`);
+    async function waitForDocument(previous, origin, mode) {
+        for (let attempt = 0; attempt < 100; attempt++) {
+            if (await evaluate(`performance.timeOrigin !== ${previous} && location.origin === ${JSON.stringify(origin)}
+                && document.body?.dataset.mode === ${JSON.stringify(mode)} && Boolean(document.querySelector('main:not([aria-busy])'))`)) return;
+            await delay(50);
+        }
+        assert.fail(`Disposable Workspace navigation did not reach ${origin} in ${mode} mode`);
+    }
+    async function checkWorkspaceInDisposableDocument() {
+        const mainOrigin = await evaluate('location.origin');
+        const fixtureServer = createServer(serveApp);
+        await new Promise(done => fixtureServer.listen(0, '127.0.0.1', done));
+        const fixtureOrigin = `http://127.0.0.1:${fixtureServer.address().port}`;
+        try {
+            const initial = await evaluate('performance.timeOrigin');
+            await cdp('Page.navigate', { url: fixtureOrigin + '/' });
+            await waitForDocument(initial, fixtureOrigin, 'home');
+            await click('#home-quick');
+            await checkNativeEditorWorkspace({ evaluate, click, cdp, acceptExpectedConfirm });
+            const leaving = await evaluate('performance.timeOrigin');
+            // Simulated reloads deliberately abandon guarded fixtures in this
+            // document. Accept only its expected unload and prove it is gone.
+            const { handled } = await withExpectedDialog(event => event.type === 'beforeunload', true, async () => {
+                await cdp('Page.navigate', { url: mainOrigin + '/' });
+                await waitForDocument(leaving, mainOrigin, 'quick');
+            });
+            assert.equal(handled, true, 'Leaving the disposable Workspace triggers its guarded unload');
+            assert.equal(await evaluate('typeof window.nativeWorkspaceFixture'), 'undefined');
+            console.log('PASS: disposable Workspace document unloaded through its expected guard; the Quick regression document is fresh.');
+        } finally {
+            fixtureServer.close();
+        }
+    }
     async function reloadReady(expectedMode = 'quick') {
         const origin = await evaluate('performance.timeOrigin');
         await cdp('Page.reload');
@@ -197,16 +244,53 @@ try {
     }
     assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.querySelector('#home-view').hidden&&document.querySelector('#timer-view').hidden`),true,'Fresh ordinary visit opens Home');
     await assertPrimaryView('home', 'Fresh ordinary visit exposes only Home');
-    assert.equal(await evaluate(`document.querySelector('#home-stopwatch').disabled&&document.querySelector('#home-stopwatch').getAttribute('aria-describedby')==='home-stopwatch-note'`),true,'Stopwatch is visible and accessibly unavailable');
+    assert.equal(await evaluate(`document.querySelector('#home-stopwatch').disabled&&document.querySelector('#home-stopwatch').getAttribute('aria-describedby')?.split(' ').includes('home-stopwatch-note')`),true,'Stopwatch is visible and accessibly unavailable');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.home-action .navigation-icon')).length===4`),true,'Landing actions reuse the established menu icon artwork');
     await click('[data-language="de"]');
     assert.equal(await text('#home-heading'),'Willkommen bei easyTimer');
     await click('[data-language="en"]');
     assert.equal(await text('#home-heading'),'Welcome to easyTimer');
-    for (const [width,height] of [[1280,720],[320,568]]) {
+    const homeDisclosure = '.home-about summary';
+    assert.equal(await evaluate("document.querySelector('.home-about').open"), false);
+    for (const [width,height] of [[1280,720],[600,720],[320,568]]) {
         await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
-        assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('.home-action')).every(button=>button.getBoundingClientRect().height>=44)`),true,'Home stays responsive with accessible action targets');
+        for (const language of ['de', 'en']) {
+            await click(`[data-language="${language}"]`);
+            assert.deepEqual(await evaluate(`[...document.querySelectorAll('.home-action-copy > small[data-copy$="Description"]')].map(node => node.textContent)`), language === 'de'
+                ? ['Zeit einstellen und direkt loslegen.', 'Events mit mehreren Zeitabschnitten durchführen.', 'Events vorbereiten und wiederverwendbare Event-Templates erstellen.', 'Verstrichene Zeit messen.']
+                : ['Set a duration and start a countdown.', 'Run events with multiple timed activities.', 'Prepare events and create reusable Event Templates.', 'Measure elapsed time.']);
+            assert.equal(await text(homeDisclosure), language === 'de' ? 'Was ist easyTimer?' : 'What is easyTimer?');
+            assert.equal(await evaluate(`document.querySelector('[data-home-language]:not([hidden])').lang`), language);
+            for (const theme of ['light', 'dark', 'system']) {
+                await click(`[data-theme="${theme}"]`);
+                assert.equal(await evaluate(`document.documentElement.dataset.theme === '${theme}' && document.documentElement.scrollWidth <= innerWidth &&
+                    [...document.querySelectorAll('.home-action, .home-about summary')].every(node => {
+                        const box = node.getBoundingClientRect();
+                        return box.width >= 44 && box.height >= 44 && node.scrollWidth <= node.clientWidth;
+                    })`), true, `Home fits at ${width}px in ${language}/${theme}`);
+            }
+        }
     }
+    await evaluate("document.querySelector('#home-editor').focus()");
+    await cdp('Input.dispatchKeyEvent', { type:'keyDown', key:'Tab', code:'Tab', windowsVirtualKeyCode:9 });
+    await cdp('Input.dispatchKeyEvent', { type:'keyUp', key:'Tab', code:'Tab', windowsVirtualKeyCode:9 });
+    assert.equal(await evaluate("document.activeElement.matches('.home-about summary:focus-visible')"), true,
+        'Tab skips the disabled Stopwatch and reaches the disclosure');
+    await cdp('Input.dispatchKeyEvent', { type:'keyDown', key:'Enter', code:'Enter', text:'\r', unmodifiedText:'\r', windowsVirtualKeyCode:13 });
+    await cdp('Input.dispatchKeyEvent', { type:'keyUp', key:'Enter', code:'Enter', windowsVirtualKeyCode:13 });
+    assert.equal(await evaluate("document.querySelector('.home-about').open"), true);
+    assert.equal(await evaluate("document.querySelectorAll('[data-home-language]:not([hidden]) p').length"), 3);
+    await cdp('Emulation.setTouchEmulationEnabled', { enabled:true });
+    const summaryPoint = await evaluate(`(() => {
+        const summary = document.querySelector('.home-about summary');
+        summary.scrollIntoView({ block:'center' });
+        const box = summary.getBoundingClientRect();
+        return { x:box.left + box.width / 2, y:box.top + box.height / 2 };
+    })()`);
+    await cdp('Input.dispatchTouchEvent', { type:'touchStart', touchPoints:[summaryPoint] });
+    await cdp('Input.dispatchTouchEvent', { type:'touchEnd', touchPoints:[] });
+    assert.equal(await evaluate("document.querySelector('.home-about').open"), false, 'Touch closes the disclosure');
+    await cdp('Emulation.setTouchEmulationEnabled', { enabled:false });
     await cdp('Emulation.clearDeviceMetricsOverride');
     await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:720,deviceScaleFactor:1,mobile:false});
     await click('#home-session');
@@ -275,10 +359,10 @@ try {
         await checkNativePhaseFields({evaluate,click,cdp});
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_NATIVE_WORKSPACE_ONLY === '1') {
-        await checkNativeEditorWorkspace({evaluate,click,cdp,acceptExpectedConfirm});
+        await checkWorkspaceInDisposableDocument();
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_EDITOR_RUNTIME_ONLY === '1') {
-        await checkEditorRuntimeApp({evaluate,click,text,cdp});
+        await checkEditorRuntimeApp({evaluate,click,text,cdp,acceptExpectedConfirm});
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_PUBLIC_CUTOVER_ONLY === '1' || process.env.EASYTIMER_UX011_ONLY === '1') {
         await checkPublicEditorCutover({evaluate,click,text,cdp});
@@ -286,7 +370,7 @@ try {
     } else {
     assert.equal(await text('#time'), '00:00');
     await checkNativePhaseFields({evaluate,click,cdp});
-    await checkNativeEditorWorkspace({evaluate,click,cdp,acceptExpectedConfirm});
+    await checkWorkspaceInDisposableDocument();
     await checkRecovery({ evaluate, click, text, cdp, configure });
     await checkRecoveryCorrections({ evaluate, click, text, cdp, configure });
     await checkSubtraction({ evaluate, click, text, cdp, configure });
@@ -296,8 +380,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=84'&&js==='js/app.js?v=84'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'84','app.js':'84','info.js':'59','header.mjs':'59','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs','editor-phase-drag.mjs','editor-phase-dndkit-vendor.mjs','editor-draft-recovery.mjs','editor-template-draft-recovery-service.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=85'&&js==='js/app.js?v=85'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'85','app.js':'85','info.js':'85','header.mjs':'85','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs','editor-phase-drag.mjs','editor-phase-dndkit-vendor.mjs','editor-draft-recovery.mjs','editor-template-draft-recovery-service.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');
@@ -967,7 +1051,7 @@ try {
     await click('[data-language="en"]');
     await configure(0, 5, 0);
     await click('#menu-toggle'); await click('#open-planner');
-    await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Create template').click()`);
+    await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='New Event Template').click()`);
     await evaluate(`(()=>{const input=document.querySelector('#planner [data-field="name"]');input.value='Offline workshop';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Add phase').click()`);
     await evaluate(`(()=>{const title=document.querySelector('#planner [data-field="title"]');title.value='Offline phase';title.dispatchEvent(new Event('input',{bubbles:true}));const duration=document.querySelector('#planner [data-field="duration"]');duration.value='1';duration.dispatchEvent(new Event('input',{bubbles:true}));})()`);
@@ -997,7 +1081,7 @@ try {
     assert.equal(await evaluate(`JSON.parse(localStorage.getItem('easyTimerEditor.v1')).activeRuntime.run.runId`), offlineRunId);
     assert.equal(await text('#status'), 'Running');
     await cdp('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 });
-    await checkEditorRuntimeApp({ evaluate, click, text, cdp });
+    await checkEditorRuntimeApp({ evaluate, click, text, cdp, acceptExpectedConfirm });
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');
     }

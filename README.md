@@ -13,30 +13,33 @@ multi-phase workshop Rundowns. The production application is available at
 
 ## What it does
 
+This overview describes the development version. See the
+[changelog](CHANGELOG.md) for verified production releases.
+
 <a id="st-001-session-planner"></a>
 
 - Quick Timer with additive READY timeboxes, runtime adjustments, pause,
   overtime and durable recovery.
-- Session Timer backed by independent native executions for manual or automatic
-  multi-phase Rundowns.
-- Native Session Editor and unified Template/Execution library with direct
-  launch, explicit lifecycle actions, single-Template JSON portability and a
+- Event Timer for independent events with manual or automatic multi-phase
+  Rundowns.
+- Event Editor and unified Event Template and Event library with direct
+  launch, explicit lifecycle actions, single Event Template JSON portability and a
   clearly labelled complete local-data export.
-- A simple Home entry links to Quick Timer, Session Timer and Session Editor;
-  the visible Stopwatch option is an unavailable placeholder.
+- Home describes each mode, links to Quick Timer, Event Timer and Event Editor,
+  and offers an optional introduction. Stopwatch is shown as unavailable.
 - Responsive DE/EN interface with Light, Dark and System themes.
 - Installable, offline-capable PWA with no mandatory account or backend.
 
 The large clock remains the primary focus. Controls are contextual, existing
-timer and Session identity is protected during navigation, and elapsed time is
+timer and Event identity is protected during navigation, and elapsed time is
 derived from real deadlines rather than animation ticks.
 
 ## Local-first and privacy
 
-Templates, independent executions, preferences and recoverable runtime state
+Event Templates, independent events, preferences and recoverable runtime state
 stay in the browser. The
 production release does not include Google Drive synchronization, analytics or
-mandatory sign-in. Users can move one Template at a time through the validated
+mandatory sign-in. Users can move one Event Template at a time through the validated
 JSON export/import workflow and can download the complete native local-data
 aggregate. Full backup restore is not yet supported. See the public
 [privacy information](https://easytimer.at/privacy.html) for the released
@@ -66,6 +69,8 @@ node tools/release/package.mjs
 
 - [`docs/BRIEFING.md`](docs/BRIEFING.md) — authoritative developer handover,
   workflow, architecture and release rules.
+- [`docs/TERMINOLOGY_MAPPING.md`](docs/TERMINOLOGY_MAPPING.md) — required
+  contributor reference for DE/EN labels and their technical counterparts.
 - [`docs/EASYTIMER_UX_KONZEPT_v2.md`](docs/EASYTIMER_UX_KONZEPT_v2.md) — detailed
   binding product and UX decisions.
 - [`docs/backlog.md`](docs/backlog.md) — future work and unresolved decisions.

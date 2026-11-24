@@ -109,7 +109,7 @@ export async function checkTimeVisuals({ evaluate, click, text, cdp, configure }
         await click('#next');await check('NORMAL');assert.equal(await text('#time'),'15:00');
         await click('#primary');await tick(839999);await check('NORMAL');await tick(1);await check('ENDGAME');
         await click('#primary');await click('#next');await check('EXPIRED');
-        assert.match(await evaluate(`document.querySelector('#time').getAttribute('aria-label')`), /^Workshop overtime:/);assert.equal(await text('#time'),'+00:00');
+        assert.match(await evaluate(`document.querySelector('#time').getAttribute('aria-label')`), /^Event overtime:/);assert.equal(await text('#time'),'+00:00');
         await tick(6000);await click('#primary');await check('EXPIRED');await tick(120000);await check('EXPIRED');
         assert.equal(await text('#time'),'+00:06');
         await click('#primary');await tick(1000);await click('#stop-overtime');await check('EXPIRED');

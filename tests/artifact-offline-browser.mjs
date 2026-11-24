@@ -97,7 +97,7 @@ async function checkOffline(negativeControl) {
                 .some(button => button.textContent === 'Export all local data' && !button.disabled && button.getClientRects().length > 0)`),
             true, 'The native Editor offers a usable full-data export');
             assert.match(await evaluate('document.querySelector("#data-backup").textContent'), /Full backup restore is not yet supported/);
-            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create template").click()');
+            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="New Event Template").click()');
             await evaluate('const name=document.querySelector("#planner [data-field=name]");name.value="Unsaved information test";name.dispatchEvent(new Event("input",{bubbles:true}))');
             // A real pointer gesture activates native beforeunload protection.
             await click('#menu-toggle');
@@ -135,7 +135,7 @@ async function checkOffline(negativeControl) {
             await click('#primary'); await wait('document.getElementById("status").textContent==="Running"');
             await click('#primary'); assert.equal(await evaluate('document.getElementById("status").textContent'), 'Paused');
             await click('#stop'); await click('#menu-toggle'); await click('#open-planner');
-            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Create template").click()');
+            await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="New Event Template").click()');
             await evaluate('Array.from(document.querySelectorAll("#planner button")).find(b=>b.textContent==="Add phase").click()');
             for (const [selector, value] of [['#planner [data-field=name]','Offline artifact'],['#planner [data-field=title]','Opening'],['#planner [data-field=duration]','1']]) {
                 await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}))})()`);

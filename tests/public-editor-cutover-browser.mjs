@@ -85,7 +85,7 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
     const reload = async expectedMode => {
         const origin = await evaluate('performance.timeOrigin');
         await cdp('Page.reload');
-        await wait(`performance.timeOrigin!==${origin}&&document.body?.dataset.mode===${JSON.stringify(expectedMode)}&&Boolean(document.querySelector('#primary')?.title)`);
+        await wait(`performance.timeOrigin!==${origin}&&document.body?.dataset.mode===${JSON.stringify(expectedMode)}&&Boolean(document.querySelector('main:not([aria-busy])'))`);
     };
     const menuAction = async selector => {
         if (await evaluate(`document.querySelector('#preferences').hidden`)) await click('#menu-toggle');
@@ -109,6 +109,7 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         unrelated:localStorage.getItem('easyTimerRuntime.v1.unrelated-cutover-quick'),
         language:localStorage.getItem('easyTimerLanguage')})`);
 
+    let passed = false;
     try {
         await evaluate(`(()=>{
             for(const key of Object.keys(localStorage)) if(key.startsWith('easyTimerRuntime.v1.')) localStorage.removeItem(key);
@@ -171,14 +172,16 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
 
         await openPicker();
         assert.deepEqual(await evaluate(`Array.from(document.querySelector('#session-template').querySelectorAll('optgroup')).map(group=>group.label)`),
-            ['Templates', 'Planned executions', 'Suspended executions', 'Completed archives']);
+            ['Event Templates', 'Planned events', 'Suspended events', 'Completed events']);
         await choose('template:cutover-template');
+        assert.equal(await text('#prepare-session'), 'Start Event');
         await click('#prepare-session');
         await wait(`document.body.dataset.mode==='session'&&document.querySelector('#session-picker').hidden&&document.querySelector('#status').textContent==='Ready'`);
         let stored = await record();
         const launched = stored.executions.find(entry => entry.execution.lifecycle === 'active').execution;
         assert.equal(stored.templates.length, 1, 'Direct launch does not mutate its source Template');
         assert.equal(launched.source.id, template.id);
+        assert.equal(launched.attempt, null, 'Start Event prepares READY without creating a timing attempt');
         assert.equal(await text('#time'), '01:00');
 
         await click('#primary');
@@ -189,8 +192,11 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         const runtimeRunId = stored.activeRuntime.run.runId;
         await click('#stop');
         assert.equal(await evaluate(`document.querySelector('#native-lifecycle-dialog').open`), true);
-        assert.match(await text('#native-suspend-help'), /Preserves progress/);
-        assert.match(await text('#native-retain-help'), /discards actual progress/);
+        assert.match(await text('#native-suspend-help'), /Saves the event and its progress/);
+        assert.match(await text('#native-retain-help'), /Keeps the event and its latest Rundown as Planned/);
+        assert.match(await text('#native-retain-help'), /results and Event and Phase Notes are discarded/);
+        assert.match(await text('#native-discard-help'), /Deletes the event, including its Rundown/);
+        assert.match(await text('#native-complete-help'), /read-only archive with its results/);
         await click('#native-suspend');
         await wait(`document.body.dataset.mode==='home'&&JSON.parse(localStorage.getItem(${JSON.stringify(EDITOR_STORAGE_KEY)})).activeRuntime===null`);
         stored = await record();
@@ -254,8 +260,11 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         await click('#planner .planner-back');
         assert.equal(await evaluate(`document.body.classList.contains('planner-open')`), true, 'Archive Back returns to the single native library');
         await click('#planner .planner-back');
-        assert.equal(await evaluate(`document.body.dataset.mode==='home'&&!document.body.classList.contains('planner-open')`), true,
-            'Library Back restores the Home context');
+        assert.equal(await evaluate(`document.body.dataset.mode==='session'&&!document.body.classList.contains('planner-open')`), true,
+            'Library Back restores the Picker that opened the archive');
+        assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner'].map(selector=>getComputedStyle(document.querySelector(selector)).display==='none')`),
+            [true, true, false, true], 'The Picker is the only computed-visible primary view');
+        await menuAction('#open-home');
         assert.deepEqual(await evaluate(`['#home-view','#timer-view','#session-picker','#planner'].map(selector=>getComputedStyle(document.querySelector(selector)).display)`),
             ['flex', 'none', 'none', 'none'], 'Home is the only computed-visible primary view after library navigation');
         await click('#home-quick');
@@ -277,11 +286,16 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         assert.equal(await evaluate(`document.body.dataset.mode`), 'home');
 
         await evaluate(`window.quickLifecycleConfirm=window.confirm`);
+        const selectLifecycle = label => `(() => {
+            const row = [...document.querySelectorAll('#planner li')].find(item =>
+                item.querySelector('h3 + p')?.textContent.startsWith(${JSON.stringify(`ID: ${executionId} ·`)}));
+            [...row.querySelectorAll('button')].find(button => button.textContent === ${JSON.stringify(label)}).click();
+        })()`;
         for (const [label, lifecycle] of [
-            ['Keep plan and reset progress', 'planned'], ['Discard run', null], ['Complete and archive', 'completed'],
+            ['Keep Rundown and reset progress', 'planned'], ['Discard Event', null], ['Complete Event', 'completed'],
         ]) {
             await evaluate(`localStorage.setItem(${JSON.stringify(EDITOR_STORAGE_KEY)},${JSON.stringify(JSON.stringify(suspendedSnapshot))});
-                localStorage.setItem('easyTimerRuntime.v1.lifecycle-unrelated',${JSON.stringify(JSON.stringify(unrelatedQuick))})`);
+                localStorage.setItem('easyTimerRuntime.v1.unrelated-cutover-quick',${JSON.stringify(JSON.stringify(unrelatedQuick))})`);
             if (await evaluate(`document.body.dataset.mode!=='home'`)) await menuAction('#open-home');
             await click('#home-quick');
             if (await evaluate(`document.querySelector('#primary').disabled`)) await click('[data-preset="60000"]');
@@ -290,7 +304,7 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
             const source = JSON.stringify(await record());
             await menuAction('#open-planner'); await wait(`document.body.classList.contains('planner-open')`);
             const writesBefore = await evaluate(`pickerReadProbe.requests`);
-            await evaluate(`window.confirm=()=>false;Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent===${JSON.stringify(label)}).click()`);
+            await evaluate(`window.confirm=()=>false;${selectLifecycle(label)}`);
             await click('#planner [data-native-lifecycle-dialog] .confirm-stop'); await delay(50);
             assert.equal(JSON.stringify(await record()), source, `${label}: rejected Quick departure performs no lifecycle mutation`);
             assert.equal(await evaluate(`pickerReadProbe.requests`), writesBefore, `${label}: rejected confirmation performs no Store write`);
@@ -298,14 +312,14 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
                 [true, 'quick', quickBefore.record.contextId, quickBefore.record.clock.status, quickBefore.record.clock.deadlineMs],
                 `${label}: rejected confirmation preserves Quick identity, status and deadline`);
 
-            await evaluate(`window.confirm=()=>true;Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent===${JSON.stringify(label)}).click()`);
+            await evaluate(`window.confirm=()=>true;${selectLifecycle(label)}`);
             await click('#planner [data-native-lifecycle-dialog] .confirm-stop');
             await wait(`document.body.dataset.mode==='home'&&!document.body.classList.contains('planner-open')`);
             const target = await record();
             assert.equal(target.executions.find(entry => entry.execution.id === executionId)?.execution.lifecycle ?? null, lifecycle,
                 `${label}: accepted confirmation writes the terminal lifecycle exactly once`);
             assert.equal(target.revision, suspendedSnapshot.revision + 1);
-            assert.equal(await evaluate(`localStorage.getItem('easyTimerRuntime.v1.lifecycle-unrelated')`), JSON.stringify(unrelatedQuick),
+            assert.equal(await evaluate(`localStorage.getItem('easyTimerRuntime.v1.unrelated-cutover-quick')`), JSON.stringify(unrelatedQuick),
                 `${label}: unrelated recovery remains untouched`);
         }
 
@@ -315,7 +329,7 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         await click('#primary'); await wait(`document.querySelector('#status').textContent==='Running'`);
         const uncertainQuick = await evaluate(`(()=>{const key=sessionStorage.getItem('easyTimerRuntimeContext.v1');return {key,record:JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+key))}})()`);
         await menuAction('#open-planner'); await wait(`document.body.classList.contains('planner-open')`);
-        await evaluate(`window.confirm=()=>true;pickerReadProbe.lateFailureNext=true;Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Keep plan and reset progress').click()`);
+        await evaluate(`window.confirm=()=>true;pickerReadProbe.lateFailureNext=true;${selectLifecycle('Keep Rundown and reset progress')}`);
         await click('#planner [data-native-lifecycle-dialog] .confirm-stop');
         await wait(`Boolean(document.querySelector('#planner [data-native-recheck]'))`);
         assert.deepEqual(await evaluate(`(()=>{const value=JSON.parse(localStorage.getItem('easyTimerRuntime.v1.'+${JSON.stringify(uncertainQuick.key)}));return [document.body.classList.contains('planner-open'),document.body.dataset.mode,value.contextId,value.clock.status,value.clock.deadlineMs]})()`),
@@ -330,7 +344,7 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         await menuAction('#open-planner');
         await wait(`document.body.classList.contains('planner-open')`);
         await evaluate(`window.cutoverConfirm=window.confirm;window.cutoverAnswers=[false,true];window.confirm=()=>window.cutoverAnswers.shift()`);
-        await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='Create template').click()`);
+        await evaluate(`Array.from(document.querySelectorAll('#planner button')).find(button=>button.textContent==='New Event Template').click()`);
         await evaluate(`(()=>{const input=document.querySelector('#planner [data-field="name"]');input.value='Retained unsaved draft';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
         await click('#planner .planner-back');
         assert.equal(await evaluate(`document.querySelector('#planner [data-field="name"]').value`), 'Retained unsaved draft', 'Rejected close preserves the complete draft');
@@ -348,18 +362,32 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
         })()`);
         await reload('quick');
         assert.equal(await evaluate(`document.querySelector('#legacy-recovery-dialog').open`), true);
-        assert.match(await text('#legacy-recovery-message'), /vorherigen Datenmodell/);
+        assert.match(await text('#legacy-recovery-message'), /in einem älteren Format gespeichert und kann nicht fortgesetzt werden/);
         await click('#legacy-recovery-keep');
+        await wait(`!document.querySelector('#legacy-recovery-dialog').open`);
         assert.notEqual(await evaluate(`localStorage.getItem('easyTimerRuntime.v1.legacy-cutover-session')`), null,
             'Keeping legacy recovery does not discard or convert it');
         assert.equal(await evaluate(`document.querySelector('#open-session').disabled`), true);
         await click('#legacy-recovery-open');
+        await wait(`document.querySelector('#legacy-recovery-dialog').open`);
         await click('#legacy-recovery-discard');
-        await wait(`!document.querySelector('#legacy-recovery-dialog').open&&!document.querySelector('#open-session').disabled`);
+        try {
+            await wait(`!document.querySelector('#legacy-recovery-dialog').open&&!document.querySelector('#open-session').disabled`);
+        } catch (error) {
+            const state = await evaluate(`({
+                dialogOpen: document.querySelector('#legacy-recovery-dialog').open,
+                discardDisabled: document.querySelector('#legacy-recovery-discard').disabled,
+                eventTimerDisabled: document.querySelector('#open-session').disabled,
+                legacyStillStored: localStorage.getItem('easyTimerRuntime.v1.legacy-cutover-session') !== null,
+                feedback: document.querySelector('#recovery-feedback').textContent,
+            })`);
+            throw new Error(`Legacy recovery discard did not settle: ${JSON.stringify(state)}`, { cause: error });
+        }
         assert.equal(await evaluate(`localStorage.getItem('easyTimerRuntime.v1.legacy-cutover-session')`), null);
         assert.equal(await evaluate(`localStorage.getItem('easyTimerRuntime.v1.unrelated-cutover-quick')`), JSON.stringify(unrelatedQuick),
             'Explicit legacy Session discard preserves unrelated Quick recovery');
         console.log('PASS: public native Picker/direct launch, exact started resume identities, Suspend versus Retain Plan, archive, draft close guard, and explicit DE legacy Session recovery discard.');
+        passed = true;
     } finally {
         await evaluate(`(()=>{
             if(window.pickerReadProbe) navigator.locks.request=window.pickerReadProbe.original;
@@ -374,7 +402,9 @@ export async function checkPublicEditorCutover({ evaluate, click, text, cdp }) {
             }
             sessionStorage.removeItem('easyTimerRuntimeContext.v1');sessionStorage.removeItem('easyTimerView.v1');
         })()`);
-        await reload('home');
-        await click('#home-quick');
+        if (passed) {
+            await reload('home');
+            await click('#home-quick');
+        }
     }
 }

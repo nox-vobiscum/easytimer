@@ -1,7 +1,7 @@
 // One presentation-only header shared by the app and standalone information pages.
 const labels = {
-    en: { home:'Home', mode:'Mode', quick:'Quick Timer', session:'Session Timer', planner:'Session Editor', editorSubtitle:'Create & manage rundowns', exportRundown:'Export Rundown', language:'Language', theme:'Appearance', de:'German', en:'English', light:'Light', dark:'Dark', system:'System', about:'About', faq:'FAQ', imprint:'Imprint', privacy:'Privacy', information:'Information', openMenu:'Open preferences', closeMenu:'Close preferences' },
-    de: { home:'Startseite', mode:'Modus', quick:'Quick-Timer', session:'Session-Timer', planner:'Session-Editor', editorSubtitle:'Rundowns erstellen & verwalten', exportRundown:'Rundown exportieren', language:'Sprache', theme:'Darstellung', de:'Deutsch', en:'Englisch', light:'Hell', dark:'Dunkel', system:'System', about:'Über easyTimer', faq:'FAQ', imprint:'Impressum', privacy:'Datenschutz', information:'Informationen', openMenu:'Einstellungen öffnen', closeMenu:'Einstellungen schließen' },
+    en: { home:'Home', mode:'Mode', quick:'Quick Timer', session:'Event Timer', planner:'Event Editor', editorSubtitle:'Manage events and Event Templates', exportRundown:'Export Rundown', language:'Language', theme:'Appearance', de:'German', en:'English', light:'Light', dark:'Dark', system:'System', about:'About', faq:'FAQ', imprint:'Imprint', privacy:'Privacy', information:'Information', openMenu:'Open preferences', closeMenu:'Close preferences' },
+    de: { home:'Startseite', mode:'Modus', quick:'Quick-Timer', session:'Event-Timer', planner:'Event-Editor', editorSubtitle:'Events und Event-Templates verwalten', exportRundown:'Rundown exportieren', language:'Sprache', theme:'Darstellung', de:'Deutsch', en:'Englisch', light:'Hell', dark:'Dunkel', system:'System', about:'Über easyTimer', faq:'FAQ', imprint:'Impressum', privacy:'Datenschutz', information:'Informationen', openMenu:'Einstellungen öffnen', closeMenu:'Einstellungen schließen' },
 };
 let instance;
 export function mountApplicationHeader() {
@@ -82,13 +82,13 @@ const headerMarkup = `
             <g class="stopwatch-echo stopwatch-echo-near"><circle cx="17" cy="16" r="7.25"/><path d="M17 8.75V6m-2-1h4m3 5 1.5-1.5"/></g>
             <circle class="stopwatch-face" cx="9" cy="16" r="8"/><path d="M9 8V4m-2-1h4m4 6 1.5-1.5M9 12v4"/>
           </svg>
-          <span data-copy="session">Session Timer</span>
+          <span data-copy="session">Event Timer</span>
         </button>
       </div>
       <div class="planner-navigation">
         <button id="open-planner" type="button">
           <svg class="navigation-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 4h10M4 8h5M4 12v8h16v-5m-12 1 1-4L19 2l3 3-10 10-4 1Zm9-12 3 3"/></svg>
-          <span class="editor-copy"><span data-copy="planner">Session Editor</span><span class="editor-subtitle" data-copy="editorSubtitle">Create &amp; manage rundowns</span></span>
+          <span class="editor-copy"><span data-copy="planner">Event Editor</span><span class="editor-subtitle" data-copy="editorSubtitle">Manage events and Event Templates</span></span>
           <svg class="planner-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6"/></svg>
         </button>
       </div>

@@ -1,9 +1,9 @@
-import { mountApplicationHeader } from './header.mjs?v=59';
+import { mountApplicationHeader } from './header.mjs?v=85';
 // Information pages do not initialize timers, recovery or development services.
 const applicationHeader = mountApplicationHeader();
 const labels = {
-    en: { about: 'About', faq: 'FAQ', imprint: 'Imprint', privacy: 'Privacy Policy', back: { home:'Back to Home', quick:'Back to Timer', session:'Back to Session', editor:'Back to Session Editor', stopwatch:'Back to Stopwatch', default:'Go to Home' }, navigation: 'Information' },
-    de: { about: 'Über easyTimer', faq: 'FAQ', imprint:'Impressum', privacy:'Datenschutz', back: { home:'Zurück zur Startseite', quick:'Zurück zum Timer', session:'Zurück zur Session', editor:'Zurück zum Session-Editor', stopwatch:'Zurück zur Stoppuhr', default:'Zur Startseite' }, navigation:'Informationen' },
+    en: { about: 'About', faq: 'FAQ', imprint: 'Imprint', privacy: 'Privacy Policy', back: { home:'Back to Home', quick:'Back to Timer', session:'Back to Event Timer', editor:'Back to Event Editor', stopwatch:'Back to Stopwatch', default:'Go to Home' }, navigation: 'Information' },
+    de: { about: 'Über easyTimer', faq: 'FAQ', imprint:'Impressum', privacy:'Datenschutz', back: { home:'Zurück zur Startseite', quick:'Zurück zum Timer', session:'Zurück zum Event-Timer', editor:'Zurück zum Event-Editor', stopwatch:'Zurück zur Stoppuhr', default:'Zur Startseite' }, navigation:'Informationen' },
 };
 const preference = (key, fallback, allowed) => {
     try { const value = localStorage.getItem(key); return allowed.includes(value) ? value : fallback; }

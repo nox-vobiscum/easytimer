@@ -34,7 +34,7 @@ export async function checkNativeDraftReload({ evaluate, cdp, origin }) {
         await cdp('Page.reload');
         await wait(`performance.timeOrigin !== ${previous} && document.querySelector('main:not([aria-busy])')
             && document.querySelector('body.planner-open #planner .planner-top')`);
-        await wait(`Array.from(document.querySelectorAll('#planner button')).some(b => b.textContent === 'Create template')`);
+        await wait(`Array.from(document.querySelectorAll('#planner button')).some(b => b.textContent === 'New Event Template')`);
     };
     await cdp('Page.navigate', { url: origin + '/' });
     await wait(`location.origin === ${JSON.stringify(origin)} && document.body?.dataset.mode === 'home'
@@ -44,8 +44,8 @@ export async function checkNativeDraftReload({ evaluate, cdp, origin }) {
     const initialStore = await readStore();
     const initialRevision = initialStore === null ? 0 : validateEditorStoreRecord(JSON.parse(initialStore)).revision;
     await click('#home-editor');
-    await wait(`Array.from(document.querySelectorAll('#planner button')).some(b => b.textContent === 'Create template')`);
-    await action('Create template');
+    await wait(`Array.from(document.querySelectorAll('#planner button')).some(b => b.textContent === 'New Event Template')`);
+    await action('New Event Template');
     await field('[data-field="name"]', 'Native draft reload');
     for (const [index, title, duration] of [[1, 'Welcome', '5'], [2, 'Discussion', '12']]) {
         await action('Add phase');
@@ -353,7 +353,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
                 [...root.querySelectorAll('h2')].filter(node => !node.closest('dialog:not([open])')).map(node => node.textContent),
                 root.textContent.includes('Lifecycle actions are intentionally unavailable'),
                 document.querySelector('#open-planner').textContent.includes('Native')];
-        })()`), [true, 'Session Editor', ['Templates', 'Planned executions', 'Active in Timer', 'Suspended', 'Completed'], false, false]);
+        })()`), [true, 'Event Editor', ['Event Templates', 'Planned events', 'Active in Timer', 'Suspended', 'Completed'], false, false]);
         assert.deepEqual(await evaluate(`nativeWorkspaceFixture.keys.every(key => key === 'easyTimerEditor.v1')`), true,
             'Workspace reads only native storage');
         assert.equal(await evaluate(`nativeWorkspaceFixture.recoveryValues.size`), 0,
@@ -374,7 +374,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             await nativeWorkspaceFixture.workspace.open();
             window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => true;
         })()`);
-        await action('Create template'); await action('Cancel'); await action('Back');
+        await action('New Event Template'); await action('Cancel'); await action('Back');
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.root.hasAttribute('data-native-editor-workspace'),
             nativeWorkspaceFixture.closeCalls.length,
@@ -383,7 +383,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             await nativeWorkspaceFixture.workspace.open();
             window.confirm = window.nativeWorkspaceConfirm;
         })()`);
-        await action('Create template'); await field('[data-field="name"]', 'Keep this draft');
+        await action('New Event Template'); await field('[data-field="name"]', 'Keep this draft');
         await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => false`);
         await action('Back');
         assert.deepEqual(await evaluate(`[
@@ -398,7 +398,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         ]`), [false, 3], 'accepted Back confirmation closes the dirty Workspace');
         await evaluate(`window.confirm = window.nativeWorkspaceConfirm; delete window.nativeWorkspaceConfirm; nativeWorkspaceFixture.workspace.open()`);
 
-        await action('Create template');
+        await action('New Event Template');
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture;
             const record = JSON.parse([...f.recoveryValues.values()].at(-1));
@@ -429,7 +429,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             const input = f.root.querySelector('[data-field="name"]');
             const result = [input.value, f.root.querySelector('h1').textContent, document.activeElement === f.root.querySelector('h1')];
             f.workspace.setLanguage('en'); return result;
-        })()`), ['Independent workshop', 'Session-Editor', true],
+        })()`), ['Independent workshop', 'Event-Editor', true],
         'a real language change rerenders localized UI while preserving the complete draft');
         recoveryWritesBefore = await recoveryWriteCount();
         await field('.native-workspace-control', 'training', 'change');
@@ -864,7 +864,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             };
             f.recoveryUnconfirmedOnSet = true;
         })()`);
-        await action('Create template');
+        await action('New Event Template');
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, warning = f.root.querySelector('[data-template-recovery-warning]');
             const record = JSON.parse([...f.recoveryValues.values()].at(-1));
@@ -925,7 +925,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         })()`);
         await evaluate(`nativeWorkspaceFixture.failWorkspaceLoadOnce = true; nativeWorkspaceFixture.reloadWorkspace()`);
         assert.deepEqual(await evaluate(`[
-            nativeWorkspaceFixture.root.textContent.includes('could not be read'),
+            nativeWorkspaceFixture.root.textContent.includes('The Event Editor could not load saved data.'),
             [...nativeWorkspaceFixture.root.querySelectorAll('button')].some(button => button.textContent === 'Retry loading'),
         ]`), [true, true], 'authoritative Store load failure replaces indefinite Loading with an explicit Retry');
         await action('Retry loading');
@@ -1007,7 +1007,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
 
         const writesBeforeSavedReload = await evaluate(`nativeWorkspaceFixture.writes`);
         const savesBeforeSavedReload = await evaluate(`nativeWorkspaceFixture.calls.templateSave`);
-        await action('Create template');
+        await action('New Event Template');
         await field('[data-field="name"]', 'Reload result test'); await action('Add phase');
         const reloadPhaseId = await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id]').dataset.nativePhaseId`);
         await field(`[data-native-phase-id="${reloadPhaseId}"] [data-field="title"]`, 'Reload phase');
@@ -1037,7 +1037,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         'saved-result Retry performs no second authoritative Save');
 
         const writesBeforeCleanupFailure = await evaluate(`nativeWorkspaceFixture.writes`);
-        await action('Create template');
+        await action('New Event Template');
         await field('[data-field="name"]', 'Cleanup test'); await action('Add phase');
         const cleanupPhaseId = await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id]').dataset.nativePhaseId`);
         await field(`[data-native-phase-id="${cleanupPhaseId}"] [data-field="title"]`, 'Cleanup phase');
@@ -1062,7 +1062,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         const writesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.writes`);
         const savesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.calls.templateSave`);
         const removesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.recoveryCalls.filter(([operation]) => operation === 'remove').length`);
-        await action('Create template');
+        await action('New Event Template');
         await field('[data-field="name"]', 'Unconfirmed cleanup test'); await action('Add phase');
         const unconfirmedCleanupPhaseId = await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-native-phase-id]').dataset.nativePhaseId`);
         await field(`[data-native-phase-id="${unconfirmedCleanupPhaseId}"] [data-field="title"]`, 'Cleanup uncertainty phase');
@@ -1092,7 +1092,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         const writesBeforeExecution = await evaluate('nativeWorkspaceFixture.writes');
         const sourceTemplateId = await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates
             .find(item => item.plan.name === 'Independent workshop').id`);
-        await rowAction('Independent workshop', 'Create planned execution');
+        await rowAction('Independent workshop', 'Plan Event');
         assert.equal(await evaluate(`nativeWorkspaceFixture.writes`), writesBeforeExecution, 'new Execution remains local before Save');
         await field('[data-field="name"]', 'Independent execution');
         await field('[data-field="prepared"]', 'Execution-only information');
@@ -1120,7 +1120,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         const storeBeforePlanningRecheck = await evaluate('nativeWorkspaceFixture.raw');
         await action('Recheck without writing');
         for (let i = 0; i < 100; i++) {
-            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Execution creation is confirmed') &&
+            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('The event was created') &&
                 nativeWorkspaceFixture.root.querySelector('button[type="submit"]')?.disabled === false`)) break;
             if (i === 99) assert.fail('Planning Recheck did not confirm the created Execution and release Save');
             await delay(20);
@@ -1128,7 +1128,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.writes,
             nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
-            nativeWorkspaceFixture.root.textContent.includes('Execution creation is confirmed'),
+            nativeWorkspaceFixture.root.textContent.includes('The event was created'),
             nativeWorkspaceFixture.root.querySelector('[data-field="prepared"]').value,
             nativeWorkspaceFixture.raw,
         ]`), [writesBeforeExecution + 1, 'Independent execution', true, 'Execution-only information', storeBeforePlanningRecheck],
@@ -1333,7 +1333,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         }
         const writesBeforeImport = await evaluate('nativeWorkspaceFixture.writes');
         await evaluate(`nativeWorkspaceFixture.uncertainOnSet = true`);
-        await action('Import copy');
+        await action('Import Event Template copy');
         for (let i = 0; i < 50; i++) {
             if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('write acknowledgement is uncertain') &&
                 Boolean(nativeWorkspaceFixture.tickets.import)`)) break;
@@ -1355,20 +1355,20 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
                 .find(button => button.textContent === 'Cancel import');
             return [f.writes, f.calls.import, f.calls.importRecheck,
                 f.recheckTickets.import === f.tickets.import, cancel.disabled,
-                f.root.textContent.includes('Review import'), !f.root.textContent.includes('Template copy imported.')];
+                f.root.textContent.includes('Review import'), !f.root.textContent.includes('Event Template copy imported.')];
         })()`), [writesBeforeImport + 1, 1, 1, true, true, true, true],
         'unresolved Import retains its candidate/ticket and blocks cancellation without another write');
         await evaluate(`nativeWorkspaceFixture.raw = JSON.stringify(nativeWorkspaceFixture.tickets.import.target)`);
         await action('Recheck without writing');
         for (let i = 0; i < 50; i++) {
-            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Template copy imported.')`)) break;
+            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Event Template copy imported.')`)) break;
             await delay(20);
         }
         assert.equal(await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates.filter(item => item.plan.name === 'Independent workshop').length`), 2,
             'single-template import creates an independent copy');
 
         await rowAction('Independent workshop', 'Delete', sourceTemplateId);
-        assert.equal(await evaluate(`document.activeElement.textContent.trim()`), 'Keep Template', 'dialog focuses safe action');
+        assert.equal(await evaluate(`document.activeElement.textContent.trim()`), 'Keep Event Template', 'dialog focuses safe action');
         await press('Escape', 'Escape', 27);
         assert.deepEqual(await evaluate(`(() => {
             const dialog = nativeWorkspaceFixture.root.querySelector('dialog');
@@ -1377,7 +1377,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         const writesBeforeDelete = await evaluate('nativeWorkspaceFixture.writes');
         await rowAction('Independent workshop', 'Delete', sourceTemplateId);
         await evaluate(`nativeWorkspaceFixture.uncertainOnSet = true`);
-        await action('Delete Template', '[data-native-dialog]');
+        await action('Delete Event Template', '[data-native-dialog]');
         for (let i = 0; i < 50; i++) {
             if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('write acknowledgement is uncertain')`)) break;
             await delay(20);
@@ -1396,13 +1396,13 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             const enabled = [...f.root.querySelectorAll('button,input,select,textarea')].filter(control => !control.disabled);
             return [f.writes, f.calls.delete, f.calls.deleteRecheck,
                 f.recheckTickets.delete === f.tickets.delete,
-                enabled.length, enabled[0]?.textContent, !f.root.textContent.includes('Template deleted.')];
+                enabled.length, enabled[0]?.textContent, !f.root.textContent.includes('Event Template deleted.')];
         })()`), [writesBeforeDelete + 1, 1, 1, true, 1, 'Recheck without writing', true],
         'unresolved Delete retains its ticket and exposes only read-only Recheck');
         await evaluate(`nativeWorkspaceFixture.raw = JSON.stringify(nativeWorkspaceFixture.tickets.delete.target)`);
         await action('Recheck without writing');
         for (let i = 0; i < 50; i++) {
-            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Template deleted.')`)) break;
+            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Event Template deleted.')`)) break;
             await delay(20);
         }
         assert.equal(await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates.some(item => item.id === ${JSON.stringify(sourceTemplateId)})`), false,
@@ -1415,10 +1415,9 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         assert.deepEqual(await evaluate(`[
             nativeWorkspaceFixture.root.querySelector('h1').textContent,
             [...nativeWorkspaceFixture.root.querySelectorAll('h2.rundown-list-heading')].map(node => node.textContent),
-        ]`), ['Session-Editor', ['Vorlagen', 'Geplante Durchführungen', 'Im Timer aktiv', 'Unterbrochen', 'Abgeschlossen']]);
-        await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('en')`);
-
-        for (const [width, height, mobile] of [[320, 640, true], [568, 320, true]]) {
+        ]`), ['Event-Editor', ['Event-Templates', 'Geplante Events', 'Im Timer aktiv', 'Unterbrochen', 'Abgeschlossen']]);
+        for (const [language, width, height, mobile] of [['de', 320, 640, true], ['en', 320, 640, true], ['en', 568, 320, true]]) {
+            await evaluate(`nativeWorkspaceFixture.workspace.setLanguage('${language}')`);
             await cdp('Emulation.setDeviceMetricsOverride', {
                 width, height, screenWidth: width, screenHeight: height, mobile, deviceScaleFactor: 1,
             });
@@ -1437,7 +1436,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
                     const element = { tag: node.localName, id: node.id, label: node.getAttribute('aria-label') || node.textContent.trim(),
                         field: node.dataset.field, action: node.dataset.action, width, height, left, right };
                     if (width < 44 || height < 44) violations.push({ ...element, criterion: 'minimum 44 × 44 CSS pixels' });
-                    if (left < 0 || right > innerWidth) {
+                    if (left < 0 || right > innerWidth || (node.matches('button') && node.scrollWidth > node.clientWidth)) {
                         violations.push({ ...element, criterion: 'inside horizontal viewport', viewportWidth: innerWidth });
                     }
                 }

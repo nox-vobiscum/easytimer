@@ -136,7 +136,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         await key('Enter','Enter',13);
         assert.equal(await text('#time'),'05:00'); assert.equal(await text('#status'),'Ready');
         assert.equal(await evaluate('document.activeElement.id'),'primary','Advance restores focus to Start');
-        assert.equal(await text('#next-label'),'Complete workshop');
+        assert.equal(await text('#next-label'),'Finish Rundown');
         assert.equal(await evaluate(`document.querySelector('#next-phase').hidden`),true,'Last phase does not imply another phase');
         await capture('last-phase-ready');
         assert.equal(await text('#phase-number'),'Phase 2 of 2'); assert.match(await text('#time-budget'),/05:00/);
@@ -146,7 +146,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         await click('#primary'); await tick(315000);
         assert.equal(await text('#phase-number'),'Phase 2 of 2'); assert.equal(await text('#time'),'+00:15');
         assert.equal(await text('#status'),'Phase time elapsed','Last phase expiry does not complete the workshop');
-        await click('#next'); assert.equal(await text('#status'),'Workshop complete');
+        await click('#next'); assert.equal(await text('#status'),'Rundown finished');
         assert.equal(await evaluate(`document.querySelector('#next').hidden&&document.querySelector('#next').disabled`),true,'No phase advance after completion');
         await capture('final-overtime');
         assert.equal(await text('#time'),'+00:00'); assert.match(await text('#time-budget'),/00:00/);
@@ -174,7 +174,7 @@ export async function checkSession({ evaluate, click, text, cdp, configure }) {
         await picker(); await choose('single-run');
         await evaluate(`document.querySelector('#next').focus()`);
         await key(' ','Space',32);
-        assert.equal(await text('#status'),'Workshop complete','Early completion of an unstarted last phase is explicit');
+        assert.equal(await text('#status'),'Rundown finished','Early completion of an unstarted last phase is explicit');
         await menu('#open-quick');
         assert.equal(await text('#status'),'Ready'); assert.equal(await text('#time'),'01:00');
         await tick(60000); assert.equal(await text('#time'),'01:00','Returning restores Quick configuration without an active deadline');
