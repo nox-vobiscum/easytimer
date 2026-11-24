@@ -1,5 +1,7 @@
 # EDITOR-001 / UX-001 — Consolidated UX decisions (2026-11-16)
 
+> **Terminology and Home follow-up (2026-11-24):** For visible terminology only, use the later [Event terminology and Home usability checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md). Event Template maps to Template; Event maps to Execution; Event/Phase Information maps to prepared information and Event/Phase Notes to occurrence-specific notes. Existing functional and timing contracts remain.
+
 > **Responsive design closure (2026-11-24):** Later 24 November §§10–14 resolve responsive design: wide Editor settings initially open but phase details initially closed at all widths; global expand/collapse actions; overlay displays read-only phase duration/category; selectable library layouts and existing theme tokens. Only these explicit supersessions modify older UX wording. [Decision record §§10–14](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#10-responsive-library-and-session-editor--confirmed-design).
 
 > **Library design follow-up (2026-11-24):** The 24 November checkpoint §2a also confirms compact Template card C, integrated example/empty state B, active Execution direct edit pencil B and unified context menu. Existing lifecycle and persistence rules remain. [Decision record §2a](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#2a-populated-library--subsequent-confirmed-decisions-2026-11-24).

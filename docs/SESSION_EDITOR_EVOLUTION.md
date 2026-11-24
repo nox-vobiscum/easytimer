@@ -1,5 +1,7 @@
 # Session Editor Evolution & Facilitator Panel
 
+> **Terminology and Home follow-up (2026-11-24):** The later [Event terminology and Home usability checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md) is authoritative for user-facing names: Event Template, Event, Rundown, Phase, Event Editor/Timer, and symmetric Information/Notes. Internal Template/Execution/Run, schemas, prepared versus occurrence-specific information, archive and lifecycle contracts stay unchanged.
+
 > **Responsive design closure (2026-11-24):** The 24 November §§10–14 now define the accepted adaptive library, asymmetric two-column editor and shared information overlay, global phase disclosures and persistent read-only phase context. Existing lifecycle, timer, ownership, persistence and prepared/execution note contracts remain unchanged. [Decision record §§10–14](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#10-responsive-library-and-session-editor--confirmed-design).
 
 > **Library design follow-up (2026-11-24):** The 24 November checkpoint §2a resolves the conditional active-row action design: direct edit pencil plus dominant Return to Timer. It also confirms the shared compact card layout and state-specific labeled actions. No change to lifecycle/ownership or editing safeguards. [Decision record §2a](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#2a-populated-library--subsequent-confirmed-decisions-2026-11-24).
