@@ -1,5 +1,7 @@
 # Session Editor Evolution & Facilitator Panel
 
+> **Responsive design closure (2026-11-24):** The 24 November §§10–14 now define the accepted adaptive library, asymmetric two-column editor and shared information overlay, global phase disclosures and persistent read-only phase context. Existing lifecycle, timer, ownership, persistence and prepared/execution note contracts remain unchanged. [Decision record §§10–14](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#10-responsive-library-and-session-editor--confirmed-design).
+
 > **Library design follow-up (2026-11-24):** The 24 November checkpoint §2a resolves the conditional active-row action design: direct edit pencil plus dominant Return to Timer. It also confirms the shared compact card layout and state-specific labeled actions. No change to lifecycle/ownership or editing safeguards. [Decision record §2a](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#2a-populated-library--subsequent-confirmed-decisions-2026-11-24).
 
 > **Current design checkpoint (2026-11-24):** [23–24 November 2026 mobile UX design checkpoint](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md) records accepted mobile design, rationale, supersessions and open items. Staging v84 at `debfc66f7431039f9cf2ecbbc295481fe84f8927`; local-only status passages below are historical, not current release evidence. No production approval for v84. Preserve all unrelated runtime/lifecycle/Facilitator Panel contracts.

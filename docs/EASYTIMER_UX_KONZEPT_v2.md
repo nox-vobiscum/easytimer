@@ -1,5 +1,7 @@
 # easyTimer — Product, UX and MVP Concept v2
 
+> **Responsive design closure (2026-11-24):** The 24 November §§10–14 close the EDITOR-001 design round, preserving existing Light/Dark/System palette, adding responsive presentation and phase disclosure controls only. No product implementation or release approval. [Decision record §§10–14](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#10-responsive-library-and-session-editor--confirmed-design).
+
 > **Later EDITOR-001 design checkpoint (2026-11-24):** [23–24 November 2026 mobile UX design checkpoint](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md) is the accepted screenshot-led mobile UX reference and targeted supersession register. Staging v84 at `debfc66f7431039f9cf2ecbbc295481fe84f8927`, not production-approved. Older operational snapshots remain historical. No new timer or persistence semantics.
 
 > **Current context (2026-11-01):** Production and staging run PWA v67 at
