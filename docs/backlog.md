@@ -1,5 +1,7 @@
 # easyTimer — Future Backlog
 
+> **Library design follow-up (2026-11-24):** The 24 November checkpoint §2a resolves the example/empty-state presentation: welcoming entry even with the protected example, hidden example removable from view but restorable, and existing all-hidden state preserved. Compact card C and state-specific actions/menu confirmed; no new implementation approval. [Decision record §2a](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#2a-populated-library--subsequent-confirmed-decisions-2026-11-24).
+
 > **EDITOR-001 design checkpoint (2026-11-24):** [23–24 November 2026 mobile UX design checkpoint](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md) records confirmed mobile UX, remaining design work and decision-continuity rules; not implementation approval. **Deferred: category-based color coding** consistently across Session Editor, Facilitator Panel and Audience View, supplementing icons, Light/Dark/System and non-color recognition; no palette or implementation approved. Owner reconfirmed prior deferred decision; original conversation citation not recovered. Keep this item for later, outside current UX polish. Historical editor status text is not evidence of current deployment; staging v84 at `debfc66f7431039f9cf2ecbbc295481fe84f8927`.
 
 **Status:** Living idea backlog · **Prepared:** 2026-10-23  

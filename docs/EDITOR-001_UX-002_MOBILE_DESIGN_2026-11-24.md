@@ -27,7 +27,67 @@ Observed UX issues: technical UUID/revision and repeated empty lifecycle section
 
 ## 2. Library — confirmed C (empty) + B (populated)
 
-Use the same library, no separate screen/wizard/onboarding flag. Fully empty library gets a welcoming task-oriented state inspired by existing Welcome screen: concise heading and explanation of planning/reuse, primary Create template, secondary Import template, discreet local-storage explanation where accurate. This returns whenever library becomes empty, not just first visit. Populated library uses compact content-oriented sections; hide empty lifecycle sections rather than listing repeated No entries. Preserve existing template/execution distinctions, tabs, pagination, sort, actions, status semantics, recovery, import/export and built-in example decisions from earlier records; detailed coexistence of empty state with protected example/hidden entries/recovery is not yet resolved and must be checked, not silently inferred. No technical UUID/revision in ordinary card display; show meaningful name, category, duration and relevant status; phase count is a candidate, not a final requirement. Populated card detail design still open. Labels in sketches are illustrative.
+Use the same library, no separate screen/wizard/onboarding flag. Fully empty library gets a welcoming task-oriented state inspired by existing Welcome screen: concise heading and explanation of planning/reuse, primary Create template, secondary Import template, discreet local-storage explanation where accurate. This returns whenever library becomes empty, not just first visit. Populated library uses compact content-oriented sections; hide empty lifecycle sections rather than listing repeated No entries. Preserve existing template/execution distinctions, tabs, pagination, sort, actions, status semantics, recovery, import/export and built-in example decisions from earlier records; coexistence with the protected example and hidden entries is resolved in §2a below; coexistence with recovery remains to be checked, not silently inferred. No technical UUID/revision in ordinary card display; show meaningful name, category, duration and relevant status; phase count is a candidate, not a final requirement. Populated card detail design confirmed in §2a. Labels in sketches are illustrative.
+
+## 2a. Populated library — subsequent confirmed decisions (2026-11-24)
+
+**Status:** Owner accepted Template card C, integrated example/empty-state option B, active Execution card B, and unified context menu. This closes the mobile library design discussion, not implementation or acceptance testing. Preserve the earlier UX-001 §2 and Session Editor Evolution lifecycle rules (especially the existing action priorities, retention and ownership boundaries), and the backlog's protected example, hide/show, and Execution-to-Template requirements.
+
+### Shared card structure and template card C
+
+Use compact, subtly tinted cards; upper row identifies the entry (existing rundown category icon, single-line ellipsized title with accessible full-name affordance, planned total duration, relevant metadata) and holds direct edit pencil where applicable plus accessible overflow. Lower row holds the explicit primary and secondary task actions. No UUID/revision or redundant lifecycle labels. All targets remain at least 44 × 44 CSS px; compactness comes from arrangement, not smaller targets. Use existing theme tokens and icon language, DE/EN parity and accessible names/tooltips; no hover dependency. Keep primary action subtly accent-filled/outlined, secondary action neutral outlined, edit and overflow restrained icon actions. Avoid making all actions visually equal.
+
+For regular startable Templates: pencil + overflow in header, and **Session starten** (primary) / **Durchführung planen** (secondary) explicitly labeled side by side below. Both remain directly accessible. The pencil edits the Template, not an Execution. Do not hide the planning action behind a calendar icon: the difference between direct launch and planning an independent Execution is important enough to label explicitly. Owner chose C over A (three labeled task buttons, extra vertical space) and B (planning represented by icon only). Preserve launch into READY without starting the clock and independent unsaved planning-copy semantics. Nonstartable records retain the already agreed concrete reason and Bearbeiten / Bearbeitung fortsetzen action, rather than inert Start. Do not infer additional restrictions on existing planning operations. The protected example has no edit pencil for its original and no permanent delete action.
+
+```text
+┌────────────────────────────────────────┐
+  category   Sprint Planning      edit ⋮
+             120 min
+  [ Session starten ] [ Durchführung planen ]
+└────────────────────────────────────────┘
+```
+
+Schematic only; actual labels, truncation and fit must be verified in both languages at narrow and wider viewports. Existing A–Z Template sort; Execution creation-descending sort; five cards per page (independently per Execution status group), show pagination only when needed. No layout change to pagination semantics. Category icon examples in chat were illustrative, not replacements for existing rundown category mapping. Phase count remains unapproved optional metadata.
+
+### Integrated example and welcoming empty state — option B
+
+The presence of the single protected built-in Retrospektive / Retrospective must not prevent the welcoming entry experience. Show the inviting task-oriented introduction, prominent New Template and secondary Import, with the normal example card beneath a short example introduction if visible. The example is not a separate gallery, tab or new card component. Preserve normal library tab access and the unobtrusive local-storage hint where accurate. In an otherwise populated library the example appears in ordinary alphabetical order with discreet Example metadata, not a name prefix. Its immutable original remains protected, while independent executions can be started/planned from it as previously specified.
+
+Owner explicitly wants the user to be able to remove the example from their visible library, leaving it visually empty. Reconcile with prior protected-example contract: use existing agreed Hide/Show, not permanent deletion; hidden preference persists and the example can be restored. No extra onboarding flag or first-visit state. Derive entry state from actual records and visibility, returning to the welcoming state whenever there are no personal entries. The agreed introductory-state condition is no own Templates or Executions; preserve tab-specific empty states and access to the other tab. Exact cross-tab presentation when only the other tab has personal records remains a visual detail, not authorization to merge tabs.
+
+| Library condition | Presentation |
+| --- | --- |
+| No personal entries, example visible | Welcoming entry plus example card |
+| No personal entries, example hidden | Welcoming entry without example card; hidden-entry access remains |
+| Personal visible entries exist | Normal compact library, relevant tab/status groups |
+| Personal entries exist but all are hidden | Existing hidden-count/temporary show action, not a misleading first-use state |
+
+Keep per-tab Show hidden toggle, default OFF on fresh library open, normal sort/group placement when shown, hidden counts and pagination rules, explicit restore and immediate persistence with existing safety checks. Do not silently unhide, duplicate or delete records. Recovery coexistence still needs review. This is the narrow supersession of the older minimal-empty-state wording for the genuinely empty/personal-empty introductory state; the all-hidden handling remains unchanged.
+
+### Execution cards: common structure, state-specific actions
+
+Keep the same visual structure as Template C; lifecycle determines available actions, not different card components or new runtime behavior. Group headings in existing order: Geplant, Im Timer aktiv, Unterbrochen, Abgeschlossen; discreet counts, independent disclosure with chevron; hide empty groups; first three initially open, Completed initially closed. The group heading communicates lifecycle, so avoid redundant status badges on each card. Preserve necessary distinct metadata (e.g. hidden) and existing sort/page rules. Use planned duration, not an invented actual-duration metric.
+
+| Entry | Primary labeled action | Secondary labeled action | Header pencil |
+| --- | --- | --- | --- |
+| Regular Template | Session starten | Durchführung planen | Yes |
+| Protected example | Session starten | Durchführung planen | No |
+| Planned | Session starten | Bearbeiten | No (edit already labeled below) |
+| Active in Timer | Zurück zum Timer | None | Yes (confirmed B) |
+| Suspended | Im Timer fortsetzen | Durchführung abschließen | No (edit in context menu) |
+| Completed | Ansehen | Neue Durchführung erstellen | No |
+
+Active card B explicitly resolves the conditional visual choice in Session Editor Evolution § Active execution row action priority (line 633 at previous checkpoint): direct pencil in upper identification row, a single full-width dominant Return to Timer action below. A (edit only in overflow) was considered and not selected. This keeps editing accessible without making it compete with the timer action. No active-run finalization or timer control in the library. The existing active editing restrictions, runtime locks and ownership/concurrency safeguards remain authoritative; direct access does not authorize broader editing or any clock/progress change. Suspended resume returns frozen/paused until explicit Continue, finalization uses existing retention choices and started/never-started eligibility, editing remains possible without activation. Completed View opens history, not the Timer; Create new execution uses existing snapshot choices and fresh independent READY semantics. No automatic mutation of source Templates. Nonstartable Planned cards use the existing concrete-reason/edit treatment.
+
+### Unified context menu — accepted
+
+Use the existing category-popover visual language: restrained tinted surface, subtle border, one clearly labeled icon/text row per available action, at least 44px target, no nested submenus. Accessible overflow trigger, keyboard/focus/close handling and viewport-safe positioning. Only show relevant and permitted actions for the specific entry; no duplicate direct actions needed. Deletion, where permitted, goes last after a subtle divider. No new destructive-action semantics, extra lifecycle action or permission changes.
+
+Illustrative regular Template menu: Export JSON (download icon), Hide (eye-off), divider, Delete (trash). Hidden entries instead offer Show; protected example has no Delete or edit-original action. Preserve all previously agreed state-specific overflow actions, including suspended Edit, Execution-to-Template copy at each lifecycle status subject to existing feasibility/safety boundaries, completed export/delete and separately guarded source-template update where applicable. Exact final action set must be verified against existing decisions and implementation, not derived solely from this illustrative menu.
+
+### Remaining visual acceptance and next topic
+
+Verify real 320px width with DE/EN button labels, long titles, 44px targets, overflow menus, pagination and hidden/example/recovery edge states. Wider viewports may adapt arrangement, column count, spacing and optional icon labels, not action semantics, priority, information hierarchy or icon meaning. Consider library, agenda editor and input overlay separately on desktop/tablet/small notebook. Then check Light/System themes and visual consistency. No new editor, schema, timer engine, storage, dependency, implementation GO or rollout.
 
 ## 3. Editor — confirmed C (agenda focus)
 
@@ -104,6 +164,6 @@ Category-based color coding across Session Editor, Facilitator Panel and Audienc
 
 ## 9. Open items / next checkpoints
 
-Populated library detailed card design (including existing tabs/pagination, built-in example and empty-state coexistence); wider responsive desktop layout and viewport breakpoints, actual 320px fit/long titles and nonwrapping durations; Light/System and DE/EN visual validation; precise copy and accessibility; storage-state and keyboard/safe-area behavior of sticky actions; existing note editor integration/technical acceptance; native validation localization and possible contact autofill; check current repo implementation against accepted requirements before implementation. No blanket implementation GO. Design reference approved by owner; exact pixels, breakpoints and palette not final. Reconcile relevant historical decisions explicitly, especially removed zero-phase placeholder, collapsed settings, framed category and position selectors, combined disclosure and global save actions. Preserve unrelated backlog and historical records.
+Library recovery-state coexistence and actual narrow-width fit of confirmed cards and menus; wider responsive desktop layout and viewport breakpoints, actual 320px fit/long titles and nonwrapping durations; Light/System and DE/EN visual validation; precise copy and accessibility; storage-state and keyboard/safe-area behavior of sticky actions; existing note editor integration/technical acceptance; native validation localization and possible contact autofill; check current repo implementation against accepted requirements before implementation. No blanket implementation GO. Design reference approved by owner; exact pixels, breakpoints and palette not final. Reconcile relevant historical decisions explicitly, especially removed zero-phase placeholder, collapsed settings, framed category and position selectors, combined disclosure and global save actions. Preserve unrelated backlog and historical records.
 
-Next discussion: populated library detail design, then responsive desktop and Light Mode. Before each, consult applicable docs and latest accepted checkpoint; only discuss genuine gaps or conflicts. Keep this record and canonical references current at each meaningful checkpoint.
+Next discussion: responsive desktop adaptation (library, editor, input overlay), then Light Mode and visual consistency. The library design is accepted in §2a; no implementation or real-device acceptance is implied. Before each, consult applicable docs and latest accepted checkpoint; only discuss genuine gaps or conflicts. Keep this record and canonical references current at each meaningful checkpoint.
