@@ -1,4 +1,4 @@
-import { mountApplicationHeader } from './header.mjs?v=85';
+import { mountApplicationHeader } from './header.mjs?v=86';
 import { createTimer, formatOvertime, formatTime, timeBudget, transition, adjustmentError } from './timer.mjs?v=54';
 import { transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=54';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=54';
@@ -28,7 +28,7 @@ const copy = {
         about: 'About', faq: 'FAQ', imprint: 'Imprint', privacy: 'Privacy', information: 'Information',
         planner: 'Event Editor', mode: 'Mode', editorSubtitle: 'Create & manage rundowns', exportRundown: 'Export Rundown', exportFailed: 'The download could not be prepared. Please try again.',
         clockOnly: 'Show clock-only view', clockControls: 'Show timer controls',
-        home: 'Home', homeHeading: 'Welcome to easyTimer', homeIntroduction: 'Choose what you would like to do.', homeSecondary: 'Start a timer directly or prepare an event for later.', homeActions: 'Timer and planning options', homeQuickDescription: 'Set a duration and start a countdown.', homeSessionDescription: 'Run events with multiple timed activities.', homeEditorDescription: 'Prepare events and create reusable Event Templates.', homeStopwatchDescription: 'Measure elapsed time.', homeAbout: 'What is easyTimer?', stopwatch: 'Stopwatch', notAvailable: 'Not yet available',
+        home: 'Home', homeHeading: 'Timing is everything.', homeIntroduction: 'Apparently.', homeActions: 'Timer and planning options', homeQuickDescription: 'Set a duration and start a countdown.', homeSessionDescription: 'Run events with multiple timed activities.', homeEditorDescription: 'Prepare events and create reusable Event Templates.', homeStopwatchDescription: 'Measure elapsed time.', homeAbout: 'What is easyTimer?', stopwatch: 'Stopwatch', notAvailable: 'Not yet available',
         quick: 'Quick Timer', session: 'Event Timer', chooseWorkshop: 'Select an Event or Event Template', backQuick: 'Back to Quick Timer',
         workshopTemplate: 'Event or Event Template', createRundown: 'Open Event Editor', pickerContext: 'Choose what to open in the Event Timer.', pickerEditorSubtitle: 'Prepare events and Event Templates',
         templateEntity: 'Event Templates', plannedEntity: 'Planned events', activeEntity: 'Active in Timer', suspendedEntity: 'Suspended events', completedEntity: 'Completed events',
@@ -69,7 +69,7 @@ const copy = {
         about: 'Über easyTimer', faq: 'FAQ', imprint: 'Impressum', privacy: 'Datenschutz', information: 'Informationen',
         planner: 'Event-Editor', mode: 'Modus', editorSubtitle: 'Rundowns erstellen & verwalten', exportRundown: 'Rundown exportieren', exportFailed: 'Der Download konnte nicht vorbereitet werden. Bitte erneut versuchen.',
         clockOnly: 'Nur die Uhr anzeigen', clockControls: 'Timer-Bedienung anzeigen',
-        home: 'Startseite', homeHeading: 'Willkommen bei easyTimer', homeIntroduction: 'Wähle aus, was du tun möchtest.', homeSecondary: 'Starte direkt einen Timer oder plane ein Event für später.', homeActions: 'Timer- und Planungsoptionen', homeQuickDescription: 'Zeit einstellen und direkt loslegen.', homeSessionDescription: 'Events mit mehreren Zeitabschnitten durchführen.', homeEditorDescription: 'Events vorbereiten und wiederverwendbare Event-Templates erstellen.', homeStopwatchDescription: 'Verstrichene Zeit messen.', homeAbout: 'Was ist easyTimer?', stopwatch: 'Stoppuhr', notAvailable: 'Noch nicht verfügbar',
+        home: 'Startseite', homeHeading: 'Timing is everything.', homeIntroduction: 'Apparently.', homeActions: 'Timer- und Planungsoptionen', homeQuickDescription: 'Zeit einstellen und direkt loslegen.', homeSessionDescription: 'Events mit mehreren Zeitabschnitten durchführen.', homeEditorDescription: 'Events vorbereiten und wiederverwendbare Event-Templates erstellen.', homeStopwatchDescription: 'Verstrichene Zeit messen.', homeAbout: 'Was ist easyTimer?', stopwatch: 'Stoppuhr', notAvailable: 'Noch nicht verfügbar',
         quick: 'Quick-Timer', session: 'Event-Timer', chooseWorkshop: 'Event oder Event-Template auswählen', backQuick: 'Zurück zum Quick-Timer',
         workshopTemplate: 'Event oder Event-Template', createRundown: 'Event-Editor öffnen', pickerContext: 'Wähle, was du im Event-Timer öffnen möchtest.', pickerEditorSubtitle: 'Events und Event-Templates vorbereiten',
         templateEntity: 'Event-Templates', plannedEntity: 'Geplante Events', activeEntity: 'Im Timer aktiv', suspendedEntity: 'Unterbrochene Events', completedEntity: 'Abgeschlossene Events',

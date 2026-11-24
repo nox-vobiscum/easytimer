@@ -247,9 +247,9 @@ try {
     assert.equal(await evaluate(`document.querySelector('#home-stopwatch').disabled&&document.querySelector('#home-stopwatch').getAttribute('aria-describedby')?.split(' ').includes('home-stopwatch-note')`),true,'Stopwatch is visible and accessibly unavailable');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.home-action .navigation-icon')).length===4`),true,'Landing actions reuse the established menu icon artwork');
     await click('[data-language="de"]');
-    assert.equal(await text('#home-heading'),'Willkommen bei easyTimer');
+    assert.equal(await text('#home-heading'),'Timing is everything.');
     await click('[data-language="en"]');
-    assert.equal(await text('#home-heading'),'Welcome to easyTimer');
+    assert.equal(await text('#home-heading'),'Timing is everything.');
     const homeDisclosure = '.home-about summary';
     assert.equal(await evaluate("document.querySelector('.home-about').open"), false);
     for (const [width,height] of [[1280,720],[600,720],[320,568]]) {
@@ -380,8 +380,8 @@ try {
     assert.equal((await text('footer')).replace(/\uFE0E/g,''),'Crafted with ♥ by Roland B. Seper | rbsnet.at © 2026');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('footer a')).map(a=>({href:a.getAttribute('href'),target:a.target,rel:a.rel}))`),[{href:'https://rolandseper.at',target:'_blank',rel:'noopener noreferrer'},{href:'https://rbsnet.at',target:'_blank',rel:'noopener noreferrer'}]);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.footer-heart')).color===getComputedStyle(document.querySelector('footer')).color&&document.querySelector('.footer-heart').textContent.includes('\uFE0E')`),true,'Monochrome Unicode heart follows the footer text color');
-    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=85'&&js==='js/app.js?v=85'})()`),true,'New HTML bypasses stale unversioned app resources');
-    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'85','app.js':'85','info.js':'85','header.mjs':'85','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs','editor-phase-drag.mjs','editor-phase-dndkit-vendor.mjs','editor-draft-recovery.mjs','editor-template-draft-recovery-service.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
+    assert.equal(await evaluate(`(()=>{const css=document.querySelector('link[rel="stylesheet"]').getAttribute('href');const js=document.querySelector('script[type="module"]').getAttribute('src');return css==='css/styles.css?v=86'&&js==='js/app.js?v=86'})()`),true,'New HTML bypasses stale unversioned app resources');
+    assert.equal(await evaluate(`fetch('service-worker.js').then(r=>r.text()).then(source=>Object.entries({'styles.css':'86','app.js':'86','info.js':'86','header.mjs':'86','recovery.mjs':'55','templates.mjs':'37','timer.mjs':'54','session.mjs':'54','time-visuals.mjs':'54'}).every(([file,version])=>source.includes(file+'?v='+version))&&['editor-workspace.mjs','editor-launch-service.mjs','editor-planner-service.mjs','editor-portability.mjs','editor-phase-drag.mjs','editor-phase-dndkit-vendor.mjs','editor-draft-recovery.mjs','editor-template-draft-recovery-service.mjs'].every(file=>source.includes(file))&&!source.includes('planner-v1.mjs')&&!source.includes('planner.js?v='))`),true,'Worker precaches matching native Editor resources, information pages, recovery, the engine, Session and shared visual helper without V1 public Editor dependencies');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.presentation-brand')).display`), 'none');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#menu-toggle')).display`), 'grid');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#preferences')).display`), 'none');

@@ -157,7 +157,7 @@ export async function checkInformation({ cdp, evaluate, wait, origin, screenshot
             await wait(`document.querySelector('[data-info-language="${language}"]:not([hidden])') && document.documentElement.lang === '${language}'`);
             assert.equal(await evaluate('document.querySelectorAll("article:not([hidden])").length'), 1);
             assert.equal(await evaluate('document.querySelectorAll("#time, #primary, #account-toggle, .development-sync").length'), 0);
-            assert.equal(await evaluate('document.querySelector("script").getAttribute("src")'), 'js/info.js?v=85');
+            assert.equal(await evaluate('document.querySelector("script").getAttribute("src")'), 'js/info.js?v=86');
             assert(await evaluate('Boolean(document.querySelector("header .brand .brand-mark")) && Boolean(document.querySelector("#menu-toggle"))'));
             assert.equal(await evaluate('document.querySelector("header").outerHTML'), appHeader, 'The exact application header markup is shared');
             assert.equal(await evaluate('document.querySelectorAll(".info-navigation a").length'), 4);

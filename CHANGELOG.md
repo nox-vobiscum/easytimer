@@ -6,6 +6,10 @@ commit, staging and production deployment are distinct events.
 
 ## Unreleased
 
+- Home now opens with “Timing is everything.” and “Apparently.” in both
+  languages. The redundant line below the mode tiles was removed. The staging
+  shell advances to PWA v86.
+
 - **Package 01 — Event terminology and Home usability:** public DE/EN copy uses
   Event, Event Template, Event Timer and Event Editor. Home explains all four
   modes and includes an optional information disclosure. The FAQ explains
