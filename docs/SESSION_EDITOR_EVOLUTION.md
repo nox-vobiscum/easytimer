@@ -1,5 +1,7 @@
 # Session Editor Evolution & Facilitator Panel
 
+> **Current design checkpoint (2026-11-24):** [23–24 November 2026 mobile UX design checkpoint](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md) records accepted mobile design, rationale, supersessions and open items. Staging v84 at `debfc66f7431039f9cf2ecbbc295481fe84f8927`; local-only status passages below are historical, not current release evidence. No production approval for v84. Preserve all unrelated runtime/lifecycle/Facilitator Panel contracts.
+
 > **UX-001 decision update (2026-11-16):** The binding, consolidated library/editor/phase/notes/resources interaction decisions are recorded in [`EDITOR-001_UX-001_DECISIONS_2026-11-16.md`](EDITOR-001_UX-001_DECISIONS_2026-11-16.md). For this UX-001 scope, that later decision record supersedes contradictory exploratory UX wording below (including underline, preview length, link-row editing and save boundaries). It does **not** supersede the existing timer, Schema-2, ACTIVE/recovery, archival or Facilitator Panel contracts. The note-editor library is a preferred candidate only, not a released feature.
 
 **Status:** Strategic direction agreed. The coordinated public Schema-2 cutover

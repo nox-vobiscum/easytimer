@@ -1,5 +1,7 @@
 # easyTimer — Developer Briefing
 
+> **Binding collaboration update (2026-11-24):** [23–24 November 2026 mobile UX design checkpoint](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md) contains the six-point decision-continuity contract. Adopt existing consistent decisions without reopening; treat unimplemented decisions as requirements; retain deferred items; discuss only concrete conflicts with newly approved UX; discuss genuine gaps; research documentation and available prior discussions before asking. Record decisions, rationale, supersessions, deferred items and open points promptly in versioned docs, separately from verified implementation. This is mandatory for future chats and developer assignments. Staging baseline at this checkpoint: PWA v84, `debfc66f7431039f9cf2ecbbc295481fe84f8927`; no production approval for v84.
+
 This is the authoritative onboarding and handover reference for work on
 easyTimer. Read it before inspecting or changing the project. The detailed
 product decisions remain in

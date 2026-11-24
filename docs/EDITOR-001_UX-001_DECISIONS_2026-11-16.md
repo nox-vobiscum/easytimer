@@ -1,5 +1,7 @@
 # EDITOR-001 / UX-001 — Consolidated UX decisions (2026-11-16)
 
+> **Later binding UX update (2026-11-24):** [23–24 November 2026 mobile UX design checkpoint](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md) records the accepted screenshot-led design and explicit supersessions: zero-phase empty agenda instead of visual placeholder, collapsed settings, C2 mobile layout, framed category/position selectors, combined content/disclosure control, tinted details, responsive local actions and explicit global action bar. Preserve unrelated functional decisions. Read both records; later explicit decisions prevail only for identified conflicts.
+
 **Status:** Product Owner decisions accepted for design; **not** blanket approval for implementation, public rollout or timer/runtime changes.
 **Scope:** Library, rundown workspace, phase editing, prepared information, notes/resources, explicit save boundaries and the isolated OverType evaluation.
 **Authority:** This file consolidates the focused UX discussion through 2026-11-16. Where an older, exploratory passage in `SESSION_EDITOR_EVOLUTION.md` contradicts a specific decision recorded here **for UX-001 only**, follow this later explicit decision; preserve all unrelated existing EDITOR-001 data, runtime, history, lifecycle and Facilitator Panel contracts. Reconcile conflicting wording in the canonical concept before production integration.
