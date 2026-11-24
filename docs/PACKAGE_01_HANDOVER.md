@@ -2,8 +2,9 @@
 
 ## Verified state
 
-At the documentation checkpoint, `develop` and staging application source
-are at `ebb0039ddaa096ab968554d62fcedfc6a499d7d6`, PWA v86.
+The verified staging application source is
+`ebb0039ddaa096ab968554d62fcedfc6a499d7d6`, PWA v86. Later
+documentation-only commits advance `develop` without changing that source.
 The [staging workflow](https://github.com/nox-vobiscum/easytimer/actions/runs/45396888619)
 completed successfully. The staging service worker was checked again at this
 checkpoint. The owner authorized intermediate staging for manual UX and device
@@ -63,20 +64,59 @@ report exact commands, exit codes, counts and remaining blockers. Update review
 evidence. No browser run on v84 was performed; its comparison was static.
 The local review ZIPs contain detailed logs and are untracked artifacts.
 
-## IST/SOLL and sequencing
+## Original IST/SOLL findings
 
-| Area | Current evidence | Accepted target or next gate |
-| --- | --- | --- |
-| Terminology and Home | Package 01 implemented; static review positive; v86 staging and one positive iPhone observation | Complete browser gate and owner acceptance; no new feature implied |
-| Native library and editor | One Schema-2 Workspace and lifecycle library exist | Mobile library cards, example/empty state and action presentation in the [mobile decision record](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md) remain subject to implementation audit and separate GO |
-| Facilitator Panel | Not in the public slice | Separate approved implementation work remains |
-| Responsive library/editor and information overlay (B2) | Design accepted, implementation not claimed | Scheduled after the current UX-001 block and Facilitator Panel, before EDITOR-001 closure; see the mobile decision record §§10–14 |
-| NANO-001 | Concept only | Next separate feature after EDITOR-001 completion, acceptance and production release, ahead of Stopwatch |
-| Stopwatch | Disabled Home tile | Separate future design and implementation |
+The independent review of `develop` at `22a28e7` recorded these findings.
+They describe that review baseline and must be rechecked against actual source
+before a later implementation:
 
-This table records the sequence supported by repository evidence. The complete
-prior conversation-derived IST/SOLL implementation roadmap, including any
-numbered packages or slice ordering beyond these documented dependencies, was
-not found in the repository or the available conversation. The owner must
-supply that material before it can be consolidated without inventing it.
-No Package 02 implementation is authorized by this handover.
+- Native Template/Execution architecture, independent records, lifecycle,
+  persistence, recovery, phase fields, drag-and-drop and category selection
+  already existed.
+- New drafts could contain zero phases, but the central plan validator rejected
+  their persistence.
+- Successful Save left the Editor. Save-and-remain required safe revision,
+  baseline and recovery handling.
+- Prepared information and resources updated the draft immediately. The
+  approved shared overlay required separate local edit buffers.
+- Library tabs, pagination, compact cards, protected example, visibility
+  management and selectable layouts were outstanding.
+- Responsive Editor, global phase disclosure controls, information previews,
+  shared overlay and sticky action bar were outstanding.
+- Preserve the existing theme identity, timer semantics, ownership and
+  persistence guarantees. No architectural rewrite was justified.
+
+## Original proposed implementation roadmap
+
+The Product Owner supplied this original planning reference from the independent
+IST/SOLL review of `develop` at `22a28e7`. Estimates and risk ratings are
+the original assessments, not verified delivery forecasts or an irrevocably
+approved sequence. Each implementation requires its own scoped approval.
+
+| Package | Scope | Estimated effort | Risk |
+| --- | --- | --- | --- |
+| 01 | Terminology and Home usability | Small–medium | Low |
+| 02 | Planning and start validation: persist incomplete plans while enforcing strict start eligibility | Medium | High |
+| 03 | Save and draft lifecycle: Save, Save & Back, discard, revisions and recovery | Medium | High |
+| 04 | Library foundation: tabs, empty states, lifecycle groups, sorting and pagination | Medium | Medium |
+| 05 | Library cards and views: compact cards, context menus and three selectable layouts | Medium | Medium |
+| 06 | Protected example and visibility: sample retrospective, hide/show and persistent visibility | Medium | Medium |
+| 07 | Event Editor foundation: name, settings, information sections, agenda and global action bar | Medium | Medium |
+| 08 | Phase UX: C2 layout, category and position controls, detail presentation and global disclosure actions | Medium | Medium |
+| 09 | Information overlay: Markdown, resources, read/edit modes and local Apply/Cancel | Larger | Medium–high |
+| 10 | Remaining lifecycle actions and Facilitator Panel under existing safety and approval boundaries | Separate assessment | High |
+| 11 | Responsive finishing work: two-column Editor, responsive overlay, theme consistency and real-device acceptance | Medium | Medium |
+
+Packages 02, 03, 06, 09 and 10 require smaller technical slices before
+implementation. Package 01 was subsequently implemented and deployed to
+staging as v85; the fixed Home claim followed in v86. Its browser regression
+gate remains open.
+
+Resume the paused browser stabilization described above before further
+implementation unless the Product Owner explicitly authorizes another sequence.
+Responsive finishing work remains scheduled after the Facilitator Panel, within
+EDITOR-001 before closure. NANO-001 remains the next separate feature after
+EDITOR-001 is completed, accepted and released to production. The
+[mobile decision record](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md)
+contains the accepted responsive design details. The Stopwatch remains a
+disabled Home tile and separate future work.
