@@ -1,5 +1,9 @@
 # EDITOR-001 — Session Editor UX evolution: mobile design checkpoint, 2026-11-24
 
+> **Later handover:** Package 01 and the v86 Home claim are on staging.
+> The [handover](PACKAGE_01_HANDOVER.md) records the current evidence and open
+> gates. The roadmap below remains a design record, not an implementation claim.
+
 > **Terminology and Home follow-up (2026-11-24):** Later [Event terminology and Home usability checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md) supersedes visible Session/Template/Execution and prepared/execution notes wording and narrowly amends the previous unchanged Welcome rule. Retain all other accepted layout, behavior and lifecycle decisions. No technical rebranding.
 
 **Status:** Product Owner accepted design decisions from the 23–24 November 2026 screenshot-led discussion. Documentation only; not implementation, test acceptance or release authorization. UX-002 in this filename is a checkpoint label only, not a new backlog ID or an allocation of an existing UX ticket.

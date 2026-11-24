@@ -1,5 +1,9 @@
 # easyTimer terminology mapping
 
+The fixed Home claim “Timing is everything.” / “Apparently.” is intentionally
+English in both DE and EN. See the [handover](PACKAGE_01_HANDOVER.md) for its
+staging and acceptance status.
+
 Mandatory reading for contributors and coding agents. Use the DE and EN columns
 for public labels and the technical columns to trace those labels into the code.
 When starting from a domain field or module, read the same tables in reverse.

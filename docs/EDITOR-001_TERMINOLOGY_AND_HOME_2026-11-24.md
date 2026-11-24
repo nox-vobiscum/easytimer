@@ -1,5 +1,11 @@
 # easyTimer — Event terminology and Home usability checkpoint (2026-11-24)
 
+> **Current staging and handover:** Package 01 passed independent static review.
+> PWA v86 at `ebb0039` is on staging with the fixed bilingual Home claim.
+> The owner reported all four modes initially accessible without scrolling on
+> iPhone 15 Safari in DE/Dark. See the [handover](PACKAGE_01_HANDOVER.md) for
+> the observation, deferred polish, paused browser gate and sequencing.
+
 **Status:** Product Owner accepted terminology and Home improvement direction following the 24 November responsive design closure. Documentation only. No implementation GO, release approval, new feature architecture or priority change. This filename is a descriptive checkpoint, not a new ticket ID.
 **Authority:** Supplements [mobile and responsive UX decisions](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md), [16 November decisions](EDITOR-001_UX-001_DECISIONS_2026-11-16.md), [Session Editor Evolution](SESSION_EDITOR_EVOLUTION.md), [canonical UX](EASYTIMER_UX_KONZEPT_v2.md) and [backlog](backlog.md). For user-visible terminology and the targeted Home enhancements explicitly accepted here, this later checkpoint prevails over older wording, screenshots and sketches. All other previously accepted functional, visual and safety contracts remain intact. Historical technical terminology in docs and code is not a conflicting user-facing requirement.
 

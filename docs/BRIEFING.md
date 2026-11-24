@@ -1,5 +1,10 @@
 # easyTimer — Developer Briefing
 
+> **Current handover:** Staging runs PWA v86 at `ebb0039`. Package 01
+> passed independent static review; browser stabilization and final acceptance
+> remain open. The [handover](PACKAGE_01_HANDOVER.md) records the verified
+> state, paused instructions and evidence-backed sequencing.
+
 **Mandatory contributor and coding-agent reading:** Use the
 [terminology mapping](TERMINOLOGY_MAPPING.md) for public DE/EN copy and its
 technical counterparts. Update it alongside any change to product terminology

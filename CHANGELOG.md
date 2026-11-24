@@ -8,14 +8,19 @@ commit, staging and production deployment are distinct events.
 
 - Home now opens with “Timing is everything.” and “Apparently.” in both
   languages. The redundant line below the mode tiles was removed. The staging
-  shell advances to PWA v86.
+  shell advances to PWA v86 at `ebb0039ddaa096ab968554d62fcedfc6a499d7d6`;
+  [staging workflow](https://github.com/nox-vobiscum/easytimer/actions/runs/45396888619)
+  succeeded. The owner reported that all four modes initially fit without
+  scrolling on iPhone 15 Safari in DE/Dark. Browser gate and final acceptance
+  remain open.
 
 - **Package 01 — Event terminology and Home usability:** public DE/EN copy uses
   Event, Event Template, Event Timer and Event Editor. Home explains all four
   modes and includes an optional information disclosure. The FAQ explains
   Rundowns, reusable templates and prepared information versus occurrence notes.
   Start Event still prepares the countdown in READY. The local PWA shell is v85.
-  Independent review and Product Owner acceptance are pending.
+  Independent static review was positive. Browser stabilization and final
+  Product Owner acceptance are pending.
 
 - **EDITOR-001 / UX-001 native phase drag-and-drop:** the accepted framework-free
   dnd-kit interaction is integrated into the Schema-2 Editor with a dedicated

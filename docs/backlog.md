@@ -1,6 +1,12 @@
 # easyTimer — Future Backlog
 
-> **Terminology and Home follow-up (2026-11-24):** Package 01 is implemented locally in shell v85 and awaits independent review, real-device verification and Product Owner acceptance. See the [terminology and Home checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md) and the maintained [terminology mapping](TERMINOLOGY_MAPPING.md). B2, Facilitator Panel, NANO-001 and Stopwatch scheduling remain in place.
+> **Terminology and Home follow-up (2026-11-24):** Package 01 passed independent static review and PWA v86 is on staging. The owner reported a positive iPhone 15 Safari DE/Dark initial Home fit; full acceptance and browser stabilization remain open. See the [handover](PACKAGE_01_HANDOVER.md), [checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md) and [terminology mapping](TERMINOLOGY_MAPPING.md). B2, Facilitator Panel, NANO-001 and Stopwatch scheduling remain in place.
+
+> **Deferred Home polish:** Reduce claim-line size contrast, tighten line spacing
+> and balance vertical spacing while preserving readable text, touch targets
+> and the observed initial no-scroll fit. Optional unprioritized Easter egg:
+> randomized humorous claim suffixes, without controls, notifications or
+> animation. No implementation is approved.
 
 > **Responsive design closure (2026-11-24):** B2 design option is now explicitly accepted and elaborated in 24 November §§10–14: three selectable library views, responsive asymmetric Editor and information overlay, global expand/collapse phase actions with disabled-state truth table, persistent read-only phase context and unchanged theme identity. Concept complete; B2 scheduling/Facilitator Panel and NANO-001 priority remain unchanged unless separately approved. IST/SOLL and scoped implementation planning next. [Decision record §§10–14](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md#10-responsive-library-and-session-editor--confirmed-design).
 
