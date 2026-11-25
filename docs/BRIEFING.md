@@ -1,11 +1,11 @@
 # easyTimer — Developer Briefing
 
-> **Current handover:** Staging runs PWA v86 at `ebb0039`. Package 01
-> passed independent review and automated browser regression, and the Product
-> Owner accepted it. Production release remains unauthorized. See the
-> [Package 01 handover](PACKAGE_01_HANDOVER.md) for verified results and the
-> [Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md) for the approved
-> start eligibility slice and the remaining review gates.
+> **Current handover:** Staging runs PWA v87 at `7425840`. The Product Owner
+> accepted Package 02 on desktop Staging. iPhone verification remains open
+> and does not block Package 03. Production release remains unauthorized.
+> See the [Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md) for the
+> production safeguard and rollback requirements, and the
+> [Package 01 handover](PACKAGE_01_HANDOVER.md) for that release baseline.
 
 **Mandatory contributor and coding-agent reading:** Use the
 [terminology mapping](TERMINOLOGY_MAPPING.md) for public DE/EN copy and its

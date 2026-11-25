@@ -19,8 +19,8 @@ The reviewed Slice 02.2 implementation was published at
 the 02.3a/02.3b decomposition and authorized 02.3a. Independent review
 accepted Slice 02.3a and all final automated verification gates. Slice 02.3b
 and its final automated verification passed independent review. Regular
-Package 02 implementation is complete. Rollout and Owner acceptance remain
-pending.
+Package 02 implementation is complete and Owner-accepted on desktop Staging
+v87. iPhone verification is pending. Production rollout remains unauthorized.
 
 The [UX-001 decisions](EDITOR-001_UX-001_DECISIONS_2026-11-16.md#5-emptyincomplete-planning-state-versus-valid-execution)
 define incomplete planning and strict Start eligibility. The
@@ -605,7 +605,8 @@ approval remain open. Full logs and the probe are in the review ZIP.
 
 This analysis uses the complete, independently reviewed Package 02 at
 `96bfeef42d77fcf144e7f1560660df1d156aae22` and the 02.3a/02.3b isolated
-compatibility evidence. Rollout and Owner acceptance remain pending.
+compatibility evidence. The comparison below records the pre-rollout proposal.
+The accepted Staging decision and desktop acceptance are recorded below.
 
 ### Data integrity and workshop continuity
 
@@ -719,7 +720,7 @@ Local and remote `develop` were verified at
 shell cache name and shell asset references, with matching test expectations.
 A comparison against the reviewed commit found only version substitutions
 in application and test files. Store, Runtime and deployment workflow code
-are unchanged. No staged deployment has been verified at this checkpoint.
+were unchanged by release preparation.
 
 Packaging and inventory verification passed for 41 files at PWA v87.
 Thirteen focused Node tests and seven offline artifact browser checkpoints
@@ -734,6 +735,35 @@ verified removal of the old shell cache, a fresh v87 document and unchanged
 persisted Event data on compatible recovery. Its deliberately unclosed v86
 owner still reproduced the Pause failure, confirming the need for the
 controlled staging gate. The result is local and uses synthetic data.
+
+### Live Staging verification and Owner acceptance
+
+Staging deployed `742584093a518d29abff146ad9ec5a23428d3393` from `develop`.
+The push-triggered workflow completed successfully.
+[GitHub Actions run 45645403009](https://github.com/nox-vobiscum/easytimer/actions/runs/45645403009)
+
+An isolated Edge profile opened live Staging v86 before the push. Over live
+HTTPS, the v87 worker claimed that document and removed the v86 shell cache.
+The old document still ran v86 until reload. Reload loaded v87, the v87
+cache held the versioned shell assets, and the isolated profile's Store was
+unchanged. The HTTPS inventory matched 40 of 41 files byte for byte; only
+`THIRD_PARTY_NOTICES.txt` differed in line endings.
+
+The Product Owner accepted Package 02 on desktop Staging v87. Manual checks
+confirmed save and reopen of a zero-phase Event Template, saving unnamed
+phases and unspecified timeboxes, the correct total and missing-timebox
+count, and the concrete reason an incomplete plan cannot start. Edit
+replaces Start Event for incomplete plans, and Plan Event remains available.
+A timed unnamed phase entered READY as `Unnamed Phase`. The independent
+Event previously activated from the Template remained available after the
+source Template was edited.
+
+Package 02 is closed for desktop Staging. iPhone verification, including
+the actual transition on the unavailable device, remains pending and does
+not block Package 03. Production remains unauthorized. The incompatible
+planning-write safeguard remains a mandatory production release blocker,
+and every rollback build must retain the complete compatible planning and
+recovery reader.
 
 Package 03 owns Save and Save & Back, draft lifecycle and associated
 navigation. The later library, responsive and Facilitator Panel work follows
