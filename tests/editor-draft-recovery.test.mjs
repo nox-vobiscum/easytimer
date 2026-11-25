@@ -97,8 +97,7 @@ function emptyRecord() {
     return { schemaVersion: 1, revision: 0, templates: [], executions: [], activeRuntime: null };
 }
 
-function templatePendingRecord() {
-    const draft = templateDraft();
+function templatePendingRecord(draft = templateDraft()) {
     const operation = {
         kind: 'create',
         template: {
@@ -115,6 +114,7 @@ function templatePendingRecord() {
     return recovery({
         savedAt: 101,
         state: 'pending',
+        draft: structuredClone(draft),
         pending: { kind: 'templateSave', ticket: { draft, operation, source, target } },
     });
 }
@@ -135,6 +135,22 @@ test('creates, reads and copy-isolates one complete recovery record with readbac
     assert.equal(storage.values.size, 1);
     assert.equal(storage.values.has(`${EDITOR_DRAFT_RECOVERY_PREFIX}recovery-1`), true);
     assert.deepEqual(storage.state.touched.map(([operation]) => operation), ['get', 'set', 'get', 'get']);
+});
+
+test('legacy empty duration drafts and canonical null Save tickets remain distinct from invalid text', () => {
+    const canonicalDraft = templateDraft({ template: editableTemplate({ phases: [phase({ durationSeconds: null })] }) });
+    const pending = templatePendingRecord(canonicalDraft);
+    pending.draft.template.phases[0].durationSeconds = '';
+    const valid = validateEditorDraftRecoveryRecord(pending);
+    assert.equal(valid.draft.template.phases[0].durationSeconds, '', 'Retained older draft stays byte-faithful');
+    assert.equal(valid.pending.ticket.draft.template.phases[0].durationSeconds, null);
+    assert.equal(valid.pending.ticket.target.templates[0].plan.phases[0].durationSeconds, null);
+    const invalid = structuredClone(pending);
+    invalid.draft.template.phases[0].durationSeconds = ' ';
+    expectCode('recoveryValidation', () => validateEditorDraftRecoveryRecord(invalid));
+    assert.equal(validateEditorDraftRecoveryRecord(recovery({
+        draft: invalid.draft,
+    })).draft.template.phases[0].durationSeconds, ' ', 'Raw invalid editable input remains recoverable');
 });
 
 test('updates only with the exact prior savedAt precondition and advances same-millisecond timestamps', () => {
@@ -554,6 +570,14 @@ test('binds a pending plan ticket to its zero-phase source and retains the edita
     const foreignPlan = structuredClone(record);
     foreignPlan.pending.ticket.expectedPlan.name = 'Foreign source plan';
     expectCode('recoveryValidation', () => validateEditorDraftRecoveryRecord(foreignPlan));
+
+    const unspecified = structuredClone(record);
+    const missingTimebox = phase({ durationSeconds: null });
+    unspecified.baseline.template.phases = [missingTimebox];
+    unspecified.draft.template.phases = [missingTimebox];
+    unspecified.pending.ticket.retained.phases = [missingTimebox];
+    unspecified.pending.ticket.expectedPlan.phases = [missingTimebox];
+    assert.deepEqual(validateEditorDraftRecoveryRecord(unspecified).pending.ticket.expectedPlan.phases, [missingTimebox]);
 });
 
 test('maps quota, security, write and readback failures to stable error codes', () => {

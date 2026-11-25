@@ -72,10 +72,22 @@ function category(value, allowed, fallback) {
     return normalized;
 }
 
-function duration(value) {
-    if (!Number.isSafeInteger(value) || value < 60 || value % 60 !== 0 || value > MAX_PHASE_SECONDS) {
-        fail('duration');
+export function isValidPhaseDuration(value) {
+    return Number.isSafeInteger(value) && value >= 60 && value % 60 === 0 && value <= MAX_PHASE_SECONDS;
+}
+
+export function summarizePhaseDurations(values) {
+    let totalSeconds = 0;
+    let missing = 0;
+    for (const value of values) {
+        if (value === null) missing++;
+        else if (isValidPhaseDuration(value)) totalSeconds += value;
     }
+    return { totalSeconds, missing };
+}
+
+function duration(value, planning) {
+    if (!(planning && value === null) && !isValidPhaseDuration(value)) fail('duration');
     return value;
 }
 
@@ -95,7 +107,7 @@ function validateResources(resources) {
     return resources.map(validateResource);
 }
 
-function validatePhase(phase, ids) {
+function validatePhase(phase, ids, planning) {
     exactFields(phase, ['id', 'title', 'durationSeconds'], ['category', 'notes', 'resources']);
     const id = identity(phase.id);
     if (ids.has(id)) fail('invalidData');
@@ -103,24 +115,21 @@ function validatePhase(phase, ids) {
     return {
         id,
         title: text(phase.title, 'phaseTitle'),
-        durationSeconds: duration(phase.durationSeconds),
+        durationSeconds: duration(phase.durationSeconds, planning),
         category: category(phase.category, PHASE_CATEGORIES, DEFAULT_PHASE_CATEGORY),
         notes: note(phase.notes === undefined ? '' : phase.notes),
         resources: validateResources(phase.resources === undefined ? [] : phase.resources),
     };
 }
 
-function validatePlan(plan, allowEmpty) {
+function validatePlan(plan, planning) {
     exactFields(plan, ['name', 'transitionMode', 'phases'], ['category', 'preparedInformation']);
     if (!['manual', 'automatic'].includes(plan.transitionMode)) fail('invalidData');
-    if (!Array.isArray(plan.phases) || (!allowEmpty && !plan.phases.length)) fail('phasesRequired');
+    if (!Array.isArray(plan.phases) || (!planning && !plan.phases.length)) fail('phasesRequired');
     const ids = new Set();
-    const phases = plan.phases.map(phase => validatePhase(phase, ids));
-    phases.reduce((sum, phase) => {
-        const next = sum + phase.durationSeconds;
-        if (!Number.isSafeInteger(next) || next > MAX_TOTAL_SECONDS) fail('totalLimit');
-        return next;
-    }, 0);
+    const phases = plan.phases.map(phase => validatePhase(phase, ids, planning));
+    const { totalSeconds } = summarizePhaseDurations(phases.map(phase => phase.durationSeconds));
+    if (!Number.isSafeInteger(totalSeconds) || totalSeconds > MAX_TOTAL_SECONDS) fail('totalLimit');
     return {
         name: text(plan.name, 'name'),
         category: category(plan.category, RUNDOWN_CATEGORIES, DEFAULT_RUNDOWN_CATEGORY),
@@ -140,7 +149,9 @@ export function validateRundownPlan(plan) {
 
 export function startEligibilityReason(plan) {
     try {
-        validateRundownPlan(plan);
+        const { phases } = validatePersistedPlan(plan);
+        if (!phases.length) return 'phasesRequired';
+        if (phases.some(phase => phase.durationSeconds === null)) return 'missingPhaseDuration';
         return null;
     } catch (error) {
         return error.message;

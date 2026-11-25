@@ -289,6 +289,25 @@ test('importing an empty Template copies its plan and identity while preserving 
     assert.equal(c.state.writes, 1);
 });
 
+test('a Template import with a null timebox reconciles an uncertain write without revising history or the Run', async () => {
+    const existing = activeRecord();
+    const c = setup(existing);
+    const source = template();
+    source.plan.phases[0].durationSeconds = null;
+    const { candidate } = c.service.prepareImport(serializeEditorTemplate(source), existing.revision);
+    assert.notEqual(candidate.template.id, source.id);
+    c.state.acknowledgement = 'readFailure';
+    const uncertain = await c.service.persistImport(candidate);
+    assert.equal(uncertain.status, 'uncertain');
+    c.state.failRead = false;
+    const checked = await c.service.reconcileImport(uncertain.reconciliation);
+    assert.equal(checked.status, 'confirmed');
+    assert.deepEqual(checked.record.templates.find(item => item.id === candidate.template.id).plan, source.plan);
+    assert.deepEqual(checked.record.activeRuntime, existing.activeRuntime);
+    assert.deepEqual(checked.record.executions, existing.executions);
+    assert.equal(c.state.writes, 1);
+});
+
 test('failed readback with exact source confirms current absence without an automatic second import', async () => {
     const c = setup();
     const { candidate } = c.service.prepareImport(document(), 0);

@@ -189,6 +189,21 @@ test('empty Template and PLANNED exports and a mixed backup round-trip through t
     assert.deepEqual(parseEditorPortability(serializeEditorBackup(mixed)).record, mixed);
 });
 
+test('only canonical null is portable for an unspecified duration in Template and PLANNED documents', () => {
+    const source = template('missing-duration');
+    source.plan.phases[0].durationSeconds = null;
+    const planned = entry(createPlannedExecution(source, 'missing-duration-event'));
+    assert.deepEqual(parseEditorPortability(serializeEditorTemplate(source)).template, source);
+    assert.deepEqual(parseEditorPortability(serializeEditorExecution(planned)).entry, planned);
+    const invalid = structuredClone(source);
+    invalid.plan.phases[0].durationSeconds = '';
+    assert.throws(() => serializeEditorTemplate(invalid), /portabilityInvalid/);
+    const mixed = completeRecord();
+    mixed.templates.push(source);
+    mixed.executions.push(planned);
+    assert.deepEqual(parseEditorPortability(serializeEditorBackup(mixed)).record, mixed);
+});
+
 test('individual active exports reject missing, foreign and inconsistent runtime snapshots', () => {
     const active = activeFixture();
     assert.throws(() => serializeEditorExecution(active.entry), /portabilityInvalid/);

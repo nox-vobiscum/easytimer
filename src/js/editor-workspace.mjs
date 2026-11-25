@@ -1,9 +1,10 @@
-import { RUNDOWN_CATEGORIES, startEligibilityReason, validatePersistedPlan } from './editor-domain.mjs';
+import { RUNDOWN_CATEGORIES, startEligibilityReason, summarizePhaseDurations, validatePersistedPlan } from './editor-domain.mjs';
 import { createNativePhaseFields } from './editor-phase-fields.mjs';
 import {
     editNativePhaseDraft,
     editNativeTemplateDraft,
     insertNativeDraftPhase,
+    normalizeDraftDuration,
     removeNativeDraftPhase,
     repositionNativeDraftPhase,
 } from './editor-template-draft.mjs';
@@ -18,6 +19,9 @@ const copy = {
         identity: 'ID', revision: 'Revision', edit: 'Edit', create: 'New Event Template',
         createExecution: 'Plan Event', launchTemplate: 'Start Event', startExecution: 'Start Event',
         startWithoutPhases: 'Add at least one phase before starting.',
+        startWithoutTimeboxes: count => count === 1
+            ? '1 timebox missing. Set it before starting.' : `Set the ${count} missing timeboxes before starting.`,
+        missingTimeboxes: count => count === 1 ? '1 timebox missing.' : `${count} timeboxes missing.`,
         startUnavailable: 'This Rundown is not ready to start.',
         emptyAgenda: 'No phases yet.',
         resumeExecution: 'Resume in Timer', openTimer: 'Back to Timer', openArchive: 'View archive', exportTemplate: 'Export JSON',
@@ -85,6 +89,9 @@ const copy = {
         identity: 'ID', revision: 'Revision', edit: 'Bearbeiten', create: 'Neues Event-Template',
         createExecution: 'Event planen', launchTemplate: 'Event starten', startExecution: 'Event starten',
         startWithoutPhases: 'Zum Starten mindestens eine Phase hinzufügen.',
+        startWithoutTimeboxes: count => count === 1
+            ? '1 Timebox fehlt. Vor dem Start festlegen.' : `Zum Starten die ${count} fehlenden Timeboxes festlegen.`,
+        missingTimeboxes: count => count === 1 ? '1 Timebox fehlt.' : `${count} Timeboxes fehlen.`,
         startUnavailable: 'Dieser Rundown ist noch nicht startbereit.',
         emptyAgenda: 'Noch keine Phasen.',
         resumeExecution: 'Im Timer fortsetzen', openTimer: 'Zurück zum Timer', openArchive: 'Archiv ansehen', exportTemplate: 'JSON exportieren',
@@ -157,11 +164,15 @@ const el = (tag, text, className) => {
 const button = (text, action, className) => {
     const node = el('button', text, className); node.type = 'button'; node.addEventListener('click', action); return node;
 };
-export function startUnavailableMessage(language, reason) {
+export function startUnavailableMessage(language, reason, plan) {
+    if (reason === 'missingPhaseDuration') {
+        const { missing } = summarizePhaseDurations(plan.phases.map(phase => phase.durationSeconds));
+        return copy[language].startWithoutTimeboxes(missing);
+    }
     return copy[language][reason === 'phasesRequired' ? 'startWithoutPhases' : 'startUnavailable'];
 }
 
-function startUnavailableHint(language, reason) {
+function startUnavailableHint(language, reason, plan) {
     const hint = el('p', undefined, 'planner-hint start-unavailable');
     const namespace = 'http://www.w3.org/2000/svg';
     const icon = document.createElementNS(namespace, 'svg');
@@ -171,7 +182,7 @@ function startUnavailableHint(language, reason) {
     const path = document.createElementNS(namespace, 'path');
     path.setAttribute('d', 'M10 2h4m-2 0v3m-5 2a8 8 0 0 1 10 12m-3 2A8 8 0 0 1 4 11M3 3l18 18');
     icon.append(path);
-    hint.append(icon, startUnavailableMessage(language, reason));
+    hint.append(icon, startUnavailableMessage(language, reason, plan));
     return hint;
 }
 const safeLink = value => {
@@ -233,6 +244,7 @@ export function createNativeEditorWorkspace({
 
     function checkpointTemplateDraft(next) {
         draft = next;
+        updateDurationSummary();
         if (editorKind !== 'template' || !templateRecovery) return;
         try {
             const result = templateRecovery.checkpoint(draft);
@@ -519,6 +531,7 @@ export function createNativeEditorWorkspace({
     function resourceSaveSnapshot() {
         const snapshot = structuredClone(draft); const issues = [];
         for (const phase of snapshot.template.phases) {
+            phase.durationSeconds = normalizeDraftDuration(phase.durationSeconds);
             phase.resources = phase.resources.filter((resource, index) => {
                 const label = resource.label.trim(); const url = resource.url.trim();
                 if (!label && !url) return false;
@@ -774,7 +787,7 @@ export function createNativeEditorWorkspace({
         const reason = startEligibilityReason(template.plan);
         const edit = () => beginTemplate(template.id);
         if (reason !== null) {
-            info.append(startUnavailableHint(language, reason));
+            info.append(startUnavailableHint(language, reason, template.plan));
             actions.append(button(t().edit, edit, 'rundown-launch'));
         } else actions.append(button(t().launchTemplate, () => requestHost('launchTemplate', template), 'rundown-launch'));
         actions.append(button(t().createExecution, () => beginNewExecution(template), 'rundown-launch'));
@@ -791,7 +804,7 @@ export function createNativeEditorWorkspace({
         const actions = el('div', undefined, 'planner-actions rundown-actions');
         if (execution.lifecycle === 'planned') {
             const reason = startEligibilityReason(execution.currentPlan);
-            if (reason !== null) info.append(startUnavailableHint(language, reason));
+            if (reason !== null) info.append(startUnavailableHint(language, reason, execution.currentPlan));
             else actions.append(button(t().startExecution, () => requestHost('activateExecution', entry), 'rundown-launch'));
             actions.append(button(t().edit, () => beginExecution(execution.id), reason !== null ? 'rundown-launch' : undefined),
                 button(t().exportTemplate, () => exportPlanned(entry)));
@@ -1057,6 +1070,19 @@ export function createNativeEditorWorkspace({
         actions.append(earlier, later, structural(t().removePhase, () => removeNativeDraftPhase(draft, phase.id), fallback));
         details.append(actions); list.append(fields.element);
     }
+    function updateDurationSummary() {
+        const total = root.querySelector('[data-duration-total]');
+        if (!total) return;
+        const missingNotice = root.querySelector('[data-duration-missing]');
+        const { totalSeconds, missing } = summarizePhaseDurations(
+            draft.template.phases.map(phase => normalizeDraftDuration(phase.durationSeconds)),
+        );
+        const totalText = `${t().total}: ${totalSeconds / 60} ${t().minutes}`;
+        const missingText = missing ? t().missingTimeboxes(missing) : '';
+        if (total.textContent !== totalText) total.textContent = totalText;
+        if (missingNotice.textContent !== missingText) missingNotice.textContent = missingText;
+        missingNotice.hidden = !missing;
+    }
     function renderEditor() {
         destroyPhaseDragging();
         const section = el('section'); heading(section);
@@ -1097,8 +1123,10 @@ export function createNativeEditorWorkspace({
             const phaseId = createPhaseId(); checkpointTemplateDraft(insertNativeDraftPhase(draft, { phaseId })); render();
             focusAddedPhaseTitle(phaseId);
         }, 'add-phase'));
-        const total = draft.template.phases.reduce((sum, phase) => sum + (Number.isSafeInteger(phase.durationSeconds) ? phase.durationSeconds : 0), 0) / 60;
-        form.append(el('p', `${t().total}: ${total} ${t().minutes}`, 'planner-hint'));
+        const total = el('p', undefined, 'planner-hint'); total.dataset.durationTotal = '';
+        const missing = el('p', undefined, 'planner-hint'); missing.dataset.durationMissing = '';
+        missing.setAttribute('role', 'status');
+        form.append(total, missing);
         const actions = el('div', undefined, 'planner-actions native-workspace-save-actions');
         const saveButton = el('button', t().save, 'primary'); saveButton.type = 'submit'; saveButton.disabled = mutationBlocked();
         actions.append(saveButton, button(t().cancel, () => {
@@ -1106,7 +1134,7 @@ export function createNativeEditorWorkspace({
             if (!discardCurrentTemplateRecovery()) return;
             clearEditor(); setFeedback('cancelled', false); render(); focusHeading();
         }));
-        form.append(actions); section.append(form); root.replaceChildren(section); renderDeleteDialog();
+        form.append(actions); section.append(form); root.replaceChildren(section); updateDurationSummary(); renderDeleteDialog();
         if (!mutationBlocked()) {
             const token = ++phaseDragToken;
             import('./editor-phase-drag.mjs').then(({ createNativePhaseDragging }) => {

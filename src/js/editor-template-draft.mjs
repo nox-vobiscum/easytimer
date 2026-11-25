@@ -5,6 +5,11 @@ const isObject = value => value !== null && typeof value === 'object' && !Array.
 const templateFields = ['name', 'transitionMode', 'category', 'preparedInformation'];
 const phaseFields = ['title', 'durationSeconds', 'category', 'notes', 'resources'];
 
+// Older editable recovery records can still contain the raw empty text.
+export function normalizeDraftDuration(value) {
+    return value === '' ? null : value;
+}
+
 // Field contents may be incomplete while editing. The Planner Service validates
 // them on explicit Save; these operations only protect the draft's structure.
 function copyDraft(draft) {

@@ -1300,7 +1300,7 @@ test('direct-launch planning preserves revision and identity checks and selects 
 
 test('the Store rejects malformed retained phases in Template and PLANNED records', () => {
     for (const [change, reason] of [
-        [value => { value.phases[0].durationSeconds = null; }, 'duration'],
+        [value => { value.phases[0].durationSeconds = ' '; }, 'duration'],
         [value => { value.phases[0].title = ''; }, 'phaseTitle'],
     ]) {
         const templateSource = record({ templates: [template()] });
@@ -1334,6 +1334,19 @@ test('zero-phase plans persist beside active and completed history without alter
     assert.deepEqual(mixed.activeRuntime, active.activeRuntime);
     assert.deepEqual(mixed.executions.find(item => item.execution.id === 'archived'), archived);
     assert.deepEqual(validateEditorStoreRecord(JSON.parse(JSON.stringify(mixed))), mixed);
+
+    const partialTemplate = { ...template(), id: 'incomplete-duration' };
+    partialTemplate.plan.phases[0].durationSeconds = null;
+    const withTemplate = insertTemplateInRecord(mixed, { template: partialTemplate, expectedAggregateRevision: mixed.revision });
+    const withPlanned = planExecutionFromTemplateInRecord(withTemplate, {
+        templateId: partialTemplate.id, executionId: 'independent-timeboxes', expectedAggregateRevision: withTemplate.revision,
+    });
+    assert.equal(withPlanned.executions.at(-1).execution.currentPlan.phases[0].durationSeconds, null);
+    assert.deepEqual(withPlanned.activeRuntime, active.activeRuntime);
+    assert.deepEqual(withPlanned.executions.find(item => item.execution.id === 'archived'), archived);
+    const damagedRun = structuredClone(withPlanned);
+    damagedRun.activeRuntime.run.phases[0].durationSeconds = null;
+    assert.throws(() => validateEditorStoreRecord(damagedRun), { message: 'duration' });
 });
 
 test('writer persists and confirms native templates, updates and planned executions without an active lock', async () => {

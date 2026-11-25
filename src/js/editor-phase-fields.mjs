@@ -1,5 +1,6 @@
 import { PHASE_CATEGORIES } from './editor-domain.mjs';
-import { editNativePhaseDraft } from './editor-template-draft.mjs';
+import { isValidPhaseDuration } from './editor-domain.mjs';
+import { editNativePhaseDraft, normalizeDraftDuration } from './editor-template-draft.mjs';
 
 const copy = {
     en: {
@@ -9,6 +10,7 @@ const copy = {
         discussion: 'Discussion', breakout: 'Breakout', break: 'Break',
         phaseTitle: 'Each phase needs a title containing 1–120 characters.',
         durationError: 'Enter a whole number from 1 to 6,000 minutes.',
+        unspecifiedDuration: '-- min',
         invalidCategory: 'Choose a supported phase category.',
         drag: title => `Drag ${title}. Press Enter or Space to choose a position.`,
         changePosition: position => `Phase ${position} – Change position`,
@@ -24,6 +26,7 @@ const copy = {
         discussion: 'Diskussion', breakout: 'Gruppenarbeit', break: 'Pause',
         phaseTitle: 'Jede Phase benötigt einen Titel mit 1–120 Zeichen.',
         durationError: 'Eine ganze Zahl von 1 bis 6.000 Minuten eingeben.',
+        unspecifiedDuration: '-- Min.',
         invalidCategory: 'Eine unterstützte Phasenkategorie auswählen.',
         drag: title => `${title} verschieben. Mit Eingabe oder Leertaste eine Position auswählen.`,
         changePosition: position => `Phase ${position} – Position ändern`,
@@ -92,7 +95,7 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
     const durationText = document.createElement('span');
     const duration = document.createElement('input');
     duration.id = `${prefix}-duration`; duration.type = 'text'; duration.inputMode = 'numeric';
-    duration.pattern = '[0-9]*'; duration.required = true;
+    duration.pattern = '[0-9]*';
     duration.dataset.field = 'duration';
     durationLabel.append(durationText, duration);
     const categoryControl = document.createElement('div'); categoryControl.className = 'phase-category-control';
@@ -130,10 +133,15 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
 
     function showValidationError(code = null) {
         errorCode = code;
-        feedback.textContent = code ? copy[language][code === 'duration' ? 'durationError' : code]
+        const phase = getDraft().template.phases.find(item => item.id === phaseId);
+        const seconds = normalizeDraftDuration(phase?.durationSeconds);
+        const invalidDuration = Boolean(phase) && seconds !== null && !isValidPhaseDuration(seconds);
+        const visibleCode = invalidDuration ? 'duration' : code;
+        duration.setCustomValidity(invalidDuration ? copy[language].durationError : '');
+        feedback.textContent = visibleCode ? copy[language][visibleCode === 'duration' ? 'durationError' : visibleCode]
             || copy[language].editFailed : '';
         for (const [input, key] of [[title, 'phaseTitle'], [duration, 'duration'], [categoryButton, 'invalidCategory']]) {
-            if (code === key) {
+            if (visibleCode === key) {
                 input.setAttribute('aria-invalid', 'true');
                 input.setAttribute('aria-describedby', feedback.id);
             } else {
@@ -152,11 +160,9 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
     }
     title.addEventListener('input', () => update({ title: title.value }));
     duration.addEventListener('input', () => {
-        // Keep incomplete minute text in the native draft for explicit Save to
-        // reject. No rounding, clamping or second duration validator is used.
-        const parsed = /^\d+$/.test(duration.value) ? Number(duration.value) * 60 : NaN;
-        const seconds = Number.isSafeInteger(parsed) ? parsed : duration.value;
-        update({ durationSeconds: seconds });
+        const raw = duration.value;
+        const parsed = /^\d+$/.test(raw) ? Number(raw) * 60 : NaN;
+        update({ durationSeconds: isValidPhaseDuration(parsed) ? parsed : normalizeDraftDuration(raw) });
     });
     function refreshCategory() {
         const phase = getDraft().template.phases.find(item => item.id === phaseId);
@@ -247,7 +253,7 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
     function localize() {
         const text = copy[language];
         titleText.textContent = text.title; title.placeholder = text.title;
-        durationText.textContent = text.duration;
+        durationText.textContent = text.duration; duration.placeholder = text.unspecifiedDuration;
         categoryPanel.setAttribute('aria-label', text.chooseCategory);
         for (const [id, { option, label }] of categoryOptions) {
             label.textContent = text[id]; option.setAttribute('aria-label', text[id]);
@@ -269,8 +275,9 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
         positionPanel.setAttribute('aria-label', copy[language].positionFor(position, phase.title.trim() || copy[language].untitled));
         title.value = phase.title;
         duration.value = typeof phase.durationSeconds === 'number'
-            ? String(phase.durationSeconds / 60) : phase.durationSeconds;
+            ? String(phase.durationSeconds / 60) : phase.durationSeconds ?? '';
         refreshCategory();
+        showValidationError(errorCode);
     }
     localize(); refresh();
     return Object.freeze({

@@ -18,8 +18,9 @@ records the product decisions and their rationale.
 | --- | --- | --- |
 | Event-Template | Event Template | `Template`, `kind: 'template'`, with its own `id`, `revision` and reusable `plan`. See `validateTemplate` in `src/js/editor-domain.mjs`. |
 | Event | Event | `Execution`, `kind: 'execution'`, with its own identity, `currentPlan`, optional provenance in `source`, `lifecycle`, `runtimeRevision`, `attempt` and `workshopNotes`. Template-derived events have `source.kind: 'template'` and an independent copy of the plan. |
-| Rundown | Rundown | The planned sequence of activities within an event. `validatePersistedPlan` permits a named plan with an empty `phases` array for `Template.plan` and PLANNED `Execution.currentPlan`. `validateRundownPlan` requires phases for executable lifecycles and `attempt.startSnapshot`. Both use the same field and phase validation. The first countdown Start captures the original executed plan. |
+| Rundown | Rundown | The planned sequence of activities within an event. `validatePersistedPlan` permits an empty `phases` array or unspecified timeboxes in named `Template.plan` and PLANNED `Execution.currentPlan`. `validateRundownPlan` requires at least one phase and a valid timebox for each phase in executable lifecycles and `attempt.startSnapshot`. The first countdown Start captures the original executed plan. |
 | Phase | Phase | An ordered element of `plan.phases` or `currentPlan.phases` with a stable `id`, `title`, `durationSeconds`, `category`, `notes` and `resources`. Recorded outcomes use `phaseId` in `Execution.phaseOutcomes`. |
+| Timebox | Timebox | `durationSeconds` on a Phase. A supplied timebox is a whole number of minutes stored as seconds. `null` means unspecified in a Template or Planned Event and blocks Start Event. The editor shows a blank field for `null`, counts unspecified timeboxes separately, and computes the displayed total from valid specified timeboxes. Invalid text stays in the draft for correction and blocks Save. |
 | Event-Informationen | Event Information | Prepared text in `plan.preparedInformation` or `currentPlan.preparedInformation`. Available on a reusable template and the event's own planning copy. |
 | Phasen-Informationen | Phase Information | Prepared guidance in `phase.notes` and labeled links in `phase.resources`. The historical field name `notes` refers to prepared text here. |
 | Event-Notizen | Event Notes | Occurrence-specific text in `Execution.workshopNotes.rundown`. The current public archive displays it read-only. |
@@ -76,8 +77,10 @@ Start Event uses `startEligibilityReason` in `editor-domain.mjs` before the
 App asks to leave a progressed Quick Timer. The Store checks eligibility
 under the existing revision checks, before creating a Planned Event for
 direct launch and before activating a Planned Event. Ordinary Plan Event has
-its own intent and only saves planning data. Slice 02.2 lets an empty agenda
-be saved, copied through ordinary planning or Template import, and exported.
-It is nonstartable and opens for editing from the Picker or library. A
-present phase still requires a valid title and duration. See the
+its own intent and only saves planning data. An empty agenda or unspecified
+timebox can be saved, copied through ordinary planning or Template import,
+and exported. `phasesRequired` means the agenda has no phases.
+`missingPhaseDuration` means a named phase has an unspecified timebox. The
+Picker and library give the missing count where applicable and provide an
+edit path. Every persisted phase still requires a valid title. See the
 [Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md).

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { createNativeSessionLaunchService } from '../src/js/editor-launch-service.mjs';
 import { createEditorRuntimeBridge } from '../src/js/editor-runtime-bridge.mjs';
-import { EDITOR_STORAGE_KEY } from '../src/js/editor-storage.mjs';
+import { EDITOR_STORAGE_KEY, updatePlannedExecutionPlanInRecord } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
 import { createNativeEditorTemplateIntegration } from '../src/js/editor-template-integration.mjs';
 
@@ -205,6 +205,48 @@ test('uncertain independent planning from a zero-phase Template is observed with
     assert.deepEqual(observed.execution.currentPlan.phases, []);
     assert.equal(activeLock.held, false);
     assert.equal(storage.state.writes, 2);
+});
+
+test('both Start paths reject unspecified durations and the same PLANNED Event becomes READY once all are supplied', async () => {
+    const source = prepared();
+    source.phases[0].durationSeconds = null;
+    source.phases.push({ ...source.phases[0], id: 'closing', title: 'Closing', durationSeconds: 300 });
+    const { activeLock, locks, service, storage, writer } = await setup({ source });
+    const beforeDirect = storage.values.get(EDITOR_STORAGE_KEY);
+    const rejection = { type: 'validation', code: 'missingPhaseDuration' };
+    const launch = await service.launchTemplateToReady({ templateId: source.id, expectedAggregateRevision: 1 });
+    assert.equal(launch.stage, 'planning');
+    assert.deepEqual(launch.error, rejection);
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), beforeDirect);
+    assert.equal(locks.held.size, 0);
+
+    const planned = await service.planFromTemplate({ templateId: source.id, expectedAggregateRevision: 1 });
+    const execution = planned.record.executions[0].execution;
+    assert.deepEqual(execution.currentPlan, planned.record.templates[0].plan);
+    const activation = { executionId: execution.id, expectedAggregateRevision: 2,
+        expectedExecutionRevision: 1, expectedRuntimeRevision: 0 };
+    const beforeActivation = storage.values.get(EDITOR_STORAGE_KEY);
+    assert.deepEqual((await service.activatePlanned(activation)).error, rejection);
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), beforeActivation);
+    assert.equal(storage.state.writes, 2);
+    assert.equal(activeLock.held, false);
+    assert.equal(locks.held.size, 0);
+
+    const completedPlan = structuredClone(execution.currentPlan);
+    completedPlan.phases[0].durationSeconds = 480;
+    await writer.write(current => updatePlannedExecutionPlanInRecord(current, {
+        executionId: execution.id, expectedAggregateRevision: 2, expectedExecutionRevision: 1, currentPlan: completedPlan,
+    }));
+    const ready = await service.activatePlanned({ ...activation, expectedAggregateRevision: 3, expectedExecutionRevision: 2 });
+    assert.equal(ready.status, 'ready');
+    assert.equal(ready.executionId, execution.id);
+    assert.equal(ready.runtime.clock.status, 'READY');
+    assert.equal(ready.runtime.attemptId, null);
+    assert.deepEqual(ready.runtime.run.phases.map(phase => [phase.id, phase.durationSeconds]),
+        [[source.phases[0].id, 480], ['closing', 300]]);
+    assert.deepEqual(ready.record.executions[0].execution.currentPlan, completedPlan);
+    assert.equal(ready.record.templates[0].plan.phases[0].durationSeconds, null);
+    await activeLock.release();
 });
 
 test('an uncertain direct-launch planning write is observed without activating or writing again', async () => {

@@ -12,6 +12,7 @@ import {
     updateTemplateInRecord,
     validateEditorStoreRecord,
 } from './editor-storage.mjs';
+import { normalizeDraftDuration } from './editor-template-draft.mjs';
 
 export const EDITOR_DRAFT_RECOVERY_PREFIX = 'easyTimerEditorDraftRecovery.v1.';
 export const EDITOR_DRAFT_RECOVERY_SCHEMA_VERSION = 1;
@@ -63,7 +64,7 @@ function validateEditablePlan(plan) {
         const id = identity(phase.id);
         if (ids.has(id)
             || typeof phase.title !== 'string'
-            || !(typeof phase.durationSeconds === 'string'
+            || !(phase.durationSeconds === null || typeof phase.durationSeconds === 'string'
                 || Number.isSafeInteger(phase.durationSeconds))
             || !PHASE_CATEGORIES.includes(phase.category)
             || typeof phase.notes !== 'string'
@@ -159,6 +160,7 @@ function assertSameBinding(baseline, draft, editorKind) {
 function saveSnapshotFromRecoveryDraft(draft) {
     const snapshot = structuredClone(draft);
     for (const phase of snapshot.template.phases) {
+        phase.durationSeconds = normalizeDraftDuration(phase.durationSeconds);
         phase.resources = phase.resources.filter(resource => resource.label.trim() || resource.url.trim());
     }
     return snapshot;

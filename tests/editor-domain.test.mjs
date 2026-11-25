@@ -20,6 +20,7 @@ import {
     resumeStartedExecution,
     startActiveExecution,
     startEligibilityReason,
+    summarizePhaseDurations,
     suspendStartedExecution,
     suspendReadyExecution,
     validatePlannedExecution,
@@ -171,7 +172,7 @@ test('start eligibility reuses strict rundown reasons and leaves the whole plan 
 
     for (const [change, reason] of [
         [value => { value.phases = []; }, 'phasesRequired'],
-        [value => { value.phases[1].durationSeconds = null; }, 'duration'],
+        [value => { value.phases[1].durationSeconds = null; }, 'missingPhaseDuration'],
         [value => { value.phases[1].durationSeconds = 0; }, 'duration'],
         [value => { value.phases[1].durationSeconds = 61; }, 'duration'],
         [value => { value.phases[1].durationSeconds = MAX_PHASE_SECONDS + 60; }, 'duration'],
@@ -188,7 +189,7 @@ test('start eligibility reuses strict rundown reasons and leaves the whole plan 
         const unchanged = structuredClone(candidate);
         assert.equal(startEligibilityReason(candidate), reason);
         assert.throws(() => requireStartEligibility(candidate), { constructor: StartEligibilityError, message: reason });
-        assert.throws(() => validateRundownPlan(candidate), { message: reason });
+        assert.throws(() => validateRundownPlan(candidate), { message: reason === 'missingPhaseDuration' ? 'duration' : reason });
         assert.deepEqual(candidate, unchanged);
     }
 });
@@ -202,10 +203,8 @@ test('only planning validation accepts zero phases; retained phase fields and ex
     assert.deepEqual(validatePlannedExecution(planned).currentPlan, planning);
     assert.throws(() => activatePlannedExecution(planned), /phasesRequired/);
     assert.throws(() => validatePersistedPlan({ ...empty.plan, name: ' ' }), /name/);
-    for (const [changes, reason] of [[{ title: '' }, 'phaseTitle'], [{ durationSeconds: null }, 'duration']]) {
-        assert.throws(() => validatePersistedPlan({ ...empty.plan, phases: [{ ...plan().phases[0], ...changes }] }),
-            { message: reason });
-    }
+    assert.throws(() => validatePersistedPlan({ ...empty.plan, phases: [{ ...plan().phases[0], title: '' }] }), /phaseTitle/);
+    const unspecified = { ...planning, phases: [{ ...plan().phases[0], durationSeconds: null }] };
     const ready = activatePlannedExecution(createPlannedExecution(template(), 'ready-event'));
     const started = startActiveExecution(ready, 'attempt', 1000, 'run');
     const completed = completeStartedExecution(started, {
@@ -217,9 +216,38 @@ test('only planning validation accepts zero phases; retained phase fields and ex
         [suspendStartedExecution(started), validateSuspendedStartedExecution], [completed, validateCompletedExecution],
     ]) {
         assert.throws(() => validate({ ...value, currentPlan: planning }), /phasesRequired/);
+        assert.throws(() => validate({ ...value, currentPlan: unspecified }), { message: 'duration' });
     }
     assert.throws(() => validateStartedExecution({ ...started, attempt: { ...started.attempt, startSnapshot: planning } }),
         /phasesRequired/);
+    assert.throws(() => validateStartedExecution({ ...started, attempt: { ...started.attempt, startSnapshot: unspecified } }),
+        { message: 'duration' });
+});
+
+test('specified duration limits, missing duration and invalid input remain distinct in planning', () => {
+    const source = plan();
+    source.phases[1].durationSeconds = null;
+    const valid = validatePersistedPlan(source);
+    assert.deepEqual(valid.phases.map(phase => [phase.id, phase.durationSeconds]),
+        [['phase-1', 600], ['phase-2', null]]);
+    assert.equal(startEligibilityReason(valid), 'missingPhaseDuration');
+    assert.deepEqual(summarizePhaseDurations([null, 600, '', 'abc', 0, 61, MAX_PHASE_SECONDS + 60, 1200, null]),
+        { totalSeconds: 1800, missing: 2 });
+    for (const invalid of ['', ' ', '10', 0, -60, 61, MAX_PHASE_SECONDS + 60, true]) {
+        const proposal = structuredClone(source);
+        proposal.phases[0].durationSeconds = invalid;
+        assert.throws(() => validatePersistedPlan(proposal), { message: 'duration' });
+        assert.equal(startEligibilityReason(proposal), 'duration');
+    }
+    const missingField = structuredClone(source);
+    delete missingField.phases[1].durationSeconds;
+    assert.throws(() => validatePersistedPlan(missingField), { message: 'invalidData' });
+    const long = { ...source, phases: [...Array.from({ length: 10 }, (_, index) => ({
+        id: `maximum-${index}`, title: 'Maximum duration', durationSeconds: MAX_PHASE_SECONDS,
+    })), source.phases[1]] };
+    assert.doesNotThrow(() => validatePersistedPlan(long));
+    long.phases.push(source.phases[0]);
+    assert.throws(() => validatePersistedPlan(long), { message: 'totalLimit' });
 });
 test('planned execution validation enforces lifecycle, revisions, absent attempt and note references', () => {
     const execution = createPlannedExecution(template(), 'execution-1');

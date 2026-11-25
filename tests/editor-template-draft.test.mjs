@@ -166,6 +166,25 @@ test('removing the last phase saves and reopens the same named Template without 
     assert.equal(context.writes, 2);
 });
 
+test('an unspecified duration saves and reopens without modifying other phase fields, while invalid raw text remains editable', async () => {
+    const { context, draft } = await savedDraft();
+    const draftWithMissing = editNativePhaseDraft(draft, 'opening', { durationSeconds: null });
+    const saved = await context.service.saveDraft(draftWithMissing);
+    assert.equal(saved.status, 'success');
+    const reopened = context.service.prepareEditDraft(saved.library, draft.template.id).draft;
+    assert.deepEqual(reopened.template, draftWithMissing.template);
+    const invalid = editNativePhaseDraft(reopened, 'opening', { durationSeconds: '0000' });
+    const rejected = await context.service.saveDraft(invalid);
+    assert.deepEqual(rejected.error, { type: 'validation', code: 'duration' });
+    assert.deepEqual(rejected.draft, invalid);
+    assert.equal(context.writes, 2);
+    const corrected = editNativePhaseDraft(rejected.draft, 'opening', { durationSeconds: 720 });
+    const confirmed = await context.service.saveDraft(corrected);
+    assert.equal(confirmed.status, 'success');
+    assert.deepEqual(context.service.prepareEditDraft(confirmed.library, draft.template.id).draft.template, corrected.template);
+    assert.equal(context.writes, 3);
+});
+
 test('editing rejects identity or structural changes without mutating the original draft', async () => {
     const { context, draft } = await savedDraft();
     const before = structuredClone(draft);

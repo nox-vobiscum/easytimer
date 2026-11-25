@@ -847,10 +847,8 @@ function pickerSelection(value) {
     const entity = kind === 'template'
         ? pickerWorkspace?.templates.find(item => item.id === id)
         : pickerWorkspace?.executions.find(item => item.execution.id === id && item.execution.lifecycle === kind);
-    let reason = null;
-    if (entity && kind === 'template') reason = startEligibilityReason(entity.plan);
-    if (entity && kind === 'planned') reason = startEligibilityReason(entity.execution.currentPlan);
-    return { kind, id, entity, reason };
+    const plan = kind === 'template' ? entity?.plan : kind === 'planned' ? entity?.execution.currentPlan : null;
+    return { kind, id, entity, plan, reason: plan ? startEligibilityReason(plan) : null };
 }
 function renderPicker() {
     const t = copy[language];
@@ -878,7 +876,7 @@ function renderPicker() {
     }
     select.value = selected;
     select.disabled = pickerBusy || pickerPending !== null;
-    const { kind: selectedKind, entity, reason } = pickerSelection(select.value);
+    const { kind: selectedKind, entity, plan, reason } = pickerSelection(select.value);
     $('prepare-session').disabled = !entity || pickerBusy || pickerPending !== null;
     $('prepare-session').textContent = reason !== null ? selectedKind === 'template' ? t.editTemplate : t.editPlanned
         : selectedKind === 'template' ? t.launchTemplate
@@ -891,7 +889,7 @@ function renderPicker() {
     $('picker-recheck').textContent = recoveryCopy[language].recheck;
     $('session-picker-note').hidden = reason !== null;
     select.setAttribute('aria-describedby', reason === null ? 'session-picker-note' : 'session-feedback');
-    $('session-feedback').textContent = reason === null ? t[pickerMessage] || '' : startUnavailableMessage(language, reason);
+    $('session-feedback').textContent = reason === null ? t[pickerMessage] || '' : startUnavailableMessage(language, reason, plan);
 }
 function loadNativeWorkspace() {
     const expectedNavigationRevision = navigationRevision;
