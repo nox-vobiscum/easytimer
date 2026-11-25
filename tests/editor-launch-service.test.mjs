@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { requireStartEligibility } from '../src/js/editor-domain.mjs';
 import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { createNativeSessionLaunchService } from '../src/js/editor-launch-service.mjs';
 import { createEditorRuntimeBridge } from '../src/js/editor-runtime-bridge.mjs';
@@ -149,10 +150,68 @@ test('launches Template to confirmed READY in two writes with stable identities 
     assert.equal(result.executionId, 'execution-1');
     assert.equal(result.record.revision, 3);
     assert.equal(result.record.executions.length, 1);
+    assert.notEqual(result.executionId, result.record.templates[0].id);
+    assert.deepEqual(result.record.executions[0].execution.currentPlan, result.record.templates[0].plan);
+    assert.notEqual(result.record.executions[0].execution.currentPlan, result.record.templates[0].plan);
     assert.equal(result.record.executions[0].execution.attempt, null);
     assert.equal(result.record.activeRuntime.clock.status, 'READY');
     assert.equal(storage.state.writes, 3, 'Template seed, planning and activation each write once');
     await activeLock.release();
+});
+
+test('direct launch preserves Store conflict precedence and does not claim runtime ownership on planning failure', async () => {
+    const { storage, locks, activeLock, service } = await setup();
+    const before = storage.values.get(EDITOR_STORAGE_KEY);
+    assert.deepEqual(await service.launchTemplateToReady({ templateId: 'missing', expectedAggregateRevision: 0 }), {
+        status: 'error', operation: 'launch', stage: 'planning', error: { type: 'conflict', code: 'conflict' },
+    });
+    assert.equal(storage.state.writes, 1);
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), before);
+    assert.equal(activeLock.held, false);
+    assert.equal(locks.held.size, 0);
+});
+
+test('direct launch reports a typed eligibility rejection at the planning boundary without activation or a write', async () => {
+    const { storage, locks, writer } = await setup();
+    const before = storage.values.get(EDITOR_STORAGE_KEY);
+    const service = createNativeSessionLaunchService({
+        writer: {
+            read: writer.read,
+            // Incomplete plans cannot reach the transform in this slice. Exercise
+            // the service's handling of the definitive validation signal at that boundary.
+            write: () => writer.write(current => requireStartEligibility({ ...current.templates[0].plan, phases: [] })),
+        },
+        runtimeBridge: {
+            activatePlanned() { assert.fail('An eligibility rejection must prevent activation'); },
+            reconcilePendingActivation() { assert.fail('No uncertain activation may be created'); },
+        },
+        createExecutionId: () => 'unused-execution',
+    });
+    const result = await service.launchTemplateToReady({ templateId: 'template-1', expectedAggregateRevision: 1 });
+    assert.deepEqual(result, {
+        status: 'error', operation: 'launch', stage: 'planning', error: { type: 'validation', code: 'phasesRequired' },
+    });
+    assert.equal(storage.state.writes, 1);
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), before);
+    assert.equal(locks.held.size, 0);
+});
+
+test('an uncertain direct-launch planning write is observed without activating or writing again', async () => {
+    const { storage, activeLock, service } = await setup();
+    storage.state.faultAfterWrites = 1;
+    storage.state.failReadAfterWrite = true;
+    const result = await service.launchTemplateToReady({ templateId: 'template-1', expectedAggregateRevision: 1 });
+    assert.deepEqual(result, {
+        status: 'uncertain', operation: 'launch', stage: 'planning', executionId: 'execution-1',
+        error: { type: 'storage', code: 'storageUnconfirmed' },
+    });
+    assert.equal(activeLock.held, false);
+    storage.state.failReadAfterWrite = false;
+    const observed = await service.observeExecution(result.executionId);
+    assert.equal(observed.status, 'observed');
+    assert.equal(observed.lifecycle, 'planned');
+    assert.equal(observed.record.activeRuntime, null);
+    assert.equal(storage.state.writes, 2);
 });
 
 test('keeps a confirmed PLANNED execution when activation fails and never creates a duplicate', async () => {

@@ -12,9 +12,10 @@ evaluation with the browser regression gate open. Production `main` remains
 at `81d86305a6ad84230675290c7d0ad35042d48177`.
 
 Package 01's Event terminology, Home, contributor mapping, documentation and
-scope received positive independent static review. This is not final product
-acceptance. The v86 Home claim is the fixed English “Timing is everything.”
-and “Apparently.” in both locales. The redundant line below the four mode
+scope passed independent static review. The Product Owner accepted Package 01
+after independent review and automated browser regression. Production release
+requires separate authorization. The v86 Home claim is the fixed English
+“Timing is everything.” and “Apparently.” in both locales. The redundant line below the four mode
 tiles was removed. This retains a concise, recognizable welcome while the
 individual mode descriptions provide task guidance. The owner reported a
 positive real iPhone 15 Safari observation in German and Dark mode: all four
@@ -29,9 +30,9 @@ controls, notifications or animation. Neither item is implementation approval.
 
 ## Browser stabilization and review checkpoint
 
-**Complete.** Independent review passed, and the automated browser regression
-gate for Package 01 / PWA v86 is accepted. Final Product Owner acceptance and
-production release remain pending.
+**Complete.** Independent review passed, the automated browser regression
+gate for Package 01 / PWA v86 is accepted, and Product Owner acceptance is
+recorded. Production release remains unauthorized.
 
 The reviewed test corrections were verified on `develop` at
 `d7b6c32dc29061d45d94d41ed3d752f632e87479`. Verification
@@ -135,8 +136,10 @@ approved sequence. Each implementation requires its own scoped approval.
 Packages 02, 03, 06, 09 and 10 require smaller technical slices before
 implementation. Package 01 was subsequently implemented and deployed to
 staging as v85; the fixed Home claim followed in v86. The automated browser
-gate is accepted. Final Product Owner acceptance and production release are
-pending. Further implementation requires separate Product Owner approval.
+gate and Product Owner acceptance are complete. Production release remains
+unauthorized. The [Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md)
+records the separately approved start eligibility slice and the gates for
+subsequent work.
 
 Responsive finishing work remains scheduled after the Facilitator Panel, within
 EDITOR-001 before closure. NANO-001 remains the next separate feature after

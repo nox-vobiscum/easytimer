@@ -9,6 +9,7 @@ import {
     startReadyExecutionInRecord,
     suspendActiveExecutionInRecord,
 } from './editor-storage.mjs';
+import { StartEligibilityError } from './editor-domain.mjs';
 import { transitionSession } from './session.mjs';
 import { recordExecutionPhaseOutcomes } from './execution-runtime.mjs';
 
@@ -23,10 +24,14 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
         if (busy) fail('bridgeBusy');
         if (requireOwnership && !claimOwnership && !activeLock.held) fail('activeLockRequired');
         busy = true;
+        let claimed = false;
         let source = null;
         let target = null;
         try {
-            if (claimOwnership) await activeLock.claim();
+            if (claimOwnership) {
+                await activeLock.claim();
+                claimed = true;
+            }
             return await writer.write(record => {
                 if (requireOwnership && !activeLock.held) fail('activeLockRequired');
                 source = structuredClone(record);
@@ -34,6 +39,10 @@ export function createEditorRuntimeBridge({ writer, activeLock }) {
                 return target;
             });
         } catch (error) {
+            if (kind === 'activation' && claimed && error instanceof StartEligibilityError) {
+                try { await activeLock.release(); }
+                catch { /* Keep the rejection reason when lock release acknowledgement fails. */ }
+            }
             const lateLockRequest = error?.message === 'lockRequest'
                 && ['activation', 'resume', 'suspend', 'retainPlan', 'discard', 'complete', 'reflection'].includes(kind)
                 && source !== null && target !== null;

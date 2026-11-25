@@ -1,10 +1,11 @@
 # easyTimer — Developer Briefing
 
 > **Current handover:** Staging runs PWA v86 at `ebb0039`. Package 01
-> passed independent static and automated browser review. Its browser
-> stabilization is complete. Final Product Owner acceptance and production
-> release remain pending. See the [handover](PACKAGE_01_HANDOVER.md) for the
-> verified results and remaining roadmap.
+> passed independent review and automated browser regression, and the Product
+> Owner accepted it. Production release remains unauthorized. See the
+> [Package 01 handover](PACKAGE_01_HANDOVER.md) for verified results and the
+> [Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md) for the approved
+> start eligibility slice and the remaining review gates.
 
 **Mandatory contributor and coding-agent reading:** Use the
 [terminology mapping](TERMINOLOGY_MAPPING.md) for public DE/EN copy and its

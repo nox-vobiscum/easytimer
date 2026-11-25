@@ -10,13 +10,16 @@ import {
     MAX_TOTAL_SECONDS,
     PHASE_CATEGORIES,
     RUNDOWN_CATEGORIES,
+    StartEligibilityError,
     activatePlannedExecution,
     createPlannedExecution,
     completeStartedExecution,
+    requireStartEligibility,
     retainCurrentPlan,
     resumeReadyExecution,
     resumeStartedExecution,
     startActiveExecution,
+    startEligibilityReason,
     suspendStartedExecution,
     suspendReadyExecution,
     validatePlannedExecution,
@@ -155,6 +158,37 @@ test('template validation is strict, normalized and non-mutating', () => {
     ]) {
         const value = template(); change(value);
         assert.throws(() => validateTemplate(value));
+    }
+});
+
+test('start eligibility reuses strict rundown reasons and leaves the whole plan untouched', () => {
+    const valid = plan();
+    const before = structuredClone(valid);
+    assert.equal(startEligibilityReason(valid), null);
+    assert.doesNotThrow(() => requireStartEligibility(valid));
+    assert.deepEqual(valid, before);
+
+    for (const [change, reason] of [
+        [value => { value.phases = []; }, 'phasesRequired'],
+        [value => { value.phases[1].durationSeconds = null; }, 'duration'],
+        [value => { value.phases[1].durationSeconds = 0; }, 'duration'],
+        [value => { value.phases[1].durationSeconds = 61; }, 'duration'],
+        [value => { value.phases[1].durationSeconds = MAX_PHASE_SECONDS + 60; }, 'duration'],
+        [value => { value.phases[1].title = ' '; }, 'phaseTitle'],
+        [value => { value.phases[1].id = value.phases[0].id; }, 'invalidData'],
+        [value => {
+            value.phases = Array.from({ length: 11 }, (_, index) => ({
+                id: `phase-${index}`, title: 'Phase', durationSeconds: MAX_PHASE_SECONDS,
+            }));
+        }, 'totalLimit'],
+    ]) {
+        const candidate = plan();
+        change(candidate);
+        const unchanged = structuredClone(candidate);
+        assert.equal(startEligibilityReason(candidate), reason);
+        assert.throws(() => requireStartEligibility(candidate), { constructor: StartEligibilityError, message: reason });
+        assert.throws(() => validateRundownPlan(candidate), { message: reason });
+        assert.deepEqual(candidate, unchanged);
     }
 });
 

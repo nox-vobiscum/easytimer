@@ -3,6 +3,7 @@ import { createTimer, formatOvertime, formatTime, timeBudget, transition, adjust
 import { transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=54';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=54';
 import { createRecovery } from './recovery.mjs?v=55';
+import { startEligibilityReason } from './editor-domain.mjs';
 import { createEditorActiveTimerLock } from './editor-active-lock.mjs';
 import { createEditorRuntimeBridge } from './editor-runtime-bridge.mjs';
 import { createEditorStoreWriter } from './editor-storage-lock.mjs';
@@ -913,6 +914,11 @@ async function acceptActivation(result) {
 
 async function requestNativeWorkspaceAction({ kind, record, entity }) {
     try {
+        if (kind === 'launchTemplate' || kind === 'activateExecution') {
+            const plan = kind === 'launchTemplate' ? entity.plan : entity.execution.currentPlan;
+            const reason = startEligibilityReason(plan);
+            if (reason !== null) return { status: 'error', error: { type: 'validation', code: reason } };
+        }
         if (kind === 'launchTemplate') {
             if (!await approveNativeEntry()) return { status: 'cancelled' };
             const result = await editorLaunchService.launchTemplateToReady({

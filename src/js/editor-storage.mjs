@@ -3,6 +3,7 @@ import {
     activatePlannedExecution,
     createPlannedExecution,
     completeStartedExecution,
+    requireStartEligibility,
     retainCurrentPlan,
     resumeReadyExecution,
     startActiveExecution,
@@ -209,9 +210,10 @@ export function deleteTemplateInRecord(record, options) {
 export function planExecutionFromTemplateInRecord(record, options) {
     const valid = validateEditorStoreRecord(record);
     if (!isObject(options)) fail('invalidData');
-    const { templateId, executionId, expectedAggregateRevision } = options;
+    const { templateId, executionId, expectedAggregateRevision, requireEligibleStart = false } = options;
     if (typeof templateId !== 'string' || !templateId.trim()
-        || typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+        || typeof executionId !== 'string' || !executionId.trim()
+        || typeof requireEligibleStart !== 'boolean') fail('invalidData');
     safeRevision(expectedAggregateRevision);
     if (valid.revision !== expectedAggregateRevision) fail('conflict');
     if (valid.revision === Number.MAX_SAFE_INTEGER) fail('invalidStoreRevision');
@@ -219,6 +221,7 @@ export function planExecutionFromTemplateInRecord(record, options) {
     const template = valid.templates.find(item => item.id === templateId);
     if (!template) fail('templateNotFound');
     if (valid.executions.some(entry => entry.execution.id === executionId)) fail('duplicateId');
+    if (requireEligibleStart) requireStartEligibility(template.plan);
     const execution = createPlannedExecution(template, executionId);
     return validateEditorStoreRecord({
         ...valid,
@@ -281,6 +284,7 @@ export function activatePlannedExecutionInRecord(record, options) {
     if (valid.executions.some((entry, entryIndex) => entryIndex !== index
         && entry.execution.lifecycle === EXECUTION_LIFECYCLES.ACTIVE)) fail('activeExecutionExists');
 
+    requireStartEligibility(selected.execution.currentPlan);
     const execution = activatePlannedExecution(selected.execution);
     const activeRuntime = prepareReadyExecutionRuntime(execution, runtimeRunId, savedAt);
     const executions = valid.executions.map((entry, entryIndex) => (entryIndex === index

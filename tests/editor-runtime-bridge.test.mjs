@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPlannedExecution } from '../src/js/editor-domain.mjs';
+import { createPlannedExecution, requireStartEligibility, StartEligibilityError } from '../src/js/editor-domain.mjs';
 import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { createEditorRuntimeBridge } from '../src/js/editor-runtime-bridge.mjs';
 import { EDITOR_STORAGE_KEY, activatePlannedExecutionInRecord,
@@ -758,6 +758,39 @@ test('domain conflicts pass through without a write while acquired ownership rem
 
     await activeLock.release();
     assert.equal(locks.held.size, 0);
+});
+
+test('definitive activation eligibility rejection releases the newly acquired lock without a write or pending operation', async () => {
+    const { locks, storage, activeLock, writer } = setup();
+    const before = storage.values.get(EDITOR_STORAGE_KEY);
+    let rejectStart = true;
+    const bridge = createEditorRuntimeBridge({
+        activeLock,
+        writer: {
+            read: writer.read,
+            write: transform => writer.write(current => {
+                assert.equal(activeLock.held, true);
+                // The current Store excludes incomplete PLANNED plans. Simulate
+                // the eligibility signal in the locked writer callback.
+                if (rejectStart) requireStartEligibility({ ...current.executions[0].execution.currentPlan, phases: [] });
+                return transform(current);
+            }),
+        },
+    });
+    await assert.rejects(bridge.activatePlanned(activationOptions()), {
+        constructor: StartEligibilityError, message: 'phasesRequired',
+    });
+    assert.equal(storage.state.writes, 0);
+    assert.equal(storage.values.get(EDITOR_STORAGE_KEY), before);
+    assert.equal(activeLock.held, false);
+    assert.equal(locks.held.size, 0);
+    await assert.rejects(bridge.reconcilePendingActivation(), /noPendingActivation/);
+
+    rejectStart = false;
+    const retry = await bridge.activatePlanned(activationOptions());
+    assert.equal(retry.activeRuntime.clock.status, 'READY');
+    assert.equal(storage.state.writes, 1);
+    await activeLock.release();
 });
 
 test('quota failure passes through without success, retry or ownership release', async () => {

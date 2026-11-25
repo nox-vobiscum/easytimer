@@ -71,3 +71,11 @@ active Event may be ready, running, paused or in overtime. Pausing the clock,
 stopping overtime and suspending the Event are distinct actions. Historical
 `STOP_WORKSHOP` resets the timer to the first phase. The native Event exit
 dialog offers the explicit lifecycle choices above.
+
+Start Event uses `startEligibilityReason` in `editor-domain.mjs` before the
+App asks to leave a progressed Quick Timer. The Store checks eligibility
+under the existing revision checks, before creating a Planned Event for
+direct launch and before activating a Planned Event. Ordinary Plan Event has
+its own intent and only saves planning data. Slice 02.1 retains the existing
+strict persisted plan shape. See the
+[Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md).

@@ -1284,6 +1284,39 @@ test('planned execution creation rejects missing templates, duplicate IDs, stale
     }), /invalidStoreRevision/);
 });
 
+test('direct-launch planning preserves revision and identity checks and selects the same independent copy', () => {
+    const source = record({ revision: 4, templates: [template()], executions: [entry(planned())] });
+    const before = structuredClone(source);
+    const options = { templateId: 'template-1', executionId: 'execution-new', expectedAggregateRevision: 4 };
+    const launch = { ...options, requireEligibleStart: true };
+    assert.deepEqual(planExecutionFromTemplateInRecord(source, launch), planExecutionFromTemplateInRecord(source, options));
+    assert.throws(() => planExecutionFromTemplateInRecord(source, {
+        ...launch, templateId: 'missing', executionId: 'execution-1', expectedAggregateRevision: 3,
+    }), { message: 'conflict' });
+    assert.throws(() => planExecutionFromTemplateInRecord(source, { ...launch, executionId: 'execution-1' }),
+        { message: 'duplicateId' });
+    assert.deepEqual(source, before);
+});
+
+test('current Store still rejects incomplete Template and PLANNED records before start transformations', () => {
+    for (const [change, reason] of [
+        [value => { value.phases = []; }, 'phasesRequired'],
+        [value => { value.phases[0].durationSeconds = null; }, 'duration'],
+        [value => { value.phases[0].title = ''; }, 'phaseTitle'],
+    ]) {
+        const templateSource = record({ templates: [template()] });
+        change(templateSource.templates[0].plan);
+        const plannedSource = record({ executions: [entry(planned())] });
+        change(plannedSource.executions[0].execution.currentPlan);
+        const before = structuredClone([templateSource, plannedSource]);
+        assert.throws(() => planExecutionFromTemplateInRecord(templateSource, {
+            templateId: 'template-1', executionId: 'execution-new', expectedAggregateRevision: 0, requireEligibleStart: true,
+        }), { message: reason });
+        assert.throws(() => activatePlannedExecutionInRecord(plannedSource, activationOptions()), { message: reason });
+        assert.deepEqual([templateSource, plannedSource], before);
+    }
+});
+
 test('writer persists and confirms native templates, updates and planned executions without an active lock', async () => {
     const storage = memory();
     const locks = aggregateLockManager();
@@ -2120,11 +2153,8 @@ test('rejects activation conflicts, invalid inputs and aggregate overflow withou
     const invalidOptions = [
         activationOptions({ executionId: 'missing' }),
         activationOptions({ executionId: '' }),
-        activationOptions({ expectedAggregateRevision: 1 }),
         activationOptions({ expectedAggregateRevision: -1 }),
-        activationOptions({ expectedExecutionRevision: 2 }),
         activationOptions({ expectedExecutionRevision: -1 }),
-        activationOptions({ expectedRuntimeRevision: 1 }),
         activationOptions({ expectedRuntimeRevision: -1 }),
         activationOptions({ runtimeRunId: undefined }),
         activationOptions({ runtimeRunId: '' }),
@@ -2132,6 +2162,10 @@ test('rejects activation conflicts, invalid inputs and aggregate overflow withou
     ];
     for (const options of invalidOptions) {
         assert.throws(() => activatePlannedExecutionInRecord(source, options));
+        assert.deepEqual(source, before);
+    }
+    for (const stale of [{ expectedAggregateRevision: 1 }, { expectedExecutionRevision: 2 }, { expectedRuntimeRevision: 1 }]) {
+        assert.throws(() => activatePlannedExecutionInRecord(source, activationOptions(stale)), { message: 'conflict' });
         assert.deepEqual(source, before);
     }
 

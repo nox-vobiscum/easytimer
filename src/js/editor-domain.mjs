@@ -130,6 +130,22 @@ export function validateRundownPlan(plan) {
     };
 }
 
+export function startEligibilityReason(plan) {
+    try {
+        validateRundownPlan(plan);
+        return null;
+    } catch (error) {
+        return error.message;
+    }
+}
+
+export class StartEligibilityError extends Error {}
+
+export function requireStartEligibility(plan) {
+    const reason = startEligibilityReason(plan);
+    if (reason !== null) throw new StartEligibilityError(reason);
+}
+
 export function validateTemplate(template) {
     exactFields(template, ['schemaVersion', 'kind', 'id', 'revision', 'plan']);
     if (template.schemaVersion !== EDITOR_SCHEMA_VERSION || template.kind !== EDITOR_KINDS.TEMPLATE) fail('invalidData');

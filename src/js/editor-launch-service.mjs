@@ -1,4 +1,4 @@
-import { EXECUTION_LIFECYCLES } from './editor-domain.mjs';
+import { EXECUTION_LIFECYCLES, StartEligibilityError } from './editor-domain.mjs';
 import { planExecutionFromTemplateInRecord } from './editor-storage.mjs';
 
 const fail = code => { throw new Error(code); };
@@ -38,7 +38,7 @@ function errorDetails(error) {
     else if (storage.has(code)) type = 'storage';
     else if (locks.has(code)) type = 'lock';
     else if (pending.has(code)) type = 'pending';
-    else if (![
+    else if (!(error instanceof StartEligibilityError) && ![
         'invalidData', 'invalidRevision', 'invalidRuntimeRevision',
         'invalidStoreRevision', 'invalidLifecycle', 'invalidActiveRuntimeBinding',
     ].includes(code)) type = 'unexpected';
@@ -63,7 +63,7 @@ export function createNativeSessionLaunchService({
         || typeof createRuntimeRunId !== 'function'
         || typeof now !== 'function') fail('invalidLaunchService');
 
-    async function planFromTemplate(options) {
+    async function planTemplate(options, requireEligibleStart) {
         let executionId = null;
         try {
             exactOptions(options, ['templateId', 'expectedAggregateRevision']);
@@ -72,6 +72,7 @@ export function createNativeSessionLaunchService({
                 templateId: options.templateId,
                 executionId,
                 expectedAggregateRevision: options.expectedAggregateRevision,
+                requireEligibleStart,
             }));
             const selected = selectedExecution(record, executionId);
             if (!selected || selected.execution.lifecycle !== EXECUTION_LIFECYCLES.PLANNED) {
@@ -142,7 +143,7 @@ export function createNativeSessionLaunchService({
     }
 
     async function launchTemplateToReady(options) {
-        const planned = await planFromTemplate(options);
+        const planned = await planTemplate(options, true);
         if (planned.status !== 'planned') {
             return { ...planned, operation: 'launch', stage: 'planning' };
         }
@@ -229,7 +230,7 @@ export function createNativeSessionLaunchService({
     }
 
     return Object.freeze({
-        planFromTemplate,
+        planFromTemplate(options) { return planTemplate(options, false); },
         activatePlanned,
         launchTemplateToReady,
         observeExecution,
