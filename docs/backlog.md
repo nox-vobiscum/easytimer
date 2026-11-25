@@ -54,6 +54,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | SYNC-099 | Optional Snapshot Cleanup | Deferred — Someday / Maybe / Very Low | No implementation planned; validated replacement/recovery/offline safety required |
 | UX-019 | Subtle Start/Resume and Stop Button Accents | Released in PWA v64 | Owner-accepted semantic Start/Resume and Stop accents |
 | UX-015 | Timer View Typography & Information Hierarchy | Session hierarchy released in PWA v66; remaining work open | Quick Timer typography and compact-landscape menu remain open |
+| UI-DNA-001 | Shared Visual & Verbal Identity | Later / Design Review — EasyTimer harmonization unscheduled | Concept after NoxPoll MVP-001 acceptance; EasyTimer after EDITOR-001 release and NoxPoll validation; NANO-001 priority retained |
 | BUG-001 | Fullscreen-safe Workshop Stop confirmation | Released in PWA v67 | Document-modal confirmation replaces the browser-native prompt |
 | BUG-002 | Session next-phase transition unexpectedly enters recovery lockout | Fix implemented in unreleased PWA v79; Firefox acceptance open | Exact confirmed-action installation fixes the false local conflict without weakening Store/runtime safeguards |
 | UX-017 | Recovery Candidate Management | Future UX refinement | Explicit management of obsolete runtime candidates; protect meaningful Runs and active ownership |
@@ -674,6 +675,63 @@ This item is distinct from PRES-001's same-device Moderator/Audience dual-window
 No infrastructure is selected and no implementation or experiment starts with this entry.
 
 ## Appearance and customization
+
+### UI-DNA-001 — Shared Visual & Verbal Identity
+
+**Priority:** Later / Design Review — EasyTimer harmonization is unscheduled.
+**Status:** Future shared design direction only; no implementation is authorized.
+Following concept review, implementation requires separate explicit Product
+Owner approval.
+
+**Goal:** Consolidate the existing design languages of EasyTimer, NoxPoll and
+Planning Poker rather than redesigning them from scratch. Facilitator Toolbox
+is an internal umbrella concept, not a public-facing brand. The products retain
+their independent brands, domains, functionality, architecture and deployment.
+Prefer a lightweight, versioned design reference, mockups and shared
+design-token conventions over shared runtime or framework dependencies.
+
+**Visual direction:** Harmonize headers, logo placement and proportions,
+navigation, menus, footers, landing-page composition, typography, spacing,
+content widths, icons, buttons, forms, dialogs, focus states and
+Light/Dark/System conventions. Establish compatible neutral palettes and
+semantic colors while retaining each product's logo and accent: EasyTimer's
+navy/blue and NoxPoll's complementary green/pastel-green identities remain;
+Planning Poker's accent palette is undecided. Consistency does not require
+identical layouts or workflows. Preserve responsive behavior, accessibility,
+product-specific interaction requirements and DE/EN semantic parity.
+
+**Verbal direction:** Develop a recognizable voice for headlines, claims,
+onboarding, empty states, FAQs, About pages and other informational content:
+charming, slightly nerdy, occasionally humorous, approachable and professional.
+Consequential actions, errors, and privacy and security communication must
+remain clear and unambiguous in both languages.
+
+**Sequencing and gates:**
+- Shared conceptual work may begin after NoxPoll MVP-001, including mandatory
+  release blockers, is complete and accepted; it may proceed while EasyTimer
+  completes its existing approved work. NoxPoll is the preferred first
+  implementation pilot, with high post-MVP priority before major functional
+  expansion.
+- EasyTimer is the preferred aesthetic reference. Its harmonization must wait
+  for EDITOR-001, including the Facilitator Panel, to be completed, accepted and
+  production-released, and must use the shared direction validated through
+  NoxPoll. Preserve the approved Editor UX and
+  [Home and terminology decisions](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md),
+  including the existing theme identity and semantic signal colors in the
+  [responsive Editor decisions](EDITOR-001_UX-002_MOBILE_DESIGN_2026-11-24.md).
+  NANO-001 remains the next feature after EDITOR-001 and before SW-001; this
+  entry must not displace that commitment. UI-DNA-001's exact EasyTimer slot
+  remains a Product Owner scheduling decision.
+- Planning Poker has no immediate redesign; defer broad visual modernization
+  until the shared direction is validated through NoxPoll. Necessary
+  maintenance and bug fixes remain unaffected.
+
+**Non-goals:** No public umbrella branding or mandatory cross-promotion; no
+shared runtime dependencies, centralized live stylesheet, common frontend
+framework or coupled release pipeline; no product rename or logo redesign
+requirement; no new functionality, architecture changes or unrelated refactoring.
+Previously approved product decisions remain intact. Report any concrete
+conflict to the Product Owner rather than silently overriding it.
 
 ### UX-019 — Subtle Start/Resume and Stop Button Accents
 
