@@ -272,6 +272,23 @@ test('unconfirmed acknowledgement retains full stable snapshots and reconciles t
     assert.equal(c.state.held, false);
 });
 
+test('importing an empty Template copies its plan and identity while preserving a running Event', async () => {
+    const existing = activeRecord();
+    const c = setup(existing);
+    const source = template();
+    source.plan.phases = [];
+    const preview = c.service.prepareImport(serializeEditorTemplate(source), existing.revision);
+    assert.equal(preview.status, 'prepared');
+    assert.notEqual(preview.candidate.template.id, source.id);
+    assert.deepEqual(preview.candidate.template.plan, source.plan);
+    const imported = await c.service.persistImport(preview.candidate);
+    assert.equal(imported.status, 'confirmed');
+    assert.deepEqual(imported.record.activeRuntime, existing.activeRuntime);
+    assert.deepEqual(imported.record.executions, existing.executions);
+    assert.deepEqual(imported.record.templates.find(item => item.id === imported.templateId).plan.phases, []);
+    assert.equal(c.state.writes, 1);
+});
+
 test('failed readback with exact source confirms current absence without an automatic second import', async () => {
     const c = setup();
     const { candidate } = c.service.prepareImport(document(), 0);

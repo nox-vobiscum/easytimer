@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPlannedExecution, requireStartEligibility, StartEligibilityError } from '../src/js/editor-domain.mjs';
+import { createPlannedExecution, StartEligibilityError } from '../src/js/editor-domain.mjs';
 import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { createEditorRuntimeBridge } from '../src/js/editor-runtime-bridge.mjs';
-import { EDITOR_STORAGE_KEY, activatePlannedExecutionInRecord,
+import { EDITOR_STORAGE_KEY, activatePlannedExecutionInRecord, updatePlannedExecutionPlanInRecord,
     completeExecutionInRecord, updateCompletedReflectionInRecord } from '../src/js/editor-storage.mjs';
 import { createEditorStoreWriter } from '../src/js/editor-storage-lock.mjs';
 import { transitionSession } from '../src/js/session.mjs';
@@ -761,22 +761,16 @@ test('domain conflicts pass through without a write while acquired ownership rem
 });
 
 test('definitive activation eligibility rejection releases the newly acquired lock without a write or pending operation', async () => {
-    const { locks, storage, activeLock, writer } = setup();
+    const locks = lockManager();
+    const initial = initialRecord();
+    initial.executions[0].execution.currentPlan.phases = [];
+    const storage = memory(initial, locks);
+    const { activeLock, writer, bridge } = setup({ locks, storage });
     const before = storage.values.get(EDITOR_STORAGE_KEY);
-    let rejectStart = true;
-    const bridge = createEditorRuntimeBridge({
-        activeLock,
-        writer: {
-            read: writer.read,
-            write: transform => writer.write(current => {
-                assert.equal(activeLock.held, true);
-                // The current Store excludes incomplete PLANNED plans. Simulate
-                // the eligibility signal in the locked writer callback.
-                if (rejectStart) requireStartEligibility({ ...current.executions[0].execution.currentPlan, phases: [] });
-                return transform(current);
-            }),
-        },
-    });
+    for (const stale of [{ expectedAggregateRevision: 1 }, { expectedExecutionRevision: 2 }, { expectedRuntimeRevision: 1 }]) {
+        await assert.rejects(bridge.activatePlanned(activationOptions(stale)), { message: 'conflict' });
+        await activeLock.release(); // Keep the established ordinary-conflict ownership behavior.
+    }
     await assert.rejects(bridge.activatePlanned(activationOptions()), {
         constructor: StartEligibilityError, message: 'phasesRequired',
     });
@@ -786,10 +780,14 @@ test('definitive activation eligibility rejection releases the newly acquired lo
     assert.equal(locks.held.size, 0);
     await assert.rejects(bridge.reconcilePendingActivation(), /noPendingActivation/);
 
-    rejectStart = false;
-    const retry = await bridge.activatePlanned(activationOptions());
+    await writer.write(current => updatePlannedExecutionPlanInRecord(current, {
+        executionId: 'execution-1', expectedAggregateRevision: 0, expectedExecutionRevision: 1, currentPlan: plan(),
+    }));
+    const retry = await bridge.activatePlanned(activationOptions({
+        expectedAggregateRevision: 1, expectedExecutionRevision: 2,
+    }));
     assert.equal(retry.activeRuntime.clock.status, 'READY');
-    assert.equal(storage.state.writes, 1);
+    assert.equal(storage.state.writes, 2);
     await activeLock.release();
 });
 

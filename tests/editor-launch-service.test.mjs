@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requireStartEligibility } from '../src/js/editor-domain.mjs';
 import { createEditorActiveTimerLock } from '../src/js/editor-active-lock.mjs';
 import { createNativeSessionLaunchService } from '../src/js/editor-launch-service.mjs';
 import { createEditorRuntimeBridge } from '../src/js/editor-runtime-bridge.mjs';
@@ -81,7 +80,7 @@ function memory(locks) {
     };
 }
 
-async function setup({ locks = lockManager(), storage = null } = {}) {
+async function setup({ locks = lockManager(), storage = null, source = prepared() } = {}) {
     const actualStorage = storage ?? memory(locks);
     const writer = createEditorStoreWriter({ getStorage: () => actualStorage, locks });
     const activeLock = createEditorActiveTimerLock({ locks });
@@ -96,7 +95,7 @@ async function setup({ locks = lockManager(), storage = null } = {}) {
         now: () => 1000,
     });
     const templates = createNativeEditorTemplateIntegration({ writer });
-    await templates.createTemplate(prepared(), { expectedAggregateRevision: 0 });
+    await templates.createTemplate(source, { expectedAggregateRevision: 0 });
     return { locks, storage: actualStorage, writer, activeLock, runtimeBridge, service };
 }
 
@@ -171,29 +170,41 @@ test('direct launch preserves Store conflict precedence and does not claim runti
     assert.equal(locks.held.size, 0);
 });
 
-test('direct launch reports a typed eligibility rejection at the planning boundary without activation or a write', async () => {
-    const { storage, locks, writer } = await setup();
+test('persisted empty Template is plannable, but direct launch rejects it before creating an Event or claiming ownership', async () => {
+    const { storage, locks, activeLock, service } = await setup({ source: { ...prepared(), phases: [] } });
     const before = storage.values.get(EDITOR_STORAGE_KEY);
-    const service = createNativeSessionLaunchService({
-        writer: {
-            read: writer.read,
-            // Incomplete plans cannot reach the transform in this slice. Exercise
-            // the service's handling of the definitive validation signal at that boundary.
-            write: () => writer.write(current => requireStartEligibility({ ...current.templates[0].plan, phases: [] })),
-        },
-        runtimeBridge: {
-            activatePlanned() { assert.fail('An eligibility rejection must prevent activation'); },
-            reconcilePendingActivation() { assert.fail('No uncertain activation may be created'); },
-        },
-        createExecutionId: () => 'unused-execution',
-    });
+    const stale = await service.launchTemplateToReady({ templateId: 'template-1', expectedAggregateRevision: 0 });
+    assert.deepEqual(stale.error, { type: 'conflict', code: 'conflict' });
     const result = await service.launchTemplateToReady({ templateId: 'template-1', expectedAggregateRevision: 1 });
     assert.deepEqual(result, {
         status: 'error', operation: 'launch', stage: 'planning', error: { type: 'validation', code: 'phasesRequired' },
     });
     assert.equal(storage.state.writes, 1);
     assert.equal(storage.values.get(EDITOR_STORAGE_KEY), before);
+    assert.equal(activeLock.held, false);
     assert.equal(locks.held.size, 0);
+    const planned = await service.planFromTemplate({ templateId: 'template-1', expectedAggregateRevision: 1 });
+    assert.equal(planned.status, 'planned');
+    assert.notEqual(planned.executionId, planned.record.templates[0].id);
+    assert.deepEqual(planned.record.executions[0].execution.currentPlan, planned.record.templates[0].plan);
+    assert.notEqual(planned.record.executions[0].execution.currentPlan, planned.record.templates[0].plan);
+    assert.equal(storage.state.writes, 2);
+    assert.equal(planned.record.activeRuntime, null);
+});
+
+test('uncertain independent planning from a zero-phase Template is observed without repeating the write', async () => {
+    const { storage, activeLock, service } = await setup({ source: { ...prepared(), phases: [] } });
+    storage.state.faultAfterWrites = 1;
+    storage.state.failReadAfterWrite = true;
+    const result = await service.planFromTemplate({ templateId: 'template-1', expectedAggregateRevision: 1 });
+    assert.equal(result.status, 'uncertain');
+    storage.state.failReadAfterWrite = false;
+    const observed = await service.observeExecution(result.executionId);
+    assert.equal(observed.status, 'observed');
+    assert.equal(observed.lifecycle, 'planned');
+    assert.deepEqual(observed.execution.currentPlan.phases, []);
+    assert.equal(activeLock.held, false);
+    assert.equal(storage.state.writes, 2);
 });
 
 test('an uncertain direct-launch planning write is observed without activating or writing again', async () => {

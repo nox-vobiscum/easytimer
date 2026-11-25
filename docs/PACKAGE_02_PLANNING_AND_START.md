@@ -11,6 +11,9 @@ PWA v86 at `ebb0039ddaa096ab968554d62fcedfc6a499d7d6`. Production release
 requires separate authorization. The Slice 02.1 baseline was
 `9a23eba4743bacfc235c2dc4168fb7d428749127`. Slice 02.1a starts from verified
 local and remote `develop` at `c9706c6023b98cf1d4b7b45d443c5b6c01125221`.
+The accepted compatibility contract was published separately at
+`26ac178acbc9ebfb5870db95709acfd11a73ac54`. Independent review accepted
+Slice 02.2 and its automated regression. Rollout approval remains pending.
 
 The [UX-001 decisions](EDITOR-001_UX-001_DECISIONS_2026-11-16.md#5-emptyincomplete-planning-state-versus-valid-execution)
 define incomplete planning and strict Start eligibility. The
@@ -282,13 +285,98 @@ exports. Do not clear storage, remove incomplete plans or replace the live
 aggregate with an older backup as a rollback step. A precautionary export
 before rollout is useful for evidence, with current restore limits understood.
 
+## Slice 02.2 — Named plans without phases
+
+`validatePersistedPlan` accepts an empty `phases` array for Templates and
+PLANNED Events. It shares the same plan and phase checks with
+`validateRundownPlan`. Blank names, missing phase durations and blank phase
+titles remain rejected. READY, ACTIVE, SUSPENDED, COMPLETED and immutable
+Attempt snapshots still require an executable Rundown. The writer, Store
+shape, storage key, lock ownership and revision checks remain in place.
+
+The library retains Edit, Plan Event and the existing Template copy/import
+paths. It offers an individual PLANNED Event export using the existing
+passive Execution format. Event planning from a Template creates an
+independent Event, including when the source has no phases. A general
+Event-to-Event clone, Event import and full backup restore remain outside
+this slice. The Picker offers direct editing on the selected, nonstartable
+entry, with a localized reason. It refreshes after the Editor observes a
+new Store revision. When opening an exact Planned draft from the Picker,
+the Editor uses its fresh validated workspace snapshot for the draft's
+revision binding; it uses the usual writer on Save. Empty agendas show
+Add Phase and contain no placeholder. The existing Save-and-return behavior
+remains in effect.
+
+Workspace new-Event save and the Plan observation ticket use the planning
+validator. Pending Template and PLANNED saves and import/export retain their
+existing canonical records and read-only rechecks. Uncertain creation can
+be observed and edited without creating a second Event. A definite
+`phasesRequired` rejection creates no new record or revision and releases
+any lock acquired for the rejected activation. Valid complete plans still
+follow the existing READY preparation and separate first Start.
+
+### Actual-build compatibility and proposed update strategy
+
+The isolated probe used the exact v86 staging source
+`ebb0039ddaa096ab968554d62fcedfc6a499d7d6` and a copy of the actual local 02.2
+source with its real validators. The loopback server gave the copy a
+distinct cache generation to exercise the worker update. The repository
+PWA version and implementation source files were not changed by the probe.
+It repeated all ten compatibility checkpoints, including a server-stopped
+offline cold start, mixed-version writes, Draft Recovery, the rollback to
+v86 and compatible roll-forward.
+
+The remaining rollout risk was reproduced with the actual implementation.
+After a newer tab wrote an incomplete plan, an older live owner could not
+persist Pause and kept the active Runtime lock. The raw aggregate and
+the persisted Run and Attempt were unchanged. After the old owner left,
+the compatible tab recovered the same RUNNING Event. An offline rollback
+to v86 preserved the bytes and left Quick Timer available, while native
+Event recovery and the Editor were unavailable.
+
+For a separately approved rollout, start with a coordinated pilot on the
+affected origin outside live Events. Ask users to deliberately suspend or
+finish active Events in the existing app when safe, close old browser
+tabs and installed PWA windows, reconnect offline clients and reopen the
+updated app. Confirm the active build and successful Event recovery before
+expanding the audience. After incomplete writes are available, retain a
+compatible planning reader for rollback. If an older owner is already
+blocked, leave the old owner and recover from the compatible app on the
+same origin and profile, preserving the stored data. Offline or dormant
+old clients cannot be guaranteed to follow the update sequence. Wider
+rollout needs a separate decision on that residual operational risk.
+There are no forced reloads, planning locks or new ownership protocols in
+this slice. The existing backup remains an export without a complete
+restore path.
+
+### Slice 02.2 verification
+
+Commands ran on Node 22.17.1 and headless Edge 158.0.4370.33 from the
+repository root. The regular browser run enabled all existing and new
+scenarios without a focused flag or diagnostic loader.
+
+| Command | Actual result |
+| --- | --- |
+| `node --test --test-reporter spec tests/editor-domain.test.mjs tests/editor-storage.test.mjs tests/editor-launch-service.test.mjs tests/editor-runtime-bridge.test.mjs tests/editor-template-draft.test.mjs tests/editor-draft-recovery.test.mjs tests/editor-portability.test.mjs tests/editor-template-import.test.mjs tests/editor-workspace-boundary.test.mjs` | Exit 0. All 281 focused Node tests passed. |
+| `node --test --test-reporter spec @(git ls-files '*test.mjs')` | Exit 0. All 590 tests passed across 37 tracked files, with zero skipped. |
+| `$env:EASYTIMER_ZERO_PHASE_PLANNING_ONLY='1'` and `node tests/browser-check.mjs` in a dedicated shell | Exit 0. Four browser checkpoints including guarded reload with a pending empty Template, uncertain planning observation, read-only rechecks, exact rejected writes and locks, independent import/export, localized direct editing, final-phase removal and successful READY after adding a valid phase. |
+| `node tests/browser-check.mjs` | Exit 0. Thirty checkpoints in the regular aggregate including all four new ones. |
+| `node tools/release/package.mjs` and `node tools/release/package.mjs --verify $artifact` using the emitted directory | Both exit 0. The inventory and artifact verify at 41 files and PWA v86. |
+| `node tests/artifact-offline-browser.mjs` | Exit 0. Seven offline artifact checkpoints including the stopped-server cold start and missing-cache negative control. |
+| `node .package-02-02-evidence/compat/actual-probe.mjs` | Exit 0. All ten actual-build compatibility checkpoints passed, including the old live owner and compatible recovery. All 45 source files in the copied candidate matched the worktree byte-for-byte. |
+| `node --check` for every changed JS/MJS file, `git diff --check`, and the source-scope comparison | Exit 0. The Store writer and lock, Runtime and timer engines, service worker, version assets and release configuration retain their baseline files. |
+
+The local `review-package-02-slice-02-2.zip` contains the complete
+implementation diff against the published compatibility checkpoint, the
+separate documentation commit diff, full changed files, exact commands and
+logs, and the reproducible actual-build compatibility probe.
+
 ## Questions for separate approval
 
-- **Before rollout** repeat the compatibility probes against the actual Slice
-  02.2 build and review an update strategy for the old live Runtime owner.
-  A newer incomplete-plan write can block controls in the old running Event
-  while that older document still holds its ownership lock. Approval covers
-  the compatibility contract and Slice 02.2 implementation. Rollout remains
+- **Before rollout** independently review the actual-build probe and the
+  proposed update sequence for existing and offline owners. Verify the
+  deployment candidate and its real cache transition. Approval covers the
+  compatibility contract and local Slice 02.2 implementation. Rollout remains
   pending separate approval.
 - **Before 02.3** decide the canonical representation of unspecified duration
   and the localized unnamed-phase fallback. `durationSeconds: null` is a

@@ -18,7 +18,7 @@ records the product decisions and their rationale.
 | --- | --- | --- |
 | Event-Template | Event Template | `Template`, `kind: 'template'`, with its own `id`, `revision` and reusable `plan`. See `validateTemplate` in `src/js/editor-domain.mjs`. |
 | Event | Event | `Execution`, `kind: 'execution'`, with its own identity, `currentPlan`, optional provenance in `source`, `lifecycle`, `runtimeRevision`, `attempt` and `workshopNotes`. Template-derived events have `source.kind: 'template'` and an independent copy of the plan. |
-| Rundown | Rundown | The planned sequence of activities within an event. `validateRundownPlan` validates the embedded `Template.plan` or `Execution.currentPlan`: `name`, `category`, `transitionMode`, `preparedInformation` and ordered `phases`. The original executed plan is captured in `attempt.startSnapshot` at first countdown start. |
+| Rundown | Rundown | The planned sequence of activities within an event. `validatePersistedPlan` permits a named plan with an empty `phases` array for `Template.plan` and PLANNED `Execution.currentPlan`. `validateRundownPlan` requires phases for executable lifecycles and `attempt.startSnapshot`. Both use the same field and phase validation. The first countdown Start captures the original executed plan. |
 | Phase | Phase | An ordered element of `plan.phases` or `currentPlan.phases` with a stable `id`, `title`, `durationSeconds`, `category`, `notes` and `resources`. Recorded outcomes use `phaseId` in `Execution.phaseOutcomes`. |
 | Event-Informationen | Event Information | Prepared text in `plan.preparedInformation` or `currentPlan.preparedInformation`. Available on a reusable template and the event's own planning copy. |
 | Phasen-Informationen | Phase Information | Prepared guidance in `phase.notes` and labeled links in `phase.resources`. The historical field name `notes` refers to prepared text here. |
@@ -76,6 +76,8 @@ Start Event uses `startEligibilityReason` in `editor-domain.mjs` before the
 App asks to leave a progressed Quick Timer. The Store checks eligibility
 under the existing revision checks, before creating a Planned Event for
 direct launch and before activating a Planned Event. Ordinary Plan Event has
-its own intent and only saves planning data. Slice 02.1 retains the existing
-strict persisted plan shape. See the
+its own intent and only saves planning data. Slice 02.2 lets an empty agenda
+be saved, copied through ordinary planning or Template import, and exported.
+It is nonstartable and opens for editing from the Picker or library. A
+present phase still requires a valid title and duration. See the
 [Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md).

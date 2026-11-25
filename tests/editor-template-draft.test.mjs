@@ -150,12 +150,20 @@ test('invalid field contents remain editable and rejected native Saves retain th
         assert.deepEqual(edited, before);
         assert.equal(context.raw, raw);
     }
+    assert.equal(context.writes, 1);
+});
+
+test('removing the last phase saves and reopens the same named Template without a placeholder', async () => {
+    const { context, draft } = await savedDraft();
     let empty = draft;
     for (const phase of draft.template.phases) empty = removeNativeDraftPhase(empty, phase.id);
-    assert.deepEqual((await context.service.saveDraft(empty)).error, {
-        type: 'validation', code: 'phasesRequired',
-    });
-    assert.equal(context.writes, 1);
+    const saved = await context.service.saveDraft(empty);
+    assert.equal(saved.status, 'success');
+    const reopened = context.service.prepareEditDraft(saved.library, draft.template.id);
+    assert.equal(reopened.status, 'success');
+    assert.deepEqual(reopened.draft.template, empty.template);
+    assert.equal(reopened.draft.expectedTemplateRevision, draft.expectedTemplateRevision + 1);
+    assert.equal(context.writes, 2);
 });
 
 test('editing rejects identity or structural changes without mutating the original draft', async () => {

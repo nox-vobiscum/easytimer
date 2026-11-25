@@ -487,7 +487,7 @@ test('PLANNED plan update rejects invalid lifecycles, revisions, overflow and ma
         [{ expectedAggregateRevision: -1 }, 'invalidStoreRevision'], [{ expectedExecutionRevision: NaN }, 'invalidRevision'],
         [{ currentPlan: { ...plan(), extra: true } }, 'invalidData'],
         [{ currentPlan: { ...plan(), phases: [plan().phases[0], plan().phases[0]] } }, 'invalidData'],
-        [{ currentPlan: { ...plan(), phases: [] } }, 'phasesRequired'],
+        [{ currentPlan: { ...plan(), name: ' ', phases: [] } }, 'name'],
         [{ currentPlan: { ...plan(), category: 'unknown' } }, 'invalidCategory'],
     ]) assert.throws(() => updatePlannedExecutionPlanInRecord(source, { ...options, ...changes }), new RegExp(error));
     for (const overflowField of ['aggregate', 'execution']) {
@@ -1298,9 +1298,8 @@ test('direct-launch planning preserves revision and identity checks and selects 
     assert.deepEqual(source, before);
 });
 
-test('current Store still rejects incomplete Template and PLANNED records before start transformations', () => {
+test('the Store rejects malformed retained phases in Template and PLANNED records', () => {
     for (const [change, reason] of [
-        [value => { value.phases = []; }, 'phasesRequired'],
         [value => { value.phases[0].durationSeconds = null; }, 'duration'],
         [value => { value.phases[0].title = ''; }, 'phaseTitle'],
     ]) {
@@ -1315,6 +1314,26 @@ test('current Store still rejects incomplete Template and PLANNED records before
         assert.throws(() => activatePlannedExecutionInRecord(plannedSource, activationOptions()), { message: reason });
         assert.deepEqual([templateSource, plannedSource], before);
     }
+});
+
+test('zero-phase plans persist beside active and completed history without altering either Runtime or archive', () => {
+    const archivedReady = activatePlannedExecutionInRecord(record({ executions: [entry(planned('archived'))] }),
+        activationOptions({ executionId: 'archived', runtimeRunId: 'archived-run' }));
+    const archivedStarted = startReadyExecutionInRecord(archivedReady, startOptions({ executionId: 'archived' }));
+    const archived = completeExecutionInRecord(archivedStarted, completionOptions(archivedStarted, 12_000, 'archived')).executions[0];
+    const active = startedRecord();
+    const source = { ...active, executions: [...active.executions, archived, entry(planned('editable'))] };
+    const saved = updatePlannedExecutionPlanInRecord(source, { executionId: 'editable',
+        expectedAggregateRevision: source.revision, expectedExecutionRevision: 1, currentPlan: { ...plan(), phases: [] },
+    });
+    const templateSource = template();
+    templateSource.plan.phases = [];
+    const mixed = insertTemplateInRecord(saved, { template: templateSource, expectedAggregateRevision: saved.revision });
+    assert.deepEqual(mixed.executions.find(item => item.execution.id === 'editable').execution.currentPlan.phases, []);
+    assert.deepEqual(mixed.templates.find(item => item.id === templateSource.id).plan.phases, []);
+    assert.deepEqual(mixed.activeRuntime, active.activeRuntime);
+    assert.deepEqual(mixed.executions.find(item => item.execution.id === 'archived'), archived);
+    assert.deepEqual(validateEditorStoreRecord(JSON.parse(JSON.stringify(mixed))), mixed);
 });
 
 test('writer persists and confirms native templates, updates and planned executions without an active lock', async () => {

@@ -382,6 +382,8 @@ body.presentation { height:100dvh; min-height:100dvh; overflow-y:auto; }
 .planner h2 { font-size:1rem; margin:1rem 0 .5rem; overflow-wrap:anywhere; }
 .planner-top, .template-library li { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
 .planner-hint, .planner-feedback, .template-library p { color:var(--muted); font-size:.85rem; }
+.start-unavailable { display:flex; align-items:center; gap:.375rem; }
+.start-unavailable svg { flex:none; width:1em; height:1em; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
 .planner-feedback { overflow-wrap:anywhere; }
 .planner-feedback:empty { display:none; }
 .planner-feedback[data-error="true"] { color:var(--error); }

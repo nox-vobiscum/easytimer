@@ -110,10 +110,10 @@ function validatePhase(phase, ids) {
     };
 }
 
-export function validateRundownPlan(plan) {
+function validatePlan(plan, allowEmpty) {
     exactFields(plan, ['name', 'transitionMode', 'phases'], ['category', 'preparedInformation']);
     if (!['manual', 'automatic'].includes(plan.transitionMode)) fail('invalidData');
-    if (!Array.isArray(plan.phases) || !plan.phases.length) fail('phasesRequired');
+    if (!Array.isArray(plan.phases) || (!allowEmpty && !plan.phases.length)) fail('phasesRequired');
     const ids = new Set();
     const phases = plan.phases.map(phase => validatePhase(phase, ids));
     phases.reduce((sum, phase) => {
@@ -128,6 +128,14 @@ export function validateRundownPlan(plan) {
         preparedInformation: note(plan.preparedInformation === undefined ? '' : plan.preparedInformation),
         phases,
     };
+}
+
+export function validatePersistedPlan(plan) {
+    return validatePlan(plan, true);
+}
+
+export function validateRundownPlan(plan) {
+    return validatePlan(plan, false);
 }
 
 export function startEligibilityReason(plan) {
@@ -156,7 +164,7 @@ export function validateTemplate(template) {
         kind: EDITOR_KINDS.TEMPLATE,
         id: identity(template.id),
         revision: normalizedRevision,
-        plan: validateRundownPlan(template.plan),
+        plan: validatePersistedPlan(template.plan),
     };
 }
 
@@ -196,7 +204,8 @@ function validateExecution(execution, lifecycle, validateAttempt) {
     const normalizedRevision = revision(execution.revision, 'invalidRevision');
     const normalizedRuntimeRevision = revision(execution.runtimeRevision, 'invalidRuntimeRevision');
     if (normalizedRevision < 1 || normalizedRuntimeRevision > normalizedRevision) fail('invalidRevision');
-    const currentPlan = validateRundownPlan(execution.currentPlan);
+    const currentPlan = lifecycle === EXECUTION_LIFECYCLES.PLANNED
+        ? validatePersistedPlan(execution.currentPlan) : validateRundownPlan(execution.currentPlan);
     const attempt = validateAttempt(execution.attempt);
     if (attempt === null && Object.hasOwn(execution, 'phaseOutcomes')) fail('invalidPhaseOutcomes');
     const phaseOutcomes = attempt === null ? null

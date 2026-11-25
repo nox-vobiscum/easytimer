@@ -11,6 +11,7 @@ import { checkMenuPolish } from './menu-browser.mjs';
 import { checkRecovery, checkRecoveryCorrections } from './recovery-browser.mjs';
 import { checkEditorRuntimeApp } from './editor-runtime-app-browser.mjs';
 import { checkEditorNavigation } from './editor-navigation-browser.mjs';
+import { checkZeroPhasePlanning } from './editor-planning-browser.mjs';
 import { checkPublicEditorCutover } from './public-editor-cutover-browser.mjs';
 import { checkSubtraction } from './subtraction-browser.mjs';
 import { configureQuickTimebox } from './quick-timebox.mjs';
@@ -152,7 +153,7 @@ try {
             fixtureServer.close();
         }
     }
-    async function checkEditorNavigationInDisposableDocument() {
+    async function checkEditorInDisposableDocument(check) {
         const fixtureServer = createServer(serveApp);
         await new Promise(done => fixtureServer.listen(0, '127.0.0.1', done));
         const fixtureOrigin = `http://127.0.0.1:${fixtureServer.address().port}`;
@@ -160,7 +161,7 @@ try {
             const initial = await evaluate('performance.timeOrigin');
             await cdp('Page.navigate', { url: fixtureOrigin + '/' });
             await waitForDocument(initial, fixtureOrigin, 'home');
-            await checkEditorNavigation({ evaluate, click, waitForBrowserState, assertPrimaryView });
+            await check({ evaluate, click, cdp, waitForBrowserState, assertPrimaryView, acceptExpectedUnload });
         } finally {
             fixtureServer.close();
         }
@@ -351,7 +352,8 @@ try {
     if (!timeTravelOptions.names.length && process.env.EASYTIMER_NATIVE_PHASE_FIELDS_ONLY !== '1'
         && process.env.EASYTIMER_EDITOR_RUNTIME_ONLY !== '1' && process.env.EASYTIMER_PUBLIC_CUTOVER_ONLY !== '1'
         && process.env.EASYTIMER_UX011_ONLY !== '1' && process.env.EASYTIMER_WORKSPACE_BACK_ONLY !== '1'
-        && process.env.EASYTIMER_OFFLINE_FIRST_START_ONLY !== '1' && process.env.EASYTIMER_EDITOR_NAVIGATION_ONLY !== '1') {
+        && process.env.EASYTIMER_OFFLINE_FIRST_START_ONLY !== '1' && process.env.EASYTIMER_EDITOR_NAVIGATION_ONLY !== '1'
+        && process.env.EASYTIMER_ZERO_PHASE_PLANNING_ONLY !== '1') {
         // Separate the fresh Draft Recovery scenario from the other tests' library and view state.
         draftReloadActive = true;
         try { await checkNativeDraftReload({ evaluate, cdp, origin: `http://localhost:${server.address().port}` }); }
@@ -506,7 +508,10 @@ try {
         await checkOfflineFirstStart();
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else if (process.env.EASYTIMER_EDITOR_NAVIGATION_ONLY === '1') {
-        await checkEditorNavigationInDisposableDocument();
+        await checkEditorInDisposableDocument(checkEditorNavigation);
+        assert.equal(errors.length,0,JSON.stringify(errors));
+    } else if (process.env.EASYTIMER_ZERO_PHASE_PLANNING_ONLY === '1') {
+        await checkEditorInDisposableDocument(checkZeroPhasePlanning);
         assert.equal(errors.length,0,JSON.stringify(errors));
     } else {
     assert.equal(await text('#time'), '00:00');
@@ -1186,7 +1191,8 @@ try {
     await checkPublicEditorCutover({ evaluate, click, text, cdp });
     await checkOfflineFirstStart();
     await checkEditorRuntimeApp({ evaluate, click, text, cdp, acceptExpectedConfirm, acceptExpectedUnload });
-    await checkEditorNavigationInDisposableDocument();
+    await checkEditorInDisposableDocument(checkEditorNavigation);
+    await checkEditorInDisposableDocument(checkZeroPhasePlanning);
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log('PASS: responsive timer stage, independent screen/viewport tablet split profiles, smartphone toggle/branding rules, exact running/overtime/addition preservation, universal menu and touch, focus, dynamic titles, presets, budget, PWA offline reload, frozen-tab timing, DE/EN, themes, responsive geometry, fullscreen/fallback and sticky progress dock.');
     }

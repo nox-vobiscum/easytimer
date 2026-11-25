@@ -1,4 +1,4 @@
-import { RUNDOWN_CATEGORIES, validateRundownPlan } from './editor-domain.mjs';
+import { RUNDOWN_CATEGORIES, startEligibilityReason, validatePersistedPlan } from './editor-domain.mjs';
 import { createNativePhaseFields } from './editor-phase-fields.mjs';
 import {
     editNativePhaseDraft,
@@ -7,7 +7,7 @@ import {
     removeNativeDraftPhase,
     repositionNativeDraftPhase,
 } from './editor-template-draft.mjs';
-import { serializeEditorBackup, serializeEditorTemplate } from './editor-portability.mjs';
+import { serializeEditorBackup, serializeEditorExecution, serializeEditorTemplate } from './editor-portability.mjs';
 
 const fail = code => { throw new Error(code); };
 const copy = {
@@ -17,6 +17,9 @@ const copy = {
         suspended: 'Suspended', completed: 'Completed', empty: 'No entries.',
         identity: 'ID', revision: 'Revision', edit: 'Edit', create: 'New Event Template',
         createExecution: 'Plan Event', launchTemplate: 'Start Event', startExecution: 'Start Event',
+        startWithoutPhases: 'Add at least one phase before starting.',
+        startUnavailable: 'This Rundown is not ready to start.',
+        emptyAgenda: 'No phases yet.',
         resumeExecution: 'Resume in Timer', openTimer: 'Back to Timer', openArchive: 'View archive', exportTemplate: 'Export JSON',
         retainPlan: 'Keep Rundown and reset progress', discardExecution: 'Discard Event', completeExecution: 'Complete Event',
         importTemplate: 'Import one Event Template', importHint: 'Imports an independent copy of one Event Template, not an application backup.',
@@ -81,6 +84,9 @@ const copy = {
         suspended: 'Unterbrochen', completed: 'Abgeschlossen', empty: 'Keine Einträge.',
         identity: 'ID', revision: 'Revision', edit: 'Bearbeiten', create: 'Neues Event-Template',
         createExecution: 'Event planen', launchTemplate: 'Event starten', startExecution: 'Event starten',
+        startWithoutPhases: 'Zum Starten mindestens eine Phase hinzufügen.',
+        startUnavailable: 'Dieser Rundown ist noch nicht startbereit.',
+        emptyAgenda: 'Noch keine Phasen.',
         resumeExecution: 'Im Timer fortsetzen', openTimer: 'Zurück zum Timer', openArchive: 'Archiv ansehen', exportTemplate: 'JSON exportieren',
         retainPlan: 'Rundown behalten und Fortschritt zurücksetzen', discardExecution: 'Event verwerfen', completeExecution: 'Event abschließen',
         importTemplate: 'Ein Event-Template importieren', importHint: 'Importiert eine unabhängige Kopie eines Event-Templates, kein Anwendungs-Backup.',
@@ -151,6 +157,23 @@ const el = (tag, text, className) => {
 const button = (text, action, className) => {
     const node = el('button', text, className); node.type = 'button'; node.addEventListener('click', action); return node;
 };
+export function startUnavailableMessage(language, reason) {
+    return copy[language][reason === 'phasesRequired' ? 'startWithoutPhases' : 'startUnavailable'];
+}
+
+function startUnavailableHint(language, reason) {
+    const hint = el('p', undefined, 'planner-hint start-unavailable');
+    const namespace = 'http://www.w3.org/2000/svg';
+    const icon = document.createElementNS(namespace, 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.setAttribute('focusable', 'false');
+    const path = document.createElementNS(namespace, 'path');
+    path.setAttribute('d', 'M10 2h4m-2 0v3m-5 2a8 8 0 0 1 10 12m-3 2A8 8 0 0 1 4 11M3 3l18 18');
+    icon.append(path);
+    hint.append(icon, startUnavailableMessage(language, reason));
+    return hint;
+}
 const safeLink = value => {
     try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; }
     catch { return null; }
@@ -182,7 +205,7 @@ export function createNativeEditorWorkspace({
     let baseline = null; let feedbackCode = null; let feedbackError = false;
     let pending = null; let mutationBusy = false;
     let importCandidate = null; let deleteTarget = null; let deleteTrigger = null;
-    let lifecycleRequest = null; let archiveId = null; let closeAfterMutation = null;
+    let lifecycleRequest = null; let archiveId = null; let editTarget = null; let closeAfterMutation = null;
     let fileReadId = 0; let resourceErrors = new Map();
     let phaseDragCleanup = null; let phaseDragToken = 0;
     let phaseTitleRevealCleanup = null;
@@ -289,7 +312,8 @@ export function createNativeEditorWorkspace({
     function deactivate() {
         destroyPhaseDragging();
         active = false; openGeneration += 1; fileReadId += 1; window.removeEventListener('beforeunload', beforeUnload);
-        clearEditor(); workspace = null; importCandidate = null; deleteTarget = null; lifecycleRequest = null; archiveId = null;
+        clearEditor(); workspace = null; importCandidate = null; deleteTarget = null; lifecycleRequest = null;
+        archiveId = null; editTarget = null;
         root.replaceChildren(); root.classList.remove('planner', 'native-editor-workspace'); delete root.dataset.nativeEditorWorkspace;
     }
     function discardCurrentTemplateRecovery() {
@@ -345,8 +369,15 @@ export function createNativeEditorWorkspace({
         const generation = openGeneration;
         if (afterPresentation) await afterPresentation;
         if (!active || generation !== openGeneration) return;
-        await loadWorkspace({ navigation: true });
+        const loaded = await loadWorkspace({ navigation: true });
         if (!active || generation !== openGeneration) return;
+        if (loaded && editTarget) {
+            const { kind, id } = editTarget;
+            editTarget = null;
+            if (kind === 'template') beginTemplate(id);
+            else if (kind === 'planned') beginPlannedDraft(plannedExecutionService.prepareDraft(workspace, id));
+            if (draft) return;
+        }
         render(); focusHeading();
     }
     function retryWorkspaceLoad() {
@@ -393,7 +424,12 @@ export function createNativeEditorWorkspace({
     }
     async function beginExecution(executionId) {
         if (mutationBlocked()) return;
+        const generation = openGeneration;
         const result = await plannedExecutionService.loadDraft(executionId);
+        if (!active || generation !== openGeneration || mutationBlocked()) return;
+        beginPlannedDraft(result);
+    }
+    function beginPlannedDraft(result) {
         if (result.status === 'success') beginDraft(result.draft, 'execution');
         else { setFeedback(resultCode(result)); render(); }
     }
@@ -424,7 +460,7 @@ export function createNativeEditorWorkspace({
         return actualExecutionDraft(record, executionId, { id: executionId, ...entry.execution.currentPlan });
     }
     async function saveNewExecution(saveDraft) {
-        try { validateRundownPlan(currentPlan(saveDraft)); }
+        try { validatePersistedPlan(currentPlan(saveDraft)); }
         catch { setFeedback('validation'); render(); return; }
         const retained = structuredClone(draft.template);
         const retainedForWrite = structuredClone(saveDraft.template);
@@ -675,6 +711,12 @@ export function createNativeEditorWorkspace({
         const safe = template.plan.name.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-|-$/g, '') || 'template';
         downloadTemplate({ name: `${safe}.json`, text: serializeEditorTemplate(template), templateId: template.id });
     }
+    function exportPlanned(entry) {
+        downloadTemplate({
+            name: `easytimer-event-${entry.execution.id.replace(/[^a-z0-9._-]+/gi, '-')}.json`,
+            text: serializeEditorExecution(entry), executionId: entry.execution.id,
+        });
+    }
     function exportAll() {
         downloadTemplate({ name: 'easytimer-local-data.json', text: serializeEditorBackup(workspace) });
         setFeedback('saved', false); render();
@@ -729,12 +771,15 @@ export function createNativeEditorWorkspace({
         const row = el('li'); const info = el('div');
         info.append(el('h3', template.plan.name), el('p', entityMeta(template)));
         const actions = el('div', undefined, 'planner-actions rundown-actions');
-        actions.append(
-            button(t().launchTemplate, () => requestHost('launchTemplate', template), 'rundown-launch'),
-            button(t().createExecution, () => beginNewExecution(template), 'rundown-launch'),
-            button(t().edit, () => beginTemplate(template.id)),
-            button(t().exportTemplate, () => exportOne(template)),
-        );
+        const reason = startEligibilityReason(template.plan);
+        const edit = () => beginTemplate(template.id);
+        if (reason !== null) {
+            info.append(startUnavailableHint(language, reason));
+            actions.append(button(t().edit, edit, 'rundown-launch'));
+        } else actions.append(button(t().launchTemplate, () => requestHost('launchTemplate', template), 'rundown-launch'));
+        actions.append(button(t().createExecution, () => beginNewExecution(template), 'rundown-launch'));
+        if (reason === null) actions.append(button(t().edit, edit));
+        actions.append(button(t().exportTemplate, () => exportOne(template)));
         const remove = button(t().delete, event => openDeleteDialog(template, event.currentTarget)); actions.append(remove);
         row.append(info, actions); return row;
     }
@@ -745,8 +790,11 @@ export function createNativeEditorWorkspace({
             ? `${t().source}: ${execution.source.id}` : t().noSource));
         const actions = el('div', undefined, 'planner-actions rundown-actions');
         if (execution.lifecycle === 'planned') {
-            actions.append(button(t().startExecution, () => requestHost('activateExecution', entry), 'rundown-launch'),
-                button(t().edit, () => beginExecution(execution.id)));
+            const reason = startEligibilityReason(execution.currentPlan);
+            if (reason !== null) info.append(startUnavailableHint(language, reason));
+            else actions.append(button(t().startExecution, () => requestHost('activateExecution', entry), 'rundown-launch'));
+            actions.append(button(t().edit, () => beginExecution(execution.id), reason !== null ? 'rundown-launch' : undefined),
+                button(t().exportTemplate, () => exportPlanned(entry)));
         } else if (execution.lifecycle === 'active') {
             actions.append(button(t().openTimer, () => requestHost('showActive', entry), 'rundown-launch'));
         } else if (execution.lifecycle === 'suspended') {
@@ -998,7 +1046,10 @@ export function createNativeEditorWorkspace({
         const actions = el('div', undefined, 'planner-actions native-workspace-phase-actions');
         const structural = (label, operation, focusId = phase.id) => button(label, () => {
             checkpointTemplateDraft(operation()); render();
-            root.querySelector(`[data-native-phase-id="${CSS.escape(focusId)}"] [data-action="details"]`)?.focus({ preventScroll: true });
+            const focus = draft.template.phases.length
+                ? root.querySelector(`[data-native-phase-id="${CSS.escape(focusId)}"] [data-action="details"]`)
+                : root.querySelector('.add-phase');
+            focus?.focus({ preventScroll: true });
         });
         const earlier = button(t().earlier, () => repositionPhase(phase.id, index)); earlier.disabled = index === 0;
         const later = button(t().later, () => repositionPhase(phase.id, index + 2)); later.disabled = index === draft.template.phases.length - 1;
@@ -1041,6 +1092,7 @@ export function createNativeEditorWorkspace({
         dragStatus.setAttribute('role', 'status'); dragStatus.setAttribute('aria-live', 'polite');
         const list = el('ol', undefined, 'phase-list'); draft.template.phases.forEach((phase, index) => renderPhase(phase, index, list));
         form.append(dragStatus, list);
+        if (!draft.template.phases.length) form.append(el('p', t().emptyAgenda, 'planner-hint'));
         form.append(button(t().addPhase, () => {
             const phaseId = createPhaseId(); checkpointTemplateDraft(insertNativeDraftPhase(draft, { phaseId })); render();
             focusAddedPhaseTitle(phaseId);
@@ -1106,7 +1158,7 @@ export function createNativeEditorWorkspace({
         async open(options = {}, afterPresentation = null) {
             const requestedArchive = options?.archiveId ?? null;
             if (active) { if (requestedArchive) { archiveId = requestedArchive; render(); } focusHeading(); return; }
-            active = true; archiveId = requestedArchive; workspaceLoadFailed = false;
+            active = true; archiveId = requestedArchive; editTarget = options?.edit ?? null; workspaceLoadFailed = false;
             window.addEventListener('beforeunload', beforeUnload); render();
             focusHeading();
             await loadVisibleWorkspace(afterPresentation);

@@ -344,18 +344,25 @@ export function createNativePlannedExecutionService({ writer } = {}) {
         if (entry.execution.lifecycle !== 'planned') fail('invalidLifecycle');
         return validatePlannedExecution(entry.execution);
     };
+    function prepareDraft(record, executionId) {
+        if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
+        const execution = selected(record, executionId);
+        return { status: 'success', draft: {
+            executionId,
+            expectedAggregateRevision: record.revision,
+            expectedExecutionRevision: execution.revision,
+            template: { id: executionId, ...structuredClone(execution.currentPlan) },
+        } };
+    }
     return Object.freeze({
+        prepareDraft(record, executionId) {
+            try { return prepareDraft(validateEditorStoreRecord(record), executionId); }
+            catch (error) { return errorOutcome(error); }
+        },
         async loadDraft(executionId) {
             try {
                 if (typeof executionId !== 'string' || !executionId.trim()) fail('invalidData');
-                const record = await writer.read();
-                const execution = selected(record, executionId);
-                return { status: 'success', draft: {
-                    executionId,
-                    expectedAggregateRevision: record.revision,
-                    expectedExecutionRevision: execution.revision,
-                    template: { id: executionId, ...structuredClone(execution.currentPlan) },
-                } };
+                return prepareDraft(await writer.read(), executionId);
             } catch (error) { return errorOutcome(error); }
         },
         async saveDraft(draft) {

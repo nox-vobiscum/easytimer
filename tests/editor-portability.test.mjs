@@ -177,6 +177,18 @@ test('individual Execution exports preserve planned, suspended and active snapsh
     assert.notEqual(activeDocument.activeRuntime, active.activeRuntime);
 });
 
+test('empty Template and PLANNED exports and a mixed backup round-trip through the same format', () => {
+    const source = template('empty-template');
+    source.plan.phases = [];
+    const planned = entry(createPlannedExecution(source, 'empty-event'));
+    const mixed = completeRecord();
+    mixed.templates.push(source);
+    mixed.executions.push(planned);
+    assert.deepEqual(parseEditorPortability(serializeEditorTemplate(source)).template, source);
+    assert.deepEqual(parseEditorPortability(serializeEditorExecution(planned)).entry, planned);
+    assert.deepEqual(parseEditorPortability(serializeEditorBackup(mixed)).record, mixed);
+});
+
 test('individual active exports reject missing, foreign and inconsistent runtime snapshots', () => {
     const active = activeFixture();
     assert.throws(() => serializeEditorExecution(active.entry), /portabilityInvalid/);

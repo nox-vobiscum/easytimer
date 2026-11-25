@@ -19,7 +19,7 @@ import {
 } from './editor-planner-service.mjs';
 import { createNativeSessionLaunchService } from './editor-launch-service.mjs';
 import { createNativeTemplateImportService } from './editor-template-import.mjs';
-import { createNativeEditorWorkspace } from './editor-workspace.mjs';
+import { createNativeEditorWorkspace, startUnavailableMessage } from './editor-workspace.mjs';
 import { createEditorDraftRecoveryStore } from './editor-draft-recovery.mjs';
 import { createNativeTemplateDraftRecoveryService } from './editor-template-draft-recovery-service.mjs';
 
@@ -34,6 +34,7 @@ const copy = {
         workshopTemplate: 'Event or Event Template', createRundown: 'Open Event Editor', pickerContext: 'Choose what to open in the Event Timer.', pickerEditorSubtitle: 'Prepare events and Event Templates',
         templateEntity: 'Event Templates', plannedEntity: 'Planned events', activeEntity: 'Active in Timer', suspendedEntity: 'Suspended events', completedEntity: 'Completed events',
         launchTemplate: 'Start Event', activateExecution: 'Start Event', resumeExecution: 'Resume in Timer', openActive: 'Back to Timer', openArchive: 'View archive',
+        editTemplate: 'Edit Event Template', editPlanned: 'Edit planned event',
         nativeActionFailed: 'The selected action could not be completed safely. Refresh the list and try again.',
         manual: 'Manual', automatic: 'Automatic', endsAutomatically: 'Rundown ends automatically',
         runNote: 'Start Event opens the Rundown in the timer. Press Start there to begin the countdown.',
@@ -75,6 +76,7 @@ const copy = {
         workshopTemplate: 'Event oder Event-Template', createRundown: 'Event-Editor öffnen', pickerContext: 'Wähle, was du im Event-Timer öffnen möchtest.', pickerEditorSubtitle: 'Events und Event-Templates vorbereiten',
         templateEntity: 'Event-Templates', plannedEntity: 'Geplante Events', activeEntity: 'Im Timer aktiv', suspendedEntity: 'Unterbrochene Events', completedEntity: 'Abgeschlossene Events',
         launchTemplate: 'Event starten', activateExecution: 'Event starten', resumeExecution: 'Im Timer fortsetzen', openActive: 'Zurück zum Timer', openArchive: 'Archiv ansehen',
+        editTemplate: 'Event-Template bearbeiten', editPlanned: 'Geplantes Event bearbeiten',
         nativeActionFailed: 'Die gewählte Aktion konnte nicht sicher abgeschlossen werden. Bitte die Liste aktualisieren und erneut versuchen.',
         manual: 'Manuell', automatic: 'Automatisch', endsAutomatically: 'Rundown endet automatisch',
         runNote: 'Event starten öffnet den Rundown im Timer. Erst Starten im Timer beginnt den Countdown.',
@@ -403,6 +405,7 @@ const planner = createNativeEditorWorkspace({
     onRequest: requestNativeWorkspaceAction,
     onRecheck: recheckNativeWorkspaceAction,
     onRecord: record => {
+        if (pickerOpen && record && record.revision !== pickerWorkspace?.revision) pickerNeedsRefresh = true;
         if (!nativeRuntime) return;
         if (record === null) { blockNativeRuntime(); render(); return; }
         if (nativeRuntime.pending || nativeRuntime.blocked || nativeExit) throw new Error('nativeRuntimeBusy');
@@ -838,6 +841,17 @@ function dispatch(action) {
     }
     render();
 }
+function pickerSelection(value) {
+    const [kind] = value.split(':', 1);
+    const id = value.slice(kind.length + 1);
+    const entity = kind === 'template'
+        ? pickerWorkspace?.templates.find(item => item.id === id)
+        : pickerWorkspace?.executions.find(item => item.execution.id === id && item.execution.lifecycle === kind);
+    let reason = null;
+    if (entity && kind === 'template') reason = startEligibilityReason(entity.plan);
+    if (entity && kind === 'planned') reason = startEligibilityReason(entity.execution.currentPlan);
+    return { kind, id, entity, reason };
+}
 function renderPicker() {
     const t = copy[language];
     const select = $('session-template');
@@ -864,9 +878,10 @@ function renderPicker() {
     }
     select.value = selected;
     select.disabled = pickerBusy || pickerPending !== null;
-    $('prepare-session').disabled = !select.value || pickerBusy || pickerPending !== null;
-    const selectedKind = select.value.split(':', 1)[0];
-    $('prepare-session').textContent = selectedKind === 'template' ? t.launchTemplate
+    const { kind: selectedKind, entity, reason } = pickerSelection(select.value);
+    $('prepare-session').disabled = !entity || pickerBusy || pickerPending !== null;
+    $('prepare-session').textContent = reason !== null ? selectedKind === 'template' ? t.editTemplate : t.editPlanned
+        : selectedKind === 'template' ? t.launchTemplate
         : selectedKind === 'planned' ? t.activateExecution
             : selectedKind === 'suspended' ? t.resumeExecution
                 : selectedKind === 'active' ? t.openActive
@@ -874,7 +889,9 @@ function renderPicker() {
     $('picker-recheck').hidden = pickerPending === null;
     $('picker-recheck').disabled = pickerBusy;
     $('picker-recheck').textContent = recoveryCopy[language].recheck;
-    $('session-feedback').textContent = t[pickerMessage] || '';
+    $('session-picker-note').hidden = reason !== null;
+    select.setAttribute('aria-describedby', reason === null ? 'session-picker-note' : 'session-feedback');
+    $('session-feedback').textContent = reason === null ? t[pickerMessage] || '' : startUnavailableMessage(language, reason);
 }
 function loadNativeWorkspace() {
     const expectedNavigationRevision = navigationRevision;
@@ -1403,21 +1420,19 @@ $('reload-templates').addEventListener('click', () => {
     void loadNativeWorkspace();
 });
 $('session-template').addEventListener('change', () => {
-    $('prepare-session').disabled = !$('session-template').value;
     renderPicker();
 });
 $('prepare-session').addEventListener('click', async () => {
     if (mode !== 'session' || !pickerOpen || plannerOpen) return;
-    const [kind, id] = $('session-template').value.split(':');
+    const { kind, id, entity, reason } = pickerSelection($('session-template').value);
     if (!kind || !id || !pickerWorkspace || pickerPending || pickerBusy) return;
+    if (!entity) return;
+    if (reason !== null) { await openEditor({ edit: { kind, id } }); return; }
     if (kind === 'completed') { await openEditor({ archiveId: id }); return; }
     pickerBusy = true; render();
     try {
-        const entity = kind === 'template'
-            ? pickerWorkspace.templates.find(item => item.id === id)
-            : pickerWorkspace.executions.find(item => item.execution.id === id);
         const action = { template: 'launchTemplate', planned: 'activateExecution', active: 'showActive', suspended: 'resumeExecution' }[kind];
-        if (!entity || !action) throw new Error('missing');
+        if (!action) throw new Error('missing');
         const result = await requestNativeWorkspaceAction({ kind: action, record: pickerWorkspace, entity });
         if (result.status === 'uncertain') { pickerPending = result.ticket; pickerMessage = 'nativeActionFailed'; render(); return; }
         if (result.status === 'cancelled') { pickerMessage = ''; render(); }

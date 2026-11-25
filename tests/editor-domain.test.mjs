@@ -23,6 +23,7 @@ import {
     suspendStartedExecution,
     suspendReadyExecution,
     validatePlannedExecution,
+    validatePersistedPlan,
     validateCompletedExecution,
     validateReadyExecution,
     validateRundownPlan,
@@ -192,6 +193,34 @@ test('start eligibility reuses strict rundown reasons and leaves the whole plan 
     }
 });
 
+test('only planning validation accepts zero phases; retained phase fields and executable lifecycles stay strict', () => {
+    const empty = { ...template(), plan: { ...plan(), phases: [] } };
+    const planning = validatePersistedPlan(empty.plan);
+    assert.deepEqual(planning.phases, []);
+    assert.equal(planning.name, 'Workshop');
+    const planned = createPlannedExecution(empty, 'empty-event');
+    assert.deepEqual(validatePlannedExecution(planned).currentPlan, planning);
+    assert.throws(() => activatePlannedExecution(planned), /phasesRequired/);
+    assert.throws(() => validatePersistedPlan({ ...empty.plan, name: ' ' }), /name/);
+    for (const [changes, reason] of [[{ title: '' }, 'phaseTitle'], [{ durationSeconds: null }, 'duration']]) {
+        assert.throws(() => validatePersistedPlan({ ...empty.plan, phases: [{ ...plan().phases[0], ...changes }] }),
+            { message: reason });
+    }
+    const ready = activatePlannedExecution(createPlannedExecution(template(), 'ready-event'));
+    const started = startActiveExecution(ready, 'attempt', 1000, 'run');
+    const completed = completeStartedExecution(started, {
+        completedAt: 1000, workshopOvertimeMs: 0, workshopNotes: { rundown: '', phases: [] },
+    });
+    for (const [value, validate] of [
+        [ready, validateReadyExecution], [started, validateStartedExecution],
+        [suspendReadyExecution(ready), validateSuspendedReadyExecution],
+        [suspendStartedExecution(started), validateSuspendedStartedExecution], [completed, validateCompletedExecution],
+    ]) {
+        assert.throws(() => validate({ ...value, currentPlan: planning }), /phasesRequired/);
+    }
+    assert.throws(() => validateStartedExecution({ ...started, attempt: { ...started.attempt, startSnapshot: planning } }),
+        /phasesRequired/);
+});
 test('planned execution validation enforces lifecycle, revisions, absent attempt and note references', () => {
     const execution = createPlannedExecution(template(), 'execution-1');
     execution.workshopNotes = {

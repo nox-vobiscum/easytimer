@@ -471,7 +471,7 @@ test('accepts uncertain save tickets emitted by the existing Planner services', 
     const integration = createNativeEditorTemplateIntegration({ writer: templateWriter });
     const planner = createNativePlannerService({ integration, createId: () => 'template-1' });
     const prepared = planner.prepareNewDraft({ revision: 0, templates: [] }).draft;
-    prepared.template = editableTemplate();
+    prepared.template = editableTemplate({ phases: [] });
     const templateResult = await planner.saveDraft(prepared);
     assert.equal(templateResult.status, 'uncertain');
     assert.equal(validateEditorDraftRecoveryRecord(recovery({
@@ -508,6 +508,7 @@ test('accepts uncertain save tickets emitted by the existing Planner services', 
     const executionService = createNativePlannedExecutionService({ writer: executionWriter });
     const executionDraft = (await executionService.loadDraft('execution-1')).draft;
     executionDraft.template.name = 'Edited execution';
+    executionDraft.template.phases = [];
     const executionResult = await executionService.saveDraft(executionDraft);
     assert.equal(executionResult.status, 'uncertain');
     assert.equal(validateEditorDraftRecoveryRecord(recovery({
@@ -518,14 +519,15 @@ test('accepts uncertain save tickets emitted by the existing Planner services', 
         draft: executionDraft,
         pending: { kind: 'executionSave', ticket: executionResult.reconciliation },
     })).pending.kind, 'executionSave');
+    assert.deepEqual(executionResult.reconciliation.target.executions[0].execution.currentPlan.phases, []);
 });
 
-test('binds a pending plan ticket to the original source plan and retained editable draft', () => {
+test('binds a pending plan ticket to its zero-phase source and retains the editable draft', () => {
     const newDraft = {
         executionId: null,
         expectedAggregateRevision: 4,
         expectedExecutionRevision: null,
-        template: editableTemplate({ id: 'unpersisted-execution' }),
+        template: editableTemplate({ id: 'unpersisted-execution', phases: [] }),
         sourceTemplateId: 'template-source',
     };
     const record = recovery({

@@ -3,7 +3,7 @@ import {
     EDITOR_SCHEMA_VERSION,
     PHASE_CATEGORIES,
     RUNDOWN_CATEGORIES,
-    validateRundownPlan,
+    validatePersistedPlan,
     validateTemplate,
 } from './editor-domain.mjs';
 import {
@@ -236,7 +236,7 @@ function validatePlanPending(ticket, record) {
     const sourceTemplateId = identity(ticket.sourceTemplateId);
     if (sourceTemplateId !== record.sourceTemplateId) fail('recoveryValidation');
     let expectedPlan;
-    try { expectedPlan = validateRundownPlan(ticket.expectedPlan); }
+    try { expectedPlan = validatePersistedPlan(ticket.expectedPlan); }
     catch { fail('recoveryValidation'); }
     const retained = validateEditableTemplate(ticket.retained);
     const { id: ignored, ...baselinePlan } = record.baseline.template;
