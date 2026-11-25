@@ -111,8 +111,10 @@ test('public native entry and Picker orchestration retain identity, ownership an
     assert.match(app, /attemptChanged && !isFirstStartTransitionInRecord\(current\.record, next\.record\)/);
     assert.match(app, /next\.runtime\.run\.runId !== current\.runtime\.run\.runId/);
     assert.match(app, /let pickerBusy = false/);
-    assert.match(app, /let pickerLoadRevision = 0/);
-    assert.match(app, /loadRevision !== pickerLoadRevision \|\| expectedNavigationRevision !== navigationRevision/);
+    assert.match(app, /if \(pickerLoad\?\.revision === expectedNavigationRevision\) return pickerLoad\.promise/);
+    assert.match(app, /const isCurrent = \(\) => expectedNavigationRevision === navigationRevision && pickerOpen && !plannerOpen/);
+    assert.match(app, /\.then\(result => \{\s*if \(!isCurrent\(\)\) return false;\s*pickerNeedsRefresh = false/);
+    assert.match(app, /navigationWorkspaceRead\.then\(\(\) => isCurrent\(\) \? editorPlannerService\.loadWorkspace\(\) : null\)/);
     assert.match(app, /next\.record\.revision < current\.record\.revision/);
     assert.match(app, /next\.runtime\.runtimeRevision < current\.runtime\.runtimeRevision/);
     assert.match(app, /function installConfirmedSessionAction\(record, sourceRecord, options\)/);

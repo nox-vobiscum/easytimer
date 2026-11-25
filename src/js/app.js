@@ -139,13 +139,21 @@ let pickerWorkspace = null;
 let pickerMessage = '';
 let pickerPending = null;
 let pickerBusy = false;
-let pickerLoadRevision = 0;
+let pickerLoad = null;
+let pickerNeedsRefresh = false;
 const development = location.origin === 'http://localhost:8000' && globalThis.easyTimerDevelopment?.enabled === true ? globalThis.easyTimerDevelopment : null;
 const editorWriter = createEditorStoreWriter({ getStorage: () => localStorage, locks: navigator.locks });
 const editorActiveLock = createEditorActiveTimerLock({ locks: navigator.locks });
 const editorBridge = createEditorRuntimeBridge({ writer: editorWriter, activeLock: editorActiveLock });
 const editorTemplateIntegration = createNativeEditorTemplateIntegration({ writer: editorWriter });
 const editorPlannerService = createNativePlannerService({ integration: editorTemplateIntegration });
+let navigationWorkspaceRead = Promise.resolve();
+function readNavigationWorkspace(isCurrent) {
+    const read = navigationWorkspaceRead.then(() => isCurrent() ? editorPlannerService.loadWorkspace() : null);
+    // Keep the barrier until the writer's lock request settles, even when the view has left.
+    navigationWorkspaceRead = read.then(() => {}, () => {});
+    return read;
+}
 const editorPlannedExecutionService = createNativePlannedExecutionService({ writer: editorWriter });
 const editorLaunchService = createNativeSessionLaunchService({
     writer: editorWriter,
@@ -376,6 +384,7 @@ $('native-recheck').addEventListener('click', async () => {
 const planner = createNativeEditorWorkspace({
     root: $('planner'),
     plannerService: editorPlannerService,
+    readNavigationWorkspace,
     plannedExecutionService: editorPlannedExecutionService,
     launchService: editorLaunchService,
     importService: editorImportService,
@@ -389,6 +398,7 @@ const planner = createNativeEditorWorkspace({
         if (focus === 'home') installHomeState();
         updatePresentation();
         $(focus === 'home' ? 'home-heading' : focus === 'timer' ? 'primary' : 'menu-toggle').focus({ preventScroll: true });
+        refreshReturningPicker();
     },
     onRequest: requestNativeWorkspaceAction,
     onRecheck: recheckNativeWorkspaceAction,
@@ -866,21 +876,28 @@ function renderPicker() {
     $('picker-recheck').textContent = recoveryCopy[language].recheck;
     $('session-feedback').textContent = t[pickerMessage] || '';
 }
-async function loadNativeWorkspace() {
-    const loadRevision = ++pickerLoadRevision;
+function loadNativeWorkspace() {
     const expectedNavigationRevision = navigationRevision;
-    try {
-        const result = await editorPlannerService.loadWorkspace();
-        if (result.status !== 'success') throw new Error(result.error?.code);
-        if (loadRevision !== pickerLoadRevision || expectedNavigationRevision !== navigationRevision || !pickerOpen) return false;
-        pickerWorkspace = result.workspace;
-        pickerMessage = pickerWorkspace.templates.length || pickerWorkspace.executions.length ? '' : 'emptyTemplates';
-    } catch {
-        if (loadRevision !== pickerLoadRevision || expectedNavigationRevision !== navigationRevision || !pickerOpen) return false;
-        pickerWorkspace = null; pickerMessage = 'loadTemplatesError';
-    }
-    render();
-    return true;
+    if (pickerLoad?.revision === expectedNavigationRevision) return pickerLoad.promise;
+    const isCurrent = () => expectedNavigationRevision === navigationRevision && pickerOpen && !plannerOpen;
+    pickerNeedsRefresh = true;
+    const promise = readNavigationWorkspace(isCurrent).catch(() => null).then(result => {
+        if (!isCurrent()) return false;
+        pickerNeedsRefresh = false;
+        pickerWorkspace = result?.status === 'success' ? result.workspace : null;
+        pickerMessage = !pickerWorkspace ? 'loadTemplatesError'
+            : pickerWorkspace.templates.length || pickerWorkspace.executions.length ? '' : 'emptyTemplates';
+        render();
+        return true;
+    }).finally(() => {
+        if (pickerLoad?.promise === promise) pickerLoad = null;
+    });
+    pickerLoad = { revision: expectedNavigationRevision, promise };
+    return promise;
+}
+
+function refreshReturningPicker() {
+    if (pickerOpen && !plannerOpen && pickerNeedsRefresh) void loadNativeWorkspace();
 }
 
 const nativeActionError = code => ({ status: 'error', error: {
@@ -1078,6 +1095,7 @@ async function switchMode(nextMode) {
         homeOpen = false;
         setMenuOpen(false); updatePresentation();
         (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll: true });
+        refreshReturningPicker();
         return;
     }
     const hasProgress = timer && (mode === 'session' ? hasSessionProgress(run, timer) : timer.status !== 'READY');
@@ -1085,15 +1103,21 @@ async function switchMode(nextMode) {
     if (hasProgress && !window.confirm(confirmation)) { dispatch({ type: 'TICK' }); return; }
     if (plannerOpen && !closePublicWorkspace()) { dispatch({ type: 'TICK' }); return; }
     navigationRevision += 1;
+    const switchingRevision = navigationRevision;
     if (mode === 'quick') quickDurationMs = timer.durationMs;
     mode = nextMode; run = null; homeOpen = false; limitExceeded = false;
     recovery.save(null);
     pickerOpen = nextMode === 'session';
     timer = pickerOpen ? null : createTimer(quickDurationMs);
-    if (pickerOpen) { const loading = loadNativeWorkspace(); if (development) await loading; }
+    if (pickerOpen) {
+        const loading = loadNativeWorkspace();
+        if (development) await loading;
+        if (navigationRevision !== switchingRevision) return;
+    }
     setMenuOpen(false);
     const exiting = exitPresentationForWorkspace();
     if (exiting) await exiting;
+    if (navigationRevision !== switchingRevision) return;
     updatePresentation();
     (pickerOpen ? $('session-picker-heading') : $('primary')).focus({ preventScroll: true });
 }
@@ -1105,7 +1129,11 @@ function render() {
     const session = mode === 'session' && run;
     development?.updateAccount?.({ language, fullscreen: Boolean(document.fullscreenElement) || expanded, mobileLandscape: isSmartphone() && landscape.matches, clockOnly,
         canChange: () => planner.canChangeAccount(), closeMenu: () => setMenuOpen(false),
-        openSetup: async () => { await openEditor(); const details = document.getElementById('data-backup'); if (details) { details.open = true; document.getElementById('backup-summary').focus(); } },
+        openSetup: async () => {
+            if (!await openEditor()) return;
+            const details = document.getElementById('data-backup');
+            if (details) { details.open = true; document.getElementById('backup-summary').focus(); }
+        },
     });
     document.body.dataset.mode = homeOpen ? 'home' : mode;
     document.body.classList.toggle('home-open', homeOpen);
@@ -1370,9 +1398,9 @@ $('home-quick').addEventListener('click', () => switchMode('quick'));
 $('home-session').addEventListener('click', () => switchMode('session'));
 $('home-editor').addEventListener('click', () => openEditor());
 $('picker-back').addEventListener('click', () => switchMode('quick'));
-$('reload-templates').addEventListener('click', async () => {
-    if (pickerBusy || pickerPending) return;
-    const loading = loadNativeWorkspace(); if (development) await loading; render();
+$('reload-templates').addEventListener('click', () => {
+    if (!pickerOpen || plannerOpen || pickerBusy || pickerPending) return;
+    void loadNativeWorkspace();
 });
 $('session-template').addEventListener('change', () => {
     $('prepare-session').disabled = !$('session-template').value;
@@ -1382,9 +1410,9 @@ $('prepare-session').addEventListener('click', async () => {
     if (mode !== 'session' || !pickerOpen || plannerOpen) return;
     const [kind, id] = $('session-template').value.split(':');
     if (!kind || !id || !pickerWorkspace || pickerPending || pickerBusy) return;
+    if (kind === 'completed') { await openEditor({ archiveId: id }); return; }
     pickerBusy = true; render();
     try {
-        if (kind === 'completed') { pickerBusy = false; await openEditor({ archiveId: id }); return; }
         const entity = kind === 'template'
             ? pickerWorkspace.templates.find(item => item.id === id)
             : pickerWorkspace.executions.find(item => item.execution.id === id);
@@ -1421,19 +1449,24 @@ $('stop-overtime').addEventListener('click', async () => {
 });
 async function openEditor(options = {}) {
     if (nativeExit || pickerBusy || pickerPending) {
-        render(); $('picker-recheck').focus({ preventScroll: true }); return;
+        render(); $('picker-recheck').focus({ preventScroll: true }); return false;
     }
-    navigationRevision += 1;
+    if (!plannerOpen) navigationRevision += 1;
+    const openingRevision = navigationRevision;
     setMenuOpen(false);
     // Navigation invalidates fullscreen requests; returning never restores them implicitly.
     plannerOpen = true;
     document.body.classList.add('planner-open');
     $('planner').hidden = false;
     const exiting = exitPresentationForWorkspace();
-    if (exiting) await exiting;
-    if (!plannerOpen) return;
     updatePresentation();
-    await planner.open(options);
+    const opening = planner.open(options, exiting);
+    if (exiting) {
+        await exiting;
+        if (plannerOpen && navigationRevision === openingRevision) updatePresentation();
+    }
+    await opening;
+    return plannerOpen && navigationRevision === openingRevision;
 }
 $('open-planner').addEventListener('click', () => openEditor());
 $('create-rundown').addEventListener('click', () => {

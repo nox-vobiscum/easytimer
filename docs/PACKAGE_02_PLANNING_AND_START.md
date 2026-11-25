@@ -4,13 +4,13 @@
 
 The Product Owner accepted the IST/SOLL analysis and the three-slice
 decomposition. Independent static and functional-scope review accepted
-**Slice 02.1**. The complete browser regression gate remains open. The
-unchanged baseline reproduction demonstrates pre-existing Picker/Editor
-Store-read contention. Slice 02.1a is approved for analysis only.
-Package 01 is Owner-accepted on staging
+**Slice 02.1** with the browser gate open due to pre-existing Picker/Editor
+Store-read contention. Independent review accepted **Slice 02.1a** and closed
+its regular aggregate browser regression gate. Package 01 is Owner-accepted on staging
 PWA v86 at `ebb0039ddaa096ab968554d62fcedfc6a499d7d6`. Production release
-requires separate authorization. The verified local and remote `develop`
-baseline is `9a23eba4743bacfc235c2dc4168fb7d428749127`.
+requires separate authorization. The Slice 02.1 baseline was
+`9a23eba4743bacfc235c2dc4168fb7d428749127`. Slice 02.1a starts from verified
+local and remote `develop` at `c9706c6023b98cf1d4b7b45d443c5b6c01125221`.
 
 The [UX-001 decisions](EDITOR-001_UX-001_DECISIONS_2026-11-16.md#5-emptyincomplete-planning-state-versus-valid-execution)
 define incomplete planning and strict Start eligibility. The
@@ -125,9 +125,68 @@ shows a causal path in the baseline: Picker and Editor use the same exclusive
 Store lock for reading, and the Editor's `ifAvailable` request fails while
 the Picker holds it. The normal failing runs have no lock trace. The
 successful instrumented aggregate, focused public cutover and isolated
-Runtime checks verify Slice 02.1 in the browser. The intermittent failure
-remains an open issue for the uninstrumented aggregate gate and is outside
-the authorized start eligibility slice.
+Runtime checks verified Slice 02.1 in the browser. The intermittent failure
+kept its uninstrumented aggregate gate open at that checkpoint and was
+outside the authorized start eligibility slice.
+
+## Slice 02.1a — Picker and Editor read coordination
+
+An initial Picker load could still hold the exclusive Store lock when the
+user opened the Editor. Navigation invalidated the Picker result while the
+underlying lock request continued. The Editor's `ifAvailable` acquisition
+then failed, and the existing load-error view offered Retry loading. The
+controlled v86 and 02.1 reproductions captured this failure and confirmed
+that manual retry after release restored the library.
+
+The App now sequences its own Picker and initial or explicit-retry Editor
+reads. Each queued read waits for the prior service promise, which settles
+after the underlying lock request, including on failure. A Picker refresh in
+the same navigation shares its pending read. A queued operation that has
+already been superseded performs no Store read. The Editor shows its
+existing loading state when opened, finishes any existing fullscreen
+handoff, and makes one fresh validated read for the opening that remains
+current. An opening or retry that becomes stale while reading is discarded
+before it can install records, call host callbacks or render and focus.
+Returning to the Picker refreshes an invalidated load using the same
+sequencing and navigation protections.
+
+The navigation coordinator uses the existing Store reader. The Store lock
+mode and availability policy, exclusive writes, active ownership, revision
+checks, reconciliation and uncertainty handling remain unchanged. An
+independent lock holder still triggers the existing load error and explicit
+retry. Malformed Store data still fails closed and remains stored. Existing
+close guards and mutation completion paths continue to apply.
+
+A shared read lock would introduce an additional acquisition policy at the
+Store boundary. A retry after `lockBusy` would still depend on when the
+holder releases the lock. Sequencing the known same-document reads lets each
+view keep its existing validated read and leaves other callers' lock policy
+intact. While the current opening waits, focus moves into the visible loader
+and then to the Editor heading. Closing the view invalidates both its
+potential read and its completion callbacks.
+
+### Slice 02.1a verification
+
+The commands ran from the repository root on Node 22.17.1 and headless Edge
+158.0.4370.33. The regular aggregate used the repository runner with the
+new regression scenarios active and no focus flag, diagnostic loader or
+alternate web root.
+
+| Command | Observed result |
+| --- | --- |
+| `$env:EASYTIMER_EDITOR_NAVIGATION_ONLY='1'` followed by `node tests/browser-check.mjs` in a dedicated shell | Exit 0, 6 browser checkpoints. Both Editor entry points begin loading while the Picker holds the lock and make one fresh read after release. Repeated refreshes coalesce, Back reloads the Picker, and rejected or stale reads leave view, focus, host callbacks and READY Runtime intact. External lock and corrupt-data paths retain explicit manual retry. |
+| `node tests/browser-check.mjs` | Exit 0, 26 checkpoints including ordinary Picker/Editor Back, all six new checks, public cutover, Runtime, fullscreen and offline first Start. |
+| `node --test --test-reporter spec tests/editor-workspace-boundary.test.mjs` | Exit 0, 8 passed. The Picker guard assertion now checks navigation identity, coalescing and the stale-result guard. |
+| `node --test --test-reporter spec @(git ls-files '*test.mjs')` | Exit 0, 584 passed across 37 files, 0 failed or skipped. |
+| `node tools/release/package.mjs` and `node tools/release/package.mjs --verify $packagePath` using the emitted directory | Both exit 0, 41 files, PWA v86. |
+| `node tests/artifact-offline-browser.mjs` | Exit 0, 7 checkpoints including stopped-server cold start and missing-cache negative control. |
+| `node --check` on the five changed JavaScript files, `git diff --check` and the source-scope comparison to `c9706c6` | Exit 0. Product changes are confined to App and Workspace. Store, lock, runtime, planning validator, PWA version and packaging code match the baseline. |
+
+Earlier focused runs exposed two fixture assumptions around locale and the
+READY handoff and a real focus gap in the newly visible loading state. The
+archive retains those failures and the final green runs. The review ZIP
+contains the complete patch, full changed files, Git status and diff
+statistics, and test and packaging logs.
 
 ## Questions for separate approval
 

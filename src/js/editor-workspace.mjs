@@ -158,6 +158,7 @@ const safeLink = value => {
 
 export function createNativeEditorWorkspace({
     root, plannerService, plannedExecutionService, launchService, importService,
+    readNavigationWorkspace = () => plannerService.loadWorkspace(),
     templateRecovery = null,
     language = 'en', createPhaseId = () => crypto.randomUUID(),
     onClose = () => {}, onRequest = async () => ({ status: 'error' }),
@@ -173,10 +174,11 @@ export function createNativeEditorWorkspace({
         || (templateRecovery !== null && ['begin', 'checkpoint', 'list', 'adopt', 'checkpointPending',
             'resolveAbsent', 'current', 'discard', 'discardCurrent', 'cleanup', 'deactivate']
             .some(method => typeof templateRecovery[method] !== 'function'))
+        || typeof readNavigationWorkspace !== 'function'
         || typeof createPhaseId !== 'function' || typeof downloadTemplate !== 'function'
         || typeof onClose !== 'function' || typeof onRequest !== 'function'
         || typeof onRecheck !== 'function' || typeof onRecord !== 'function') fail('invalidWorkspace');
-    let active = false; let workspace = null; let draft = null; let editorKind = null;
+    let active = false; let openGeneration = 0; let workspace = null; let draft = null; let editorKind = null;
     let baseline = null; let feedbackCode = null; let feedbackError = false;
     let pending = null; let mutationBusy = false;
     let importCandidate = null; let deleteTarget = null; let deleteTrigger = null;
@@ -228,8 +230,11 @@ export function createNativeEditorWorkspace({
         return true;
     }
 
-    async function loadWorkspace({ completion = false } = {}) {
-        const result = await plannerService.loadWorkspace();
+    async function loadWorkspace({ completion = false, navigation = false } = {}) {
+        const generation = openGeneration;
+        const isCurrent = () => active && generation === openGeneration;
+        const result = await (navigation ? readNavigationWorkspace(isCurrent) : plannerService.loadWorkspace());
+        if (!isCurrent()) return false;
         if (result.status !== 'success') {
             try { onRecord(null); } catch { /* Host remains fail-closed. */ }
             workspaceLoadFailed = true;
@@ -283,7 +288,7 @@ export function createNativeEditorWorkspace({
 
     function deactivate() {
         destroyPhaseDragging();
-        active = false; fileReadId += 1; window.removeEventListener('beforeunload', beforeUnload);
+        active = false; openGeneration += 1; fileReadId += 1; window.removeEventListener('beforeunload', beforeUnload);
         clearEditor(); workspace = null; importCandidate = null; deleteTarget = null; lifecycleRequest = null; archiveId = null;
         root.replaceChildren(); root.classList.remove('planner', 'native-editor-workspace'); delete root.dataset.nativeEditorWorkspace;
     }
@@ -336,9 +341,18 @@ export function createNativeEditorWorkspace({
             recoveryId: record.recoveryId,
         });
     }
-    async function retryWorkspaceLoad() {
+    async function loadVisibleWorkspace(afterPresentation = null) {
+        const generation = openGeneration;
+        if (afterPresentation) await afterPresentation;
+        if (!active || generation !== openGeneration) return;
+        await loadWorkspace({ navigation: true });
+        if (!active || generation !== openGeneration) return;
+        render(); focusHeading();
+    }
+    function retryWorkspaceLoad() {
         workspaceLoadFailed = false; setFeedback(null, false); render();
-        await loadWorkspace(); render(); focusHeading();
+        focusHeading();
+        return loadVisibleWorkspace();
     }
     function retryRecoveryLoad() {
         refreshRecoveryCandidates(); render();
@@ -1072,24 +1086,30 @@ export function createNativeEditorWorkspace({
         root.className = 'planner native-editor-workspace'; root.dataset.nativeEditorWorkspace = '';
         if (!workspace) {
             if (workspaceLoadFailed) renderWorkspaceLoadError();
-            else root.replaceChildren(el('p', t().loading));
+            else {
+                const loading = el('p', t().loading);
+                loading.tabIndex = -1; loading.dataset.workspaceLoading = '';
+                root.replaceChildren(loading);
+            }
             return;
         }
         if (draft) renderEditor(); else if (archiveId) renderArchive(); else renderLibrary();
         renderLifecycleDialog();
         lockRenderedControls();
     }
-    function focusHeading() { root.querySelector('h1')?.focus({ preventScroll: true }); }
+    function focusHeading() { root.querySelector('h1, [data-workspace-loading]')?.focus({ preventScroll: true }); }
     const beforeUnload = event => {
         if (dirty() || mutationBlocked()) { event.preventDefault(); event.returnValue = ''; }
     };
 
     return Object.freeze({
-        async open(options = {}) {
+        async open(options = {}, afterPresentation = null) {
             const requestedArchive = options?.archiveId ?? null;
             if (active) { if (requestedArchive) { archiveId = requestedArchive; render(); } focusHeading(); return; }
-            active = true; window.addEventListener('beforeunload', beforeUnload); render();
-            await loadWorkspace(); archiveId = requestedArchive; render(); focusHeading();
+            active = true; archiveId = requestedArchive; workspaceLoadFailed = false;
+            window.addEventListener('beforeunload', beforeUnload); render();
+            focusHeading();
+            await loadVisibleWorkspace(afterPresentation);
         },
         close,
         canChangeAccount: () => !draft && !importCandidate && !mutationBlocked(),
