@@ -188,15 +188,108 @@ archive retains those failures and the final green runs. The review ZIP
 contains the complete patch, full changed files, Git status and diff
 statistics, and test and packaging logs.
 
+## Before Slice 02.2 — mixed-version compatibility assessment
+
+**Independently accepted compatibility contract:** Keep Schema-2 and the existing Store key.
+Require backward reading by the new app and fail-closed behavior in old
+clients. Accept that v86 loses access to the native Editor and Event Runtime
+when its Store first contains an unsupported plan. Once a build can write such
+records, keep a zero-phase-capable reader as the rollback floor. This assessment
+does not authorize a release.
+
+### Evidence and scope
+
+The [Store](../src/js/editor-storage.mjs) saves one aggregate under
+`easyTimerEditor.v1` at Store schema 1 with Schema-2 entities. A load validates
+all Templates and Executions before returning the aggregate. In v86, a single
+zero-phase Template or PLANNED Event fails that validation. Only a missing key
+produces an empty aggregate. An unreadable aggregate produces `storageValidation`.
+The [Store writer](../src/js/editor-storage-lock.mjs) loads under the existing
+exclusive lock before calling the transform. A saved snapshot must still
+match the exact raw bytes and expected aggregate revision. Successful writes
+advance the revision by one and confirm identical readback. This explains
+both the fresh-write rejection and the stale-snapshot conflict.
+
+At boot, the [Runtime Bridge](../src/js/editor-runtime-bridge.mjs) reads the
+entire Store before claiming active ownership and reads it again after
+claiming. A Store validation error blocks adoption even when the persisted
+active entry is valid on its own. An already-loaded owner continues to use its
+loaded Runtime. On a persisted action, v86 hits the same Store validator and
+blocks the Runtime controls. Ownership can remain held until that tab leaves.
+
+The [service worker](../src/service-worker.js) precaches during install, uses
+`skipWaiting`, deletes older app caches during activation and claims existing
+clients. Navigations try the network and fall back to cached HTML. Assets are
+cache-first, and several domain module URLs are unversioned. Claiming a client
+does not restart its loaded JavaScript. An older tab and a new tab on the
+same origin can therefore access the same Store with different validators.
+An offline client can continue to boot the cached old shell until it receives
+an update. A release must verify consistent assets on startup and update.
+
+The isolated assessment used the exact staging application source at
+`ebb0039ddaa096ab968554d62fcedfc6a499d7d6` and an extracted copy of the reviewed
+`d0bdee56cf149acc1836d9d07c184546c036c237`. In the copy only, the probe allows
+zero phases for Template and PLANNED validation and simulates a new cache
+generation. The actual Store, writer, Runtime, import/export and service
+worker behavior are exercised on a disposable loopback origin. READY and
+started Runtime validation remain strict in the probe. The candidate is a
+compatibility model. It is not an implementation or verification of the
+future 02.2 Workspace, editing or rollout.
+
+| Scenario | Observed behavior | Safety and availability |
+| --- | --- | --- |
+| Existing complete records and exports | The compatibility model accepts the existing v86 Template and independently planned Event as-is and round-trips an existing v86 backup. v86 itself also cold-starts offline with that Store. | Same Store shape. The read does not rewrite records. Existing records need no migration. |
+| v86 meets a zero-phase record | Separate zero-phase Template and PLANNED Event probes both fail with `storageValidation`. An already-failed Store instance rejects Save with `storageBlocked`. The model still rejects activation of the incomplete Event. | Bytes stay intact. Native access through that Store is unavailable in v86. |
+| Mixed-version tabs | After the compatible writer persists the two zero-phase records, a fresh read or write in the still-loaded v86 tab returns `storageValidation`. The write transform is never called. A previously loaded v86 snapshot returns `conflict` on Save. | No overwrite or revision advance from the old tab. |
+| Mixed Store with a valid RUNNING Event | The compatible app recovers the same Run and Attempt from the mixed Store on an offline cold start. v86 rejects the entire Store. On offline rollback, its Event recovery and Editor show errors while Quick Timer still works. | The aggregate is byte-identical before and after rollback, but the native feature outage includes unrelated Events. |
+| v86 already owns a live Event | A newer tab writes a zero-phase Template without changing the running Event. The existing v86 owner attempts Pause, then blocks the action and retains the active lock. After leaving the old owner, the compatible tab reloads and recovers the same running Event. | No writes from v86 and no altered Run. Timer controls and compatible recovery can be temporarily unavailable until the old owner leaves. |
+| Offline update and roll-forward | The probe stopped the loopback server for cold starts and disabled the browser HTTP cache. The worker changed generations on the same origin and removed the old app cache. The open old document still ran v86. After v86 rollback with mixed data, updating forward to the compatible cache restored the same RUNNING Event. | Operational recovery uses a compatible app on the same origin and profile. If only v86 is cached, getting the compatible shell requires connectivity. |
+| Portability and Draft Recovery | The compatible model parses its full backup and individual zero-phase Template export. Both are `portabilityInvalid` in v86. The public importer rejects a full backup even on the compatible model. v86 accepts editable zero-phase draft data in isolation but reports `recoveryValidation` for an incompatible pending save ticket without modifying or removing it. | Full backup is an export, not an existing restore route. An unreadable Workspace can also prevent user access to its export controls. Return to the compatible app to use supported export and reconciliation. |
+
+The final probe ran as `node .package-02-compatibility-probe/probe.mjs`
+on Node 22.17.1 with headless Edge 158.0.4370.33. It exited 0 with ten
+checkpoints. An earlier eight-checkpoint run also exited 0. The reproducible
+probe and logs are in the local untracked
+`review-package-02-compatibility.zip`. The reviewed 02.1a suites were not
+rerun. The probe uses one browser engine and synthetic data. It covers an
+incompatible Template save ticket. Planned Event save and observation tickets
+still require end-to-end verification in the actual 02.2 implementation.
+The probe does not verify every cache activation interleaving or device.
+
+### Options and rollout contract
+
+| Option | Assessment |
+| --- | --- |
+| Keep the aggregate and fail closed in v86 | Smallest change. Existing locks, revision checks and validation protect raw data. The operational cost is temporary loss of the native Editor and Event Runtime on unsupported clients. |
+| Deliver a compatible reader before enabling incomplete writes | Can reduce exposure and establish a tested compatible rollback build when rollout needs extra caution. It adds sequencing and still cannot make already-offline v86 clients understand the new records. |
+| Preserve full v86 readability with a second Store, placeholders or a data rewrite | Changes storage or planning semantics and introduces data-safety and recovery risks disproportionate to the requirement. |
+
+For a later rollout, verify the real 02.2 candidate with existing Store data,
+the mixed cases above, consistent assets through offline update, and the
+compatible recovery path before enabling incomplete writes. Reopen upgraded
+tabs and installed PWAs on the same origin. Complete or intentionally suspend
+active Events in the old app before rollout where practical. Ensure an older
+tab is no longer holding runtime ownership before recovering from the
+compatible app. A rollout cannot guarantee simultaneous upgrade of offline
+tabs, so their temporary unavailability must be an explicit release decision.
+
+Rollback to v86 is operationally safe only for a profile whose aggregate and
+relevant pending recovery data are verified v86-readable. Once incomplete
+writes are enabled, a blanket rollback to v86 is unsuitable. Roll forward or
+revert other changes while keeping the compatible planning reader and strict
+runtime boundary. Retain browser data, pending recovery entries and any
+exports. Do not clear storage, remove incomplete plans or replace the live
+aggregate with an older backup as a rollback step. A precautionary export
+before rollout is useful for evidence, with current restore limits understood.
+
 ## Questions for separate approval
 
-- **Before 02.2** assess compatibility with older or offline app versions and
-  rollback to v86 after incomplete plans have been saved. The current v86
-  aggregate reader rejects such a Store as `storageValidation`, including
-  when it also contains a valid runtime. No migration of currently valid
-  records is anticipated. Prove behavior for mixed-version tabs and rollback
-  before committing to rollout. Preserve fail-closed reads and writer
-  revision protections.
+- **Before rollout** repeat the compatibility probes against the actual Slice
+  02.2 build and review an update strategy for the old live Runtime owner.
+  A newer incomplete-plan write can block controls in the old running Event
+  while that older document still holds its ownership lock. Approval covers
+  the compatibility contract and Slice 02.2 implementation. Rollout remains
+  pending separate approval.
 - **Before 02.3** decide the canonical representation of unspecified duration
   and the localized unnamed-phase fallback. `durationSeconds: null` is a
   candidate for the existing field. Define how an unnamed phase is represented
