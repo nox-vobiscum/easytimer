@@ -1301,7 +1301,7 @@ test('direct-launch planning preserves revision and identity checks and selects 
 test('the Store rejects malformed retained phases in Template and PLANNED records', () => {
     for (const [change, reason] of [
         [value => { value.phases[0].durationSeconds = ' '; }, 'duration'],
-        [value => { value.phases[0].title = ''; }, 'phaseTitle'],
+        [value => { value.phases[0].title = 'x'.repeat(121); }, 'phaseTitle'],
     ]) {
         const templateSource = record({ templates: [template()] });
         change(templateSource.templates[0].plan);

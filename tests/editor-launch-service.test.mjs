@@ -158,6 +158,23 @@ test('launches Template to confirmed READY in two writes with stable identities 
     await activeLock.release();
 });
 
+test('direct launch materializes only the unnamed title within the second confirmed write', async () => {
+    const source = prepared();
+    source.phases[0].title = '   ';
+    source.phases.push({ ...source.phases[0], id: 'literal', title: 'Unnamed Phase' });
+    const { storage, activeLock, service } = await setup({ source });
+    const before = JSON.parse(storage.values.get(EDITOR_STORAGE_KEY));
+    const result = await service.launchTemplateToReady({ templateId: source.id, expectedAggregateRevision: 1 });
+    assert.equal(result.status, 'ready');
+    assert.equal(storage.state.writes, 3);
+    assert.deepEqual(result.record.templates, before.templates);
+    assert.equal(before.templates[0].plan.phases[0].title, '');
+    assert.deepEqual(result.record.executions[0].execution.currentPlan.phases,
+        before.templates[0].plan.phases.map(phase => ({ ...phase, title: 'Unnamed Phase' })));
+    assert.equal(result.record.activeRuntime.clock.status, 'READY');
+    await activeLock.release();
+});
+
 test('direct launch preserves Store conflict precedence and does not claim runtime ownership on planning failure', async () => {
     const { storage, locks, activeLock, service } = await setup();
     const before = storage.values.get(EDITOR_STORAGE_KEY);

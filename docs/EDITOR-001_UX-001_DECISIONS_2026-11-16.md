@@ -63,7 +63,7 @@
 
 - A new template or planned rundown can be **saved with no real phases**, with named but incomplete phases, or with incomplete timeboxes. Workshop preparation must not be blocked simply because the agenda is unfinished.
 - The first blank visually prepared phase is **not a stored record** if completely untouched. `-- min` means unspecified duration, **not** stopwatch/unlimited time.
-- A genuine phase with no name uses **Unbenannte Phase**; its computed order number remains separate from the title.
+- A genuine phase with no name displays **Unnamed Phase** in DE and EN. The fixed English label supersedes the earlier localized label. Its computed order number remains separate. Planning stores an empty title; Start Event materializes the label in the independent Event plan when it becomes READY.
 - **Session starten** requires at least one genuine phase and a valid timebox on **every** genuine phase. No silent skipped phases and no “start anyway”. Show precise inline/card explanations (e.g. no phases yet; two missing timeboxes), not alarming save warnings.
 - Preserve the stricter runtime validation/ownership contract. If Schema-2 draft validators currently reject incomplete plans, investigate a safe draft/runtime validation boundary as a separately reviewed implementation concern; **do not weaken the authoritative run validator**.
 - Deletion/absence semantics depend on the **current content**, not whether a user typed something earlier.

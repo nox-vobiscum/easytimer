@@ -17,8 +17,10 @@ Slice 02.2 and its automated regression. Rollout approval remains pending.
 The reviewed Slice 02.2 implementation was published at
 `fabb81697ee6a8993755f49d4c25e85c235f9333`. The Product Owner accepted
 the 02.3a/02.3b decomposition and authorized 02.3a. Independent review
-accepted Slice 02.3a and all final automated verification gates. Rollout and
-Slice 02.3b require separate approval.
+accepted Slice 02.3a and all final automated verification gates. Slice 02.3b
+and its final automated verification passed independent review. Regular
+Package 02 implementation is complete. Rollout and Owner acceptance remain
+pending.
 
 The [UX-001 decisions](EDITOR-001_UX-001_DECISIONS_2026-11-16.md#5-emptyincomplete-planning-state-versus-valid-execution)
 define incomplete planning and strict Start eligibility. The
@@ -34,7 +36,7 @@ Start Event (enter READY) and Start (start the countdown).
 | Area | v86 baseline | Accepted Package 02 outcome |
 | --- | --- | --- |
 | Empty planning | The draft can contain zero phases. The strict Domain validator rejects persistence. The Workspace uses the same strict preflight for a new planned Event. | Save and reopen named Event Templates and Planned Events with zero phases, including after removing the final phase. Render an empty agenda with Add Phase. |
-| Incomplete phase | A draft holds temporary invalid input. Phase fields require title and duration. An explicitly added phase currently starts with 600 seconds. | Retain real phases with stable IDs, order, categories, prepared information and valid resources. A missing timebox is representable in planning. An unnamed genuine phase receives the agreed localized display label. Invalid input stays editable and receives specific feedback. |
+| Incomplete phase | A draft holds temporary invalid input. Phase fields require title and duration. An explicitly added phase currently starts with 600 seconds. | Retain real phases with stable IDs, order, categories, prepared information and valid resources. A missing timebox is representable in planning. An unnamed genuine phase receives the fixed display label. Invalid input stays editable and receives specific feedback. |
 | Duration total | The Workspace totals all safe integers, including values outside the timebox limits. | Sum specified valid timeboxes and indicate missing durations separately. Preserve current duration limits. Missing means unspecified. Untimed phases and a target total remain deferred. |
 | Library and Picker | Template and Planned actions expose Start without inspecting eligibility. | Show nonstartable records with a concrete reason and Edit or Continue Editing, using the agreed subdued timer-off treatment in the library. Keep Plan Event available for Templates. The Picker uses the same reasons and a route to editing. |
 | Direct Start and activation | Template launch writes a Planned copy and then activates it. PLANNED activation, runtime and first Start already have strict checks. | Check eligibility before the first direct-launch write and within PLANNED activation. Start requires at least one real phase and a valid timebox for every phase. Preserve phase order and identity through READY. The countdown starts only on the separate Start action. |
@@ -380,7 +382,7 @@ logs, and the reproducible actual-build compatibility probe.
 
 The accepted behavior remains the basis for this analysis. A real Phase can
 be planned without a duration or title. Show missing time as `-- min`, show
-the localized unnamed-phase label separately from its position, sum specified
+the fixed unnamed-phase label separately from its position, sum specified
 valid timeboxes, and explain why a saved plan cannot start. Every phase
 requires a valid timebox to start. A blank title is not an additional Start
 requirement. The empty agenda introduced in 02.2 remains legitimate. The
@@ -395,7 +397,7 @@ deliberate removal, including when fields are cleared.
 | Boundary | Current behavior | Proposed 02.3 contract |
 | --- | --- | --- |
 | Persisted plan | `validatePersistedPlan` permits zero phases but shares 02.2's nonblank title and strict duration checks with `validateRundownPlan`. | Limit the value expansion to Template plans and PLANNED current plans. Use exact JSON `durationSeconds: null` for unspecified and an empty string for unnamed. Normalize a whitespace-only title to the empty string on explicit Save. The fields remain required. Keep the nonblank Rundown name, ID, order, category, information and resource rules. A supplied duration remains subject to current whole-minute, per-phase and total limits. |
-| Editable draft and form | `editor-phase-fields.mjs` requires title and duration. It keeps unparseable input as text and valid digits as seconds. The existing Add Phase action inserts a stable row with a 600-second default. `editor-workspace.mjs` currently totals any safe integer, including out-of-range values. | Clearing the duration is an explicit unspecified state. Preserve malformed input, whitespace-only numeric text, zero and out-of-range values for correction. Do not clamp, infer, coerce them to null or save them. On reopen render missing duration as empty with the agreed indication. Keep invalid- and missing-value feedback distinct and sum only valid supplied durations. Keep the current Add Phase default unless a separate decision changes it. Empty title remains a blank editable field with localized visual and accessible fallback. |
+| Editable draft and form | `editor-phase-fields.mjs` requires title and duration. It keeps unparseable input as text and valid digits as seconds. The existing Add Phase action inserts a stable row with a 600-second default. `editor-workspace.mjs` currently totals any safe integer, including out-of-range values. | Clearing the duration is an explicit unspecified state. Preserve malformed input, whitespace-only numeric text, zero and out-of-range values for correction. Do not clamp, infer, coerce them to null or save them. On reopen render missing duration as empty with the agreed indication. Keep invalid- and missing-value feedback distinct and sum only valid supplied durations. Keep the current Add Phase default unless a separate decision changes it. Empty title remains a blank editable field with the fixed visual and accessible fallback. |
 | Draft Recovery and tickets | Editable recovery accepts strings and safe integers for duration, including the earlier raw empty input. `validateTemplatePending` and `validateExecutionPending` compare ticket drafts with the recovery Save snapshot and replay the exact Store transform. `validatePlanPending` binds the canonical source plan to the saved baseline and retains the editable draft. Workspace and App compare `expectedPlan` when observing an uncertain planning write. | Permit null in the editable recovery shape and keep older raw draft input, identity, revision and baseline readable. Treat the prior empty duration string as blank when rendering and at the explicit Save boundary. Apply one deterministic conversion to the copied Save snapshot and when reconstructing pending tickets. Preserve other invalid text byte-for-byte in the recoverable draft. Planning observation must compare the canonical *planned* snapshot, with null and blank title where present. Rechecks stay read-only and never regenerate or relocalize a target. |
 | Portability | Template import/export validates through `validateTemplate`. Passive Event and backup documents use the aggregate's lifecycle validation. Restore for full backups is outside the existing feature set. | Round-trip the exact null and empty title for eligible planning documents, including Template import as an independently identified copy. Keep missing properties, invalid strings and invalid executable documents rejected. Leave Event and backup documents passive. |
 | Eligibility | The shared `startEligibilityReason` calls the strict Rundown validator. Both direct launch before its first write and locked PLANNED activation use the shared boundary. The Picker and library consume the same reasons. | Use the same plan validation and duration rules to separate `phasesRequired`, a dedicated missing-duration reason with a precise count for valid incomplete plans, and other validation errors. A timed, unnamed Phase is eligible. A missing duration blocks the entire Rundown, including direct launch before committing a Planned Event. The executable output still passes the existing strict validation. |
@@ -405,7 +407,7 @@ source/target comparisons. Existing persisted or pending 02.2 records keep
 their previous representation. Do not backfill, rewrite on read, or
 reinterpret a raw invalid value as valid. The normalization for a recovered
 legacy blank applies to an explicit Save snapshot. Do not use the proposed
-localized fallback as a persisted planning value or as evidence of a user
+fixed fallback as a persisted planning value or as evidence of a user
 edit.
 
 ### Unnamed phase at the executable boundary
@@ -428,35 +430,23 @@ these current data checks.
 | Keep active `currentPlan` empty and give only the projected Run a nonblank title | READY still rejects the empty current plan, and the first Start snapshots that same plan. Supporting this would need a different active-plan and Attempt contract or another representation. |
 | Persist a neutral marker as the nonblank title and localize it when rendering | Existing titles and JSON imports can contain the same marker. Without a distinct origin field, display and Retain Plan cannot distinguish it from authored text. The marker would also appear in passive exports or engines and old clients that do not interpret it. |
 
-**Recommendation for approval:** Resolve the fixed DE/EN unnamed label for
-the requested activation, validate that input and freeze it before the
-asynchronous operation. For direct Template launch reject invalid command
-inputs and ineligible content before the first write. Keep the first planned
-copy identical to the validated Template plan. In the revision-bound
-activation, replace only blank titles in the copied plan, then pass that
-plan through the strict READY and Run validators. No duration or phase may
-be dropped or synthesized. Where a caller has no UI locale, approve an
-explicit locale or a deterministic default such as English. Browser
-preferences must never be consulted again during a recheck, already-active
-adoption, suspend, resume, or completion. The existing recorded target is
-the authority if acknowledgement was lost.
+**Binding decision for 02.3b.** The Product Owner selected Option A with
+the exact fixed title **Unnamed Phase** in DE and EN. This supersedes the
+localized proposal. Before activation, a blank or whitespace-only title
+is canonicalized to the empty string on Save; the display fallback never
+writes planning data. The existing activation transformation replaces
+only empty titles in the independent Event plan, then runs strict READY
+and Run validation. There is no locale input, title-origin metadata or
+extra Store write. Direct launch still confirms two writes and leaves
+the source Template intact.
 
-Under this recommendation the selected locale determines generated titles
-at activation, before the first countdown Start. Switching the interface
-language afterward changes copy but leaves the stored titles and snapshots
-unchanged. A generated title already used in READY survives a never-started
-suspend and the construction of a fresh READY Run on resume. A started
-resume restores its frozen checkpoint with the same Run and Attempt identity.
-The generated title also persists in completed history. `retainCurrentPlan`
-keeps the latest executable plan and
-resets progress, so the generated title would remain as ordinary editable
-text in the returned PLANNED Event. Later editing can explicitly clear it.
-While blank it displays the current UI fallback, and a later activation can
-materialize a new label. Never clear a string based on equality with an
-unnamed label, since users can deliberately author that same string. The
-Template retains the original empty title and all phases, information and
-resources. This technical choice requires review of the language default
-and the frozen label consequences in retained plans and history.
+The materialized title is ordinary editable title text where lifecycle
+permissions allow edits. It survives suspension, completion, Attempt
+snapshots and retained plans. An explicitly authored `Unnamed Phase`
+is preserved. Clearing it requires explicit editing. A later Start
+Event can materialize the fixed title again. Missing timeboxes still
+block execution of the complete Rundown. The existing 120-character
+limit and executable nonempty-title requirement remain in effect.
 
 ### Compatibility and smallest coherent slices
 
@@ -483,7 +473,7 @@ relevant. Retain the pending rollout decision and existing backup limitations.
 | Proposed slice | Coverage and focused checks |
 | --- | --- |
 | **02.3a — Unspecified timebox** | After approval, adapt persistence, phase fields, totals, eligibility, Workspace, Picker, recovery and portability together. Cover named phases with null, old raw blank drafts, malformed and out-of-range input, exact missing counts, DE/EN with no Save warning for blank time, order and identity, deletion to a zero-phase plan, pending Template/PLANNED saves and observation tickets, import/export and byte-identical no-write Start rejection in a mixed Store. Confirm invalid phase titles remain rejected until the next coherent slice. |
-| **02.3b — Unnamed phase and READY materialization** | Depends on 02.3a and approval of title materialization and its locale. Open blank-title planning and its Start path together. Cover both lanes of Start, two-write Template launch, independent identity and preserved phase order/resources, nonblank authored lookalike titles, missing-time rejection even with blank titles, locale freeze across pending acknowledgement/reload, READY then actual Start, immutable Attempt snapshot, suspend/resume, Retain Plan and later editing, completed history, and localized planning display without a write. Strict malformed Runtime and compatibility/offline regressions must pass. |
+| **02.3b — Unnamed phase and READY materialization** | Depends on 02.3a and approval of title materialization. Open blank-title planning and its Start path together. Cover both lanes of Start, two-write Template launch, independent identity and preserved phase order/resources, nonblank authored lookalike titles, missing-time rejection even with blank titles, fixed title across pending acknowledgement/reload, READY then actual Start, immutable Attempt snapshot, suspend/resume, Retain Plan and later editing, completed history, and fixed planning display without a write. Strict malformed Runtime and compatibility/offline regressions must pass. |
 
 The analysis above records the pre-implementation state at reviewed 02.2.
 The implementation and rollout gates remain separate.
@@ -577,6 +567,40 @@ these results. Rollout approval remains pending, including how to address
 the old-live-owner risk. Once null-duration writes are enabled, rollback
 builds must retain the compatible planning reader.
 
+## Slice 02.3b verification
+
+Local and remote `develop` agreed at `4cbbae1967afd5c978b5baef511c154201c16760`
+before implementation. The reviewed scope covers Domain planning and READY
+materialization, native phase fields and drag announcements, with the Store,
+Runtime and history validators retaining their existing contracts.
+
+| Check | Result |
+| --- | --- |
+| Focused Node tests | Exit 0, 176 passed |
+| Complete tracked Node suite | Exit 0, 598 passed |
+| Focused Workspace and Picker browser scenario | Exit 0, 3 checkpoints |
+| Regular aggregate browser regression | Exit 0, 33 checkpoints |
+| Packaging and inventory verification | Exit 0 for both, 41 files, PWA v86 |
+| Offline artifact browser regression | Exit 0, 7 checkpoints |
+| Syntax and diff checks | Exit 0 |
+
+The isolated compatibility probe ran against 02.3a (`4cbbae1`) and the
+staging v86 application (`ebb0039`), with ten successful checkpoints per
+build. Both older readers opened legacy editable blank-title drafts but
+failed closed on blank-title persisted planning records and pending tickets.
+Older writes left persisted bytes intact. A stale save conflicted. The
+compatible build reopened mixed data offline and recovered the same Event,
+Run and Attempt. Compatible builds round-trip the planning export; the
+full backup remains a data copy with no complete public restore mechanism.
+The probe used a virtual cache version transition in loopback HTTP only.
+
+Both older builds reproduced the old-live-owner issue. A newer blank-title
+write blocked Pause in the old tab while it retained its ownership lock.
+The compatible build recovered the same Event once the old owner left. Any
+rollback after blank-title writes must retain the 02.3b planning reader
+for both blank titles and unspecified timeboxes. Rollout strategy and
+approval remain open. Full logs and the probe are in the review ZIP.
+
 ## Questions for separate approval
 
 - **Before rollout** independently review the actual-build probe and the
@@ -584,11 +608,7 @@ builds must retain the compatible planning reader.
   deployment candidate and its real cache transition. Approval covers the
   compatibility contract and local Slice 02.2 implementation. Rollout remains
   pending separate approval.
-- **Before 02.3b** approve the blank-title planning representation and the
-  activation fallback locale for UI and non-UI callers
-  and the resulting retained-plan and history behavior. A requirement for
-  live localization of already-materialized titles or reversible retention of
-  unnamed status would need a separate data-contract design.
+- **Before release** retain the 02.3b-compatible planning reader after blank-title writes and resolve the existing old-live-owner rollout risk.
 
 Package 03 owns Save and Save & Back, draft lifecycle and associated
 navigation. The later library, responsive and Facilitator Panel work follows

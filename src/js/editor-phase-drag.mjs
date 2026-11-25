@@ -7,6 +7,7 @@ import {
     PointerSensor,
     Sortable,
 } from './editor-phase-dndkit-vendor.mjs';
+import { phaseDisplayTitle } from './editor-domain.mjs';
 
 const messages = {
     en: {
@@ -70,7 +71,7 @@ export function createNativePhaseDragging({ list, getDraft, onReposition, announ
     const cleanups = [
         manager.monitor.addEventListener('dragstart', ({ operation }) => {
             const phase = getDraft().template.phases.find(item => item.id === operation.source?.id);
-            if (phase) announce(messages[language].moving(phase.title));
+            if (phase) announce(messages[language].moving(phaseDisplayTitle(phase.title)));
         }),
         manager.monitor.addEventListener('dragend', ({ operation, canceled }) => {
             if (destroyed) return;
@@ -79,13 +80,13 @@ export function createNativePhaseDragging({ list, getDraft, onReposition, announ
             const phaseId = String(source.id);
             const phase = getDraft().template.phases.find(item => item.id === phaseId);
             if (!phase) return;
-            const success = messages[language].moved(phase.title, source.index + 1);
+            const success = messages[language].moved(phaseDisplayTitle(phase.title), source.index + 1);
             const result = applyNativePhaseDrop({
                 source, canceled, announcement: success, onReposition,
                 schedule: callback => queueMicrotask(() => { if (!destroyed) callback(); }),
             });
             if (result === 'unchanged') {
-                announce(messages[language].unchanged(phase.title));
+                announce(messages[language].unchanged(phaseDisplayTitle(phase.title)));
                 requestAnimationFrame(() => list.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"]`)
                     ?._nativePhase.dragHandle.focus({ preventScroll: true }));
                 return;

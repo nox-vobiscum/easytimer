@@ -1,5 +1,4 @@
-import { PHASE_CATEGORIES } from './editor-domain.mjs';
-import { isValidPhaseDuration } from './editor-domain.mjs';
+import { PHASE_CATEGORIES, UNNAMED_PHASE_TITLE, isValidPhaseDuration, phaseDisplayTitle } from './editor-domain.mjs';
 import { editNativePhaseDraft, normalizeDraftDuration } from './editor-template-draft.mjs';
 
 const copy = {
@@ -8,14 +7,14 @@ const copy = {
         showDetails: 'Show phase details', hideDetails: 'Hide phase details',
         chooseCategory: 'Choose phase category', uncategorized: 'Uncategorized', presentation: 'Presentation',
         discussion: 'Discussion', breakout: 'Breakout', break: 'Break',
-        phaseTitle: 'Each phase needs a title containing 1–120 characters.',
+        phaseTitle: 'Phase titles may contain up to 120 characters.',
         durationError: 'Enter a whole number from 1 to 6,000 minutes.',
         unspecifiedDuration: '-- min',
         invalidCategory: 'Choose a supported phase category.',
         drag: title => `Drag ${title}. Press Enter or Space to choose a position.`,
         changePosition: position => `Phase ${position} – Change position`,
         positionFor: (position, title) => `Change position for phase ${position}: ${title}`,
-        position: 'Position', move: 'Move', cancel: 'Cancel', untitled: 'Untitled phase',
+        position: 'Position', move: 'Move', cancel: 'Cancel',
         phaseNotFound: 'This phase is no longer in the draft. Your input has been retained.',
         editFailed: 'The draft could not be updated. Your input has been retained.',
     },
@@ -24,14 +23,14 @@ const copy = {
         showDetails: 'Phasendetails anzeigen', hideDetails: 'Phasendetails ausblenden',
         chooseCategory: 'Phasenkategorie auswählen', uncategorized: 'Ohne Kategorie', presentation: 'Präsentation',
         discussion: 'Diskussion', breakout: 'Gruppenarbeit', break: 'Pause',
-        phaseTitle: 'Jede Phase benötigt einen Titel mit 1–120 Zeichen.',
+        phaseTitle: 'Phasentitel dürfen bis zu 120 Zeichen enthalten.',
         durationError: 'Eine ganze Zahl von 1 bis 6.000 Minuten eingeben.',
         unspecifiedDuration: '-- Min.',
         invalidCategory: 'Eine unterstützte Phasenkategorie auswählen.',
         drag: title => `${title} verschieben. Mit Eingabe oder Leertaste eine Position auswählen.`,
         changePosition: position => `Phase ${position} – Position ändern`,
         positionFor: (position, title) => `Position für Phase ${position} ändern: ${title}`,
-        position: 'Position', move: 'Verschieben', cancel: 'Abbrechen', untitled: 'Unbenannte Phase',
+        position: 'Position', move: 'Verschieben', cancel: 'Abbrechen',
         phaseNotFound: 'Diese Phase ist nicht mehr im Entwurf. Deine Eingabe bleibt erhalten.',
         editFailed: 'Der Entwurf konnte nicht geändert werden. Deine Eingabe bleibt erhalten.',
     },
@@ -87,7 +86,7 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
     titleLabel.className = 'phase-title';
     const titleText = document.createElement('span');
     const title = document.createElement('input');
-    title.id = `${prefix}-title`; title.type = 'text'; title.maxLength = 120; title.required = true;
+    title.id = `${prefix}-title`; title.type = 'text'; title.maxLength = 120;
     title.dataset.field = 'title';
     titleLabel.append(titleText, title);
     const durationLabel = document.createElement('label');
@@ -158,7 +157,14 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
             showValidationError(error.message);
         }
     }
-    title.addEventListener('input', () => update({ title: title.value }));
+    title.addEventListener('input', () => {
+        update({ title: title.value });
+        const displayTitle = phaseDisplayTitle(title.value);
+        dragHandle.setAttribute('aria-label', copy[language].drag(displayTitle));
+        dragHandle.title = dragHandle.getAttribute('aria-label');
+        positionPanel.setAttribute('aria-label', copy[language].positionFor(number.textContent, displayTitle));
+    });
+    title.addEventListener('blur', () => { if (!title.value.trim()) title.value = ''; });
     duration.addEventListener('input', () => {
         const raw = duration.value;
         const parsed = /^\d+$/.test(raw) ? Number(raw) * 60 : NaN;
@@ -197,7 +203,7 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
         if (index < 0) { showValidationError('phaseNotFound'); return; }
         positionSelect.replaceChildren(...phases.map((phase, optionIndex) => {
             const option = document.createElement('option'); option.value = String(optionIndex + 1);
-            option.textContent = `${String(optionIndex + 1).padStart(2, '0')} · ${phase.title.trim() || copy[language].untitled}`;
+            option.textContent = `${String(optionIndex + 1).padStart(2, '0')} · ${phaseDisplayTitle(phase.title)}`;
             return option;
         }));
         positionSelect.value = String(index + 1); move.disabled = true;
@@ -252,7 +258,7 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
 
     function localize() {
         const text = copy[language];
-        titleText.textContent = text.title; title.placeholder = text.title;
+        titleText.textContent = text.title; title.placeholder = UNNAMED_PHASE_TITLE;
         durationText.textContent = text.duration; duration.placeholder = text.unspecifiedDuration;
         categoryPanel.setAttribute('aria-label', text.chooseCategory);
         for (const [id, { option, label }] of categoryOptions) {
@@ -269,11 +275,11 @@ export function createNativePhaseFields({ getDraft, onDraftChange, onReposition,
         if (index < 0) { showValidationError('phaseNotFound'); return; }
         const phase = phases[index];
         const position = String(index + 1).padStart(2, '0');
-        dragHandle.setAttribute('aria-label', copy[language].drag(phase.title.trim() || copy[language].untitled));
+        dragHandle.setAttribute('aria-label', copy[language].drag(phaseDisplayTitle(phase.title)));
         dragHandle.title = dragHandle.getAttribute('aria-label');
         number.textContent = position; number.setAttribute('aria-label', copy[language].changePosition(position));
-        positionPanel.setAttribute('aria-label', copy[language].positionFor(position, phase.title.trim() || copy[language].untitled));
-        title.value = phase.title;
+        positionPanel.setAttribute('aria-label', copy[language].positionFor(position, phaseDisplayTitle(phase.title)));
+        title.value = phase.title.trim() ? phase.title : '';
         duration.value = typeof phase.durationSeconds === 'number'
             ? String(phase.durationSeconds / 60) : phase.durationSeconds ?? '';
         refreshCategory();

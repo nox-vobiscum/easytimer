@@ -32,6 +32,11 @@ export const DEFAULT_RUNDOWN_CATEGORY = 'uncategorized';
 export const DEFAULT_PHASE_CATEGORY = 'uncategorized';
 export const MAX_PHASE_SECONDS = 6000 * 60;
 export const MAX_TOTAL_SECONDS = 60000 * 60;
+export const UNNAMED_PHASE_TITLE = 'Unnamed Phase';
+
+export function phaseDisplayTitle(title) {
+    return title.trim() || UNNAMED_PHASE_TITLE;
+}
 
 const fail = code => { throw new Error(code); };
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -49,10 +54,10 @@ function identity(value) {
     return value;
 }
 
-function text(value, code) {
+function text(value, code, allowEmpty = false) {
     if (typeof value !== 'string') fail(code);
     const normalized = value.trim();
-    if (!normalized || normalized.length > 120) fail(code);
+    if ((!allowEmpty && !normalized) || normalized.length > 120) fail(code);
     return normalized;
 }
 
@@ -114,7 +119,7 @@ function validatePhase(phase, ids, planning) {
     ids.add(id);
     return {
         id,
-        title: text(phase.title, 'phaseTitle'),
+        title: text(phase.title, 'phaseTitle', planning),
         durationSeconds: duration(phase.durationSeconds, planning),
         category: category(phase.category, PHASE_CATEGORIES, DEFAULT_PHASE_CATEGORY),
         notes: note(phase.notes === undefined ? '' : phase.notes),
@@ -358,6 +363,10 @@ export function activatePlannedExecution(execution) {
     const planned = validatePlannedExecution(execution);
     return validateReadyExecution({
         ...planned,
+        currentPlan: {
+            ...planned.currentPlan,
+            phases: planned.currentPlan.phases.map(phase => phase.title ? phase : { ...phase, title: UNNAMED_PHASE_TITLE }),
+        },
         revision: nextRevision(planned.revision),
         runtimeRevision: nextRevision(planned.runtimeRevision),
         lifecycle: EXECUTION_LIFECYCLES.ACTIVE,

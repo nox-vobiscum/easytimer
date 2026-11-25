@@ -55,7 +55,7 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     await library();
     await action('New Event Template');
     await field('#planner [data-field=name]', 'Mixed timeboxes');
-    for (const [index, title] of ['Welcome', 'Discussion', 'Closing'].entries()) {
+    for (const [index, title] of ['   ', 'Unnamed Phase', 'Closing'].entries()) {
         await action('Add phase');
         assert.equal(await evaluate(`document.querySelector(${JSON.stringify(phaseField(index + 1, 'duration'))}).value`),
             '10', 'Add Phase retains its existing initial duration');
@@ -64,6 +64,12 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     await duration(1, '7');
     await duration(2, '');
     await duration(3, '0000');
+    const displayedTitle = () => evaluate(`(() => {
+        const field = document.querySelector(${JSON.stringify(phaseField(1, 'title'))});
+        return [field.value, field.placeholder, field.closest('li').querySelector('[data-action=drag]').getAttribute('aria-label')];
+    })()`);
+    assert.deepEqual((await displayedTitle()).slice(0, 2), ['', 'Unnamed Phase']);
+    assert.match((await displayedTitle())[2], /Unnamed Phase/);
     await assertSummary('Total: 7 min', '1 timebox missing.');
     const invalidState = () => evaluate(`(() => {
         const input = document.querySelector(${JSON.stringify(phaseField(3, 'duration'))});
@@ -73,6 +79,8 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     assert.deepEqual(await invalidState(), { value:'0000', message:'Enter a whole number from 1 to 6,000 minutes.',
         invalid:'true', feedback:'Enter a whole number from 1 to 6,000 minutes.', focused:true });
     await evaluate("document.querySelector('[data-language=de]').click()");
+    assert.deepEqual((await displayedTitle()).slice(0, 2), ['', 'Unnamed Phase']);
+    assert.match((await displayedTitle())[2], /Unnamed Phase/);
     await assertSummary('Gesamt: 7 Min.', '1 Timebox fehlt.');
     await evaluate("document.querySelector('#planner [data-field=name]').focus()");
     const beforeInvalid = await raw();
@@ -90,6 +98,7 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     const ids = await evaluate("[...document.querySelectorAll('#planner [data-native-phase-id]')].map(row => row.dataset.nativePhaseId)");
     await saveToLibrary();
     const template = (await record()).templates[0];
+    assert.deepEqual(template.plan.phases.map(phase => phase.title), ['', 'Unnamed Phase', 'Closing']);
     assert.deepEqual(template.plan.phases.map(phase => [phase.id, phase.durationSeconds]), ids.map((id, index) => [id, [420,null,null][index]]));
     assert.equal(await evaluate(`(${row('Mixed timeboxes')}).querySelector('.start-unavailable').textContent`),
         'Set the 2 missing timeboxes before starting.');
@@ -156,6 +165,9 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('#planner [data-field=duration]')]
         .map(input => [input.value, input.placeholder])`), [['7','-- min'],['','-- min'],['','-- min']]);
     await assertSummary('Total: 7 min', '2 timeboxes missing.');
+    await field(phaseField(1, 'title'), 'Edited title');
+    assert.equal((await displayedTitle())[0], 'Edited title');
+    await field(phaseField(1, 'title'), '');
     await saveToLibrary();
     const reopenedTemplate = (await record()).templates.find(item => item.id === template.id);
     assert.deepEqual(reopenedTemplate, { ...template, revision: template.revision + 1 });
@@ -205,6 +217,8 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     assert.equal(ready.activeRuntime.executionId, planned.id);
     assert.equal(ready.activeRuntime.attemptId, null);
     assert.deepEqual(ready.activeRuntime.run.phases.map(phase => [phase.id, phase.durationSeconds]), [[ids[0],420],[ids[1],480],[ids[2],540]]);
+    assert.deepEqual(ready.executions[0].execution.currentPlan.phases.map(phase => phase.title), ['Unnamed Phase', 'Unnamed Phase', 'Closing']);
+    assert.deepEqual(ready.activeRuntime.run.phases.map(phase => phase.title), ['Unnamed Phase', 'Unnamed Phase', 'Closing']);
     assert.deepEqual(ready.templates.find(item => item.id === template.id), reopenedTemplate);
     console.log('PASS: Picker reasons count missing timeboxes; direct editing, reopen and uncertain Save recheck lead to READY only after every duration is set.');
 }

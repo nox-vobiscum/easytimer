@@ -20,6 +20,7 @@ records the product decisions and their rationale.
 | Event | Event | `Execution`, `kind: 'execution'`, with its own identity, `currentPlan`, optional provenance in `source`, `lifecycle`, `runtimeRevision`, `attempt` and `workshopNotes`. Template-derived events have `source.kind: 'template'` and an independent copy of the plan. |
 | Rundown | Rundown | The planned sequence of activities within an event. `validatePersistedPlan` permits an empty `phases` array or unspecified timeboxes in named `Template.plan` and PLANNED `Execution.currentPlan`. `validateRundownPlan` requires at least one phase and a valid timebox for each phase in executable lifecycles and `attempt.startSnapshot`. The first countdown Start captures the original executed plan. |
 | Phase | Phase | An ordered element of `plan.phases` or `currentPlan.phases` with a stable `id`, `title`, `durationSeconds`, `category`, `notes` and `resources`. Recorded outcomes use `phaseId` in `Execution.phaseOutcomes`. |
+| Unnamed Phase | Unnamed Phase | Fixed display fallback for a blank `Phase.title`. `validatePersistedPlan` permits and canonicalizes blank titles in Templates and PLANNED Events. `activatePlannedExecution` uses `UNNAMED_PHASE_TITLE` to materialize the title in the independent Event before strict READY validation. The fallback becomes ordinary title text in the Event and its history. |
 | Timebox | Timebox | `durationSeconds` on a Phase. A supplied timebox is a whole number of minutes stored as seconds. `null` means unspecified in a Template or Planned Event and blocks Start Event. The editor shows a blank field for `null`, counts unspecified timeboxes separately, and computes the displayed total from valid specified timeboxes. Invalid text stays in the draft for correction and blocks Save. |
 | Event-Informationen | Event Information | Prepared text in `plan.preparedInformation` or `currentPlan.preparedInformation`. Available on a reusable template and the event's own planning copy. |
 | Phasen-Informationen | Phase Information | Prepared guidance in `phase.notes` and labeled links in `phase.resources`. The historical field name `notes` refers to prepared text here. |
@@ -80,7 +81,7 @@ direct launch and before activating a Planned Event. Ordinary Plan Event has
 its own intent and only saves planning data. An empty agenda or unspecified
 timebox can be saved, copied through ordinary planning or Template import,
 and exported. `phasesRequired` means the agenda has no phases.
-`missingPhaseDuration` means a named phase has an unspecified timebox. The
+`missingPhaseDuration` means a phase has an unspecified timebox. The
 Picker and library give the missing count where applicable and provide an
-edit path. Every persisted phase still requires a valid title. See the
+edit path. Executable and historical phases require a nonempty title. See the
 [Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md).

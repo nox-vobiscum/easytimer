@@ -176,7 +176,7 @@ test('start eligibility reuses strict rundown reasons and leaves the whole plan 
         [value => { value.phases[1].durationSeconds = 0; }, 'duration'],
         [value => { value.phases[1].durationSeconds = 61; }, 'duration'],
         [value => { value.phases[1].durationSeconds = MAX_PHASE_SECONDS + 60; }, 'duration'],
-        [value => { value.phases[1].title = ' '; }, 'phaseTitle'],
+        [value => { value.phases[1].title = 'x'.repeat(121); }, 'phaseTitle'],
         [value => { value.phases[1].id = value.phases[0].id; }, 'invalidData'],
         [value => {
             value.phases = Array.from({ length: 11 }, (_, index) => ({
@@ -194,6 +194,34 @@ test('start eligibility reuses strict rundown reasons and leaves the whole plan 
     }
 });
 
+test('unnamed planning phases materialize at activation and survive the Event lifecycle', () => {
+    const source = template();
+    source.plan.phases[0].title = ' \t ';
+    const planned = createPlannedExecution(source, 'unnamed-event');
+    assert.equal(planned.currentPlan.phases[0].title, '');
+    assert.equal(startEligibilityReason(planned.currentPlan), null);
+    const ready = activatePlannedExecution(planned);
+    const materialized = { ...planned.currentPlan.phases[0], title: 'Unnamed Phase' };
+    assert.deepEqual(ready.currentPlan.phases[0], materialized);
+    assert.equal(source.plan.phases[0].title, ' \t ');
+    assert.equal(planned.currentPlan.phases[0].title, '');
+    const started = startActiveExecution(ready, 'attempt', 1000, 'run');
+    const suspended = suspendStartedExecution(started);
+    const completed = completeStartedExecution(started, {
+        completedAt: 1000, workshopOvertimeMs: 0, workshopNotes: { rundown: '', phases: [] },
+    });
+    for (const result of [started, suspended, completed]) {
+        assert.deepEqual(result.currentPlan.phases[0], materialized);
+        assert.deepEqual(result.attempt.startSnapshot.phases[0], materialized);
+    }
+    assert.deepEqual(retainCurrentPlan(suspended).currentPlan.phases[0], materialized);
+    assert.throws(() => validateReadyExecution({ ...ready, currentPlan: planned.currentPlan }), /phaseTitle/);
+    assert.throws(() => validateCompletedExecution({ ...completed, currentPlan: planned.currentPlan }), /phaseTitle/);
+    assert.throws(() => validateStartedExecution({ ...started, attempt: {
+        ...started.attempt, startSnapshot: planned.currentPlan,
+    } }), /phaseTitle/);
+});
+
 test('only planning validation accepts zero phases; retained phase fields and executable lifecycles stay strict', () => {
     const empty = { ...template(), plan: { ...plan(), phases: [] } };
     const planning = validatePersistedPlan(empty.plan);
@@ -203,7 +231,7 @@ test('only planning validation accepts zero phases; retained phase fields and ex
     assert.deepEqual(validatePlannedExecution(planned).currentPlan, planning);
     assert.throws(() => activatePlannedExecution(planned), /phasesRequired/);
     assert.throws(() => validatePersistedPlan({ ...empty.plan, name: ' ' }), /name/);
-    assert.throws(() => validatePersistedPlan({ ...empty.plan, phases: [{ ...plan().phases[0], title: '' }] }), /phaseTitle/);
+    assert.throws(() => validatePersistedPlan({ ...empty.plan, phases: [{ ...plan().phases[0], title: null }] }), /phaseTitle/);
     const unspecified = { ...planning, phases: [{ ...plan().phases[0], durationSeconds: null }] };
     const ready = activatePlannedExecution(createPlannedExecution(template(), 'ready-event'));
     const started = startActiveExecution(ready, 'attempt', 1000, 'run');
