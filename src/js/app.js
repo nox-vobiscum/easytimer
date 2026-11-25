@@ -1,4 +1,4 @@
-import { mountApplicationHeader } from './header.mjs?v=86';
+import { mountApplicationHeader } from './header.mjs?v=87';
 import { createTimer, formatOvertime, formatTime, timeBudget, transition, adjustmentError } from './timer.mjs?v=54';
 import { transitionSession, sessionRemaining, hasSessionProgress } from './session.mjs?v=54';
 import { timeVisualState, formatTimerReadout } from './time-visuals.mjs?v=54';

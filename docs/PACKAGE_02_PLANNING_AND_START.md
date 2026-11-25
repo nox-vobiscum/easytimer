@@ -601,14 +601,139 @@ rollback after blank-title writes must retain the 02.3b planning reader
 for both blank titles and unspecified timeboxes. Rollout strategy and
 approval remain open. Full logs and the probe are in the review ZIP.
 
-## Questions for separate approval
+## Package 02 rollout decision proposal
 
-- **Before rollout** independently review the actual-build probe and the
-  proposed update sequence for existing and offline owners. Verify the
-  deployment candidate and its real cache transition. Approval covers the
-  compatibility contract and local Slice 02.2 implementation. Rollout remains
-  pending separate approval.
-- **Before release** retain the 02.3b-compatible planning reader after blank-title writes and resolve the existing old-live-owner rollout risk.
+This analysis uses the complete, independently reviewed Package 02 at
+`96bfeef42d77fcf144e7f1560660df1d156aae22` and the 02.3a/02.3b isolated
+compatibility evidence. Rollout and Owner acceptance remain pending.
+
+### Data integrity and workshop continuity
+
+The Store validates the complete aggregate on load. One newly incompatible
+planning record can block an older client's Event Timer even when the
+active Event itself is unchanged. The probes found unchanged bytes on
+blocked reads and writes, and a revision conflict on a stale save. They also
+found that an older live owner refused Pause and retained the ownership lock.
+A compatible tab could only recover that same Event after the old tab left.
+This protects persisted data while interrupting the operating workshop.
+
+The service worker precaches on install, calls `skipWaiting`, deletes older
+shell caches on activation and claims clients. Navigation is network-first
+with an offline shell fallback. Claiming a client does not reload its
+executing document, and the application registers the worker without an
+automatic document reload. An open tab can therefore keep old code after a
+new tab starts using the new shell. An offline tab can remain old indefinitely.
+The worker version cannot identify the code held by a Runtime owner.
+
+Planning Save, ordinary planning/copy and Template import commit through the
+exclusive Store writer. The writer reads, transforms and saves synchronously
+under its write lock. Activation and recovery also use the separate exclusive
+active Runtime lock. Activation claims ownership before its Store write.
+Recovery reads again after claiming. The Store lock serializes writes and
+checks revisions but conveys no Runtime ownership or owner version.
+Draft recovery and uncertain-write tickets retain identity and exact source
+and target data. A recheck observes persisted state, and a rejection before
+mutation must not become an uncertain write or an automatic retry. Older
+readers can also reject new pending tickets while leaving their bytes intact.
+
+### Options and recommendation
+
+| Option | Coverage and limitation |
+| --- | --- |
+| Controlled staging update | Recommended for staging. Account for all participating tabs and installed app windows sharing the staging origin and browser profile. Resolve pending operations using Recheck, finish or safely suspend any live workshop, then explicitly close the old documents. Reopen online, verify the document and worker versions, then verify offline startup. This is reliable for a coordinated cohort only. |
+| Compatibility reader first | A first build could read all three incomplete forms and compatible recovery tickets while continuing to write only old-compatible new content. The resulting rollback target and updated cohort would be safe. A later writer release still cannot prove that long-lived or offline tabs installed or loaded that reader. A second release adds work without closing the race on its own. |
+| Narrow write safeguard | Recommended for production as a separately approved design. At the authoritative Store transformation, reject planning writes that would introduce incompatible content while an active Runtime is persisted and this document cannot prove it holds ownership using the compatible code. Treat another or unknown owner conservatively. Keep compatible planning, removal of incompatible content, read-only reconciliation and Runtime actions available. This can temporarily defer incomplete planning in a second compatible tab or when an active record has no live owner. |
+| Accept the residual risk | Reasonable only for the controlled cohort, with explicit Owner acceptance elsewhere. Recovery instructions shorten an interruption but cannot protect a running workshop. If affected, keep site data, close the old owning window, open the compatible build online, recover the same Event and recheck any pending operation before attempting it again. Avoid clearing storage, discarding the Event or using a backup import as a full restore. |
+
+For production, prefer the Store predicate above to owner-version detection
+or a separate reader deployment. Evaluate both current and proposed records
+inside the existing write lock. Cover all three incompatible planning forms
+and every path that introduces them, including Save, import and ordinary
+Event planning. Check actual local ownership through the existing controller,
+not through a role inferred from the view or a snapshot from `locks.query()`.
+An activation that commits first leaves an active record for the planning
+guard to see. If incompatible planning commits first, an older activation
+or recovery must validate the new aggregate before it can operate. Preserve
+conflict precedence, existing lock order, exact readback and the user's
+editable draft. A rejected operation should report why it is deferred and
+allow explicit retry after the workshop or in the compatible owning tab.
+This safeguard would prevent the reproduced interruption on a previously
+readable Store. Already-incompatible data still requires a compatible reader.
+An old client that was offline or idle can still encounter feature
+unavailability on its next use. No forced refresh or waiting period is needed.
+
+### Release verification and rollback
+
+- Stage only after separate approval. Test the real artifact and service
+  worker update on desktop and installed mobile, including offline cold
+  startup after the update and a known older tab that stays open.
+- In isolated profiles, reproduce the current old-owner failure and test
+  the proposed guard with old, unknown and same-document compatible owners.
+  Exercise both write orderings against activation and adoption, all three
+  incomplete forms, Save/copy/import, a compatible write and cleanup of
+  incomplete records. On rejection compare exact Store bytes and revisions,
+  verify the draft remains editable, and prove the old owner can still Pause
+  and resume the same Event. Recheck ownership after failure and release.
+- Test ambiguous acknowledgements and reload with pending draft or Runtime
+  tickets. Rechecks must remain read-only, retain identity and preserve an
+  unresolved outcome where the exact source or target is absent. Verify the
+  same Attempt and Run on compatible recovery and verify Quick Timer remains
+  independent.
+- Prepare and test a rollback artifact before enabling incomplete writes.
+  It must retain readers for zero phases, null durations, blank titles,
+  and their supported recovery tickets, and keep strict executable and
+  archive validation. Roll back with mixed plans and live/history data,
+  check offline recovery and exact persisted bytes, then roll forward.
+  v86 and 02.3a are unsuitable general rollback targets for the completed
+  package. Backup export is evidence and a data copy without a complete
+  public restore path.
+
+## Accepted rollout decision and Staging v87 gate
+
+The Product Owner approved the controlled, coordinated Staging update.
+Production release remains unauthorized. Before pushing a candidate that
+triggers Staging, obtain explicit confirmation that all old Staging tabs
+and installed app windows in the participating profiles are closed and
+active or pending operations are resolved. For this v87 deployment, the
+Product Owner explicitly authorized proceeding despite incomplete shutdown
+confirmation and accepted the residual risk of an old Staging tab on an
+unavailable iPhone. This exception applies to this Staging deployment only.
+After deployment, record the
+commit, workflow, live version and observed cache transition. Staging v87
+requires separate Owner acceptance. The previously accepted regression
+evidence remains in the Package 02 checkpoints and review archives.
+
+The narrowly scoped incompatible-planning-write safeguard is a mandatory
+production release blocker. Its analysis, implementation and review each
+require separate approval. It must protect an older or unknown-version
+active Runtime owner, preserve drafts when a write is rejected and enforce
+the authoritative decision under existing Store write and revision boundaries.
+All rollback builds must retain the complete Package 02-compatible planning
+and recovery reader. Forced reload, destructive cleanup and new persistence
+architecture are excluded. The safeguard remains open for production.
+
+### Staging v87 candidate evidence
+
+Local and remote `develop` were verified at
+`96bfeef42d77fcf144e7f1560660df1d156aae22`. The candidate changes the v87
+shell cache name and shell asset references, with matching test expectations.
+A comparison against the reviewed commit found only version substitutions
+in application and test files. Store, Runtime and deployment workflow code
+are unchanged. No staged deployment has been verified at this checkpoint.
+
+Packaging and inventory verification passed for 41 files at PWA v87.
+Thirteen focused Node tests and seven offline artifact browser checkpoints
+passed. The regular aggregate browser regression passed 33 checkpoints
+after synchronizing its hardcoded shell-version expectations. All final
+checks exited 0, including syntax and diff checks. The earlier browser
+attempt and its corrected version assertion are recorded in the candidate
+evidence. Ten update checkpoints passed using the actual packaged v87 files
+and the staging v86 source at `ebb0039`. The isolated loopback probe used
+real shell cache names, with the network stopped for offline checks. It
+verified removal of the old shell cache, a fresh v87 document and unchanged
+persisted Event data on compatible recovery. Its deliberately unclosed v86
+owner still reproduced the Pause failure, confirming the need for the
+controlled staging gate. The result is local and uses synthetic data.
 
 Package 03 owns Save and Save & Back, draft lifecycle and associated
 navigation. The later library, responsive and Facilitator Panel work follows

@@ -1,4 +1,4 @@
-import { mountApplicationHeader } from './header.mjs?v=86';
+import { mountApplicationHeader } from './header.mjs?v=87';
 // Information pages do not initialize timers, recovery or development services.
 const applicationHeader = mountApplicationHeader();
 const labels = {

@@ -2,7 +2,7 @@
 
 > **Terminology and Home follow-up:** Package 01 passed independent review and automated browser regression. The Product Owner accepted Package 01 and reported a positive iPhone 15 Safari DE/Dark initial Home fit. Staging runs PWA v86. Production release remains unauthorized. See the [handover](PACKAGE_01_HANDOVER.md), [terminology checkpoint](EDITOR-001_TERMINOLOGY_AND_HOME_2026-11-24.md) and [terminology mapping](TERMINOLOGY_MAPPING.md). B2, Facilitator Panel, NANO-001 and Stopwatch scheduling remain in place.
 
-> **Package 02 planning and Start:** See the [decision and implementation checkpoint](PACKAGE_02_PLANNING_AND_START.md). Slice 02.1 establishes the Start eligibility boundary. Subsequent slices require separate approval.
+> **Package 02 planning and Start:** Regular implementation passed independent review. The Product Owner authorized Staging v87 with a one-time exception for a potentially open old tab on an unavailable iPhone. Staging Owner acceptance remains pending. The incompatible-planning-write safeguard is a mandatory production release blocker and requires separate analysis, implementation and review approval. Rollback builds must retain the complete Package 02-compatible planning and recovery reader. See the [Package 02 checkpoint](PACKAGE_02_PLANNING_AND_START.md).
 
 > **Deferred Home polish:** Reduce claim-line size contrast, tighten line spacing
 > and balance vertical spacing while preserving readable text, touch targets

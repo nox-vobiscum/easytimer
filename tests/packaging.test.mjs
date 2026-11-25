@@ -43,7 +43,7 @@ test('packaging rejects the original version mismatch, missing files and unexpec
     await assert.rejects(validateProduction(source), /DEPENDENCY_NOT_ALLOWED|UNREVIEWED_IMPORT_SYNTAX|UNREVIEWED_RUNTIME_LOADING/);
     await writeFile(session, original);
     const about = join(source, 'about.html'), aboutHTML = await readFile(about, 'utf8');
-    await writeFile(about, aboutHTML.replace('js/info.js?v=86', '../tools/app-sync/account.mjs'));
+    await writeFile(about, aboutHTML.replace('js/info.js?v=87', '../tools/app-sync/account.mjs'));
     await assert.rejects(validateProduction(source), /DEPENDENCY_NOT_ALLOWED: about.html/);
     await writeFile(about, aboutHTML.replace('href="faq.html"', 'href="missing.html"'));
     await assert.rejects(validateProduction(source), /DEPENDENCY_NOT_ALLOWED: about.html/);
