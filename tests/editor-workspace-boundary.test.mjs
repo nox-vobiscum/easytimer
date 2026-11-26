@@ -56,7 +56,7 @@ test('Workspace retains reconciliation state and serializes local mutations', as
     assert.match(workspace, /let pending = null; let mutationBusy = false/);
     assert.match(workspace, /if \(mutationBusy \|\| \(pending && !allowPending\) \|\| \(templateCompletion && !allowCompletion\)\) return false/);
     assert.match(workspace, /clearEditor\(\{ clearPending: true \}\)/);
-    assert.match(workspace, /if \(mutationBlocked\(\)\) return;\s*if \(!discardCurrentTemplateRecovery\(\)\) return;\s*clearEditor\(\)/);
+    assert.match(workspace, /if \(mutationBlocked\(\)\) return;\s*if \(!discardDraftChanges\(\)\) return;\s*clearEditor\(\)/);
     assert.match(workspace, /data-native-recheck/);
     assert.match(workspace, /if \(mutationBlocked\(\)\)[\s\S]*return false/);
 });
@@ -98,7 +98,8 @@ test('Template draft recovery is injected, synchronous and central without a sec
     assert.match(workspace, /templateRecovery\?\.checkpointPending\(pending\)/);
     assert.match(workspace, /templateRecovery\.resolveAbsent\(\)/);
     assert.match(workspace, /templateRecovery\.discardCurrent\(\)/);
-    assert.match(workspace, /templateRecovery\?\.cleanup\(\)/);
+    assert.match(workspace, /templateRecovery\.cleanup\(\)/);
+    assert.match(workspace, /templateRecovery\.begin\(next\)/);
     assert.doesNotMatch(workspace, /localStorage|sessionStorage|indexedDB|caches/);
 });
 

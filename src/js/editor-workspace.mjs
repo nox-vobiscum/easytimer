@@ -229,6 +229,12 @@ export function createNativeEditorWorkspace({
     const library = () => ({ revision: workspace.revision, templates: workspace.templates });
     const currentPlan = (source = draft) => { const { id, ...plan } = source.template; return plan; };
     const dirty = () => draft !== null && JSON.stringify(draft) !== baseline;
+    const needsSave = () => draft !== null && (dirty() || (editorKind === 'template'
+        ? draft.mode === 'create' : editorKind === 'newExecution'));
+    function syncSaveButton() {
+        const button = root.querySelector('[data-native-save]');
+        if (button) button.disabled = mutationBlocked() || !needsSave();
+    }
     const setFeedback = (code, error = true) => { feedbackCode = code; feedbackError = error; };
     const feedbackText = () => feedbackCode ? (t()[feedbackCode] || t().unexpected) : '';
     const resultCode = result => result.error?.type === 'conflict' ? 'conflict'
@@ -244,7 +250,13 @@ export function createNativeEditorWorkspace({
 
     function checkpointTemplateDraft(next) {
         draft = next;
+        if (feedbackCode === 'saved' && dirty()) {
+            setFeedback(null, false);
+            const feedback = root.querySelector('.planner-feedback[role="status"]');
+            if (feedback) feedback.textContent = '';
+        }
         updateDurationSummary();
+        syncSaveButton();
         if (editorKind !== 'template' || !templateRecovery) return;
         try {
             const result = templateRecovery.checkpoint(draft);
@@ -305,8 +317,9 @@ export function createNativeEditorWorkspace({
             if (retry) retry.disabled = false;
         }
     }
-    async function runMutation(operation, { allowPending = false, allowCompletion = false } = {}) {
+    async function runMutation(operation, { allowPending = false, allowCompletion = false, preserveEditor = false } = {}) {
         if (mutationBusy || (pending && !allowPending) || (templateCompletion && !allowCompletion)) return false;
+        const presentation = preserveEditor && draft ? savePresentation() : null;
         mutationBusy = true; lockRenderedControls();
         try { await operation(); }
         catch { setFeedback('unexpected'); }
@@ -316,7 +329,10 @@ export function createNativeEditorWorkspace({
                 const focus = closeAfterMutation; closeAfterMutation = null;
                 deactivate();
                 onClose({ focus });
-            } else render();
+            } else {
+                render();
+                if (presentation && draft) restoreSavePresentation(presentation);
+            }
         }
         return true;
     }
@@ -328,10 +344,10 @@ export function createNativeEditorWorkspace({
         archiveId = null; editTarget = null;
         root.replaceChildren(); root.classList.remove('planner', 'native-editor-workspace'); delete root.dataset.nativeEditorWorkspace;
     }
-    function discardCurrentTemplateRecovery() {
+    function discardDraftChanges() {
+        if (dirty() && !window.confirm(t()[editorKind === 'template' ? 'recoveryDraftDiscardConfirm' : 'discardDraft'])) return false;
         const current = editorKind === 'template' ? templateRecovery?.current() : null;
         if (!current?.persisted && !current?.blocked) return true;
-        if (!window.confirm(t().recoveryDraftDiscardConfirm)) return false;
         const result = templateRecovery.discardCurrent();
         if (result.status === 'success') { recoveryNotice = null; refreshRecoveryCandidates(); return true; }
         recoveryWarning = true; recoveryNotice = 'recoveryDiscardFailed'; render(); return false;
@@ -340,8 +356,7 @@ export function createNativeEditorWorkspace({
         if (mutationBlocked()) {
             render(); root.querySelector('[data-native-recheck], [data-template-save-retry]')?.focus({ preventScroll: true }); return false;
         }
-        if (!discardCurrentTemplateRecovery()) return false;
-        if (editorKind !== 'template' && dirty() && !window.confirm(t().discardDraft)) return false;
+        if (!discardDraftChanges()) return false;
         deactivate();
         return true;
     }
@@ -496,7 +511,10 @@ export function createNativeEditorWorkspace({
     }
     async function saveExistingExecution(saveDraft = draft) {
         const result = await plannedExecutionService.saveDraft(saveDraft);
-        if (result.status === 'success') { await finishWrite('saved'); return; }
+        if (result.status === 'success') {
+            await acceptSavedDraft(persistedExecutionDraft(result.record, saveDraft.executionId));
+            return;
+        }
         if (result.status === 'uncertain') { pending = { kind: 'executionSave', ticket: result.reconciliation }; setFeedback('uncertain'); }
         else setFeedback(resultCode(result));
         render();
@@ -504,20 +522,40 @@ export function createNativeEditorWorkspace({
     async function completeTemplateWrite() {
         if (!templateCompletion) return;
         if (!await loadWorkspace({ completion: true })) return;
-        const cleanup = templateRecovery?.cleanup() ?? { status: 'success' };
-        const cleanupNotice = cleanup.status === 'success' ? null
-            : cleanup.status === 'uncertain' ? 'recoveryCleanupUncertain' : 'recoveryCleanupFailed';
-        clearEditor({ clearPending: true }); importCandidate = null;
-        refreshRecoveryCandidates(); recoveryNotice = cleanupNotice;
+        templateCompletion = null;
         setFeedback('saved', false);
     }
+    async function acceptSavedDraft(next) {
+        draft = next;
+        baseline = JSON.stringify(next);
+        pending = null;
+        templateCompletion = true;
+        recoveryNotice = null;
+        resourceErrors = new Map();
+        if (editorKind === 'template' && templateRecovery) {
+            try {
+                const cleanup = templateRecovery.cleanup();
+                recoveryNotice = cleanup.status === 'success' ? null
+                    : cleanup.status === 'uncertain' ? 'recoveryCleanupUncertain' : 'recoveryCleanupFailed';
+            } catch { recoveryNotice = 'recoveryCleanupFailed'; }
+            try { recoveryWarning = templateRecovery.begin(next).status !== 'ready'; }
+            catch { recoveryWarning = true; }
+        }
+        setFeedback('saved', false);
+        await completeTemplateWrite();
+    }
+    async function acceptSavedTemplate(result, templateId) {
+        const next = plannerService.prepareEditDraft(result.library, templateId);
+        if (next.status !== 'success') fail('invalidSaveResult');
+        await acceptSavedDraft(next.draft);
+    }
     function retryTemplateCompletion() {
-        return runMutation(completeTemplateWrite, { allowCompletion: true });
+        return runMutation(completeTemplateWrite, { allowCompletion: true, preserveEditor: true });
     }
     async function saveTemplate(saveDraft) {
         const result = await plannerService.saveDraft(saveDraft);
         if (result.status === 'success') {
-            templateCompletion = { message: 'saved' }; await completeTemplateWrite(); return;
+            await acceptSavedTemplate(result, saveDraft.template.id); return;
         }
         if (result.status === 'uncertain') {
             pending = { kind: 'templateSave', ticket: result.reconciliation };
@@ -553,6 +591,7 @@ export function createNativeEditorWorkspace({
         field?.focus({ preventScroll: true }); field?.scrollIntoView({ block: 'center', inline: 'nearest' });
     }
     function save() {
+        if (mutationBlocked() || !needsSave()) return Promise.resolve(false);
         const prepared = resourceSaveSnapshot();
         if (prepared.issues.length) { showResourceValidation(prepared.issues); return Promise.resolve(false); }
         resourceErrors = new Map();
@@ -560,7 +599,7 @@ export function createNativeEditorWorkspace({
             if (editorKind === 'template') await saveTemplate(prepared.snapshot);
             else if (editorKind === 'newExecution') await saveNewExecution(prepared.snapshot);
             else await saveExistingExecution(prepared.snapshot);
-        });
+        }, { preserveEditor: true });
     }
     function recheck() {
         if (!pending) return Promise.resolve(false);
@@ -606,8 +645,10 @@ export function createNativeEditorWorkspace({
             else result = await importService.reconcileImport(pending.ticket);
             if (result.status === 'confirmed') {
                 if (pendingKind === 'templateSave') {
-                    pending = null; templateCompletion = { message: 'saved' };
-                    await completeTemplateWrite(); return;
+                    await acceptSavedTemplate(result, draft.template.id); return;
+                }
+                if (pendingKind === 'executionSave') {
+                    await acceptSavedDraft(persistedExecutionDraft(result.record, draft.executionId)); return;
                 }
                 await finishWrite(pendingKind === 'delete' ? 'deleted' : pendingKind === 'import' ? 'imported' : 'saved'); return;
             }
@@ -622,7 +663,7 @@ export function createNativeEditorWorkspace({
                 pending = null; setFeedback('absent'); render(); return;
             }
             setFeedback('unresolved'); render();
-        }, { allowPending: true });
+        }, { allowPending: true, preserveEditor: true });
     }
     function confirmDelete() {
         if (!deleteTarget) return Promise.resolve(false);
@@ -919,6 +960,29 @@ export function createNativeEditorWorkspace({
             details.hidden = false; disclosure.setAttribute('aria-expanded', 'true');
         }
     }
+    function savePresentation() {
+        const field = document.activeElement;
+        return {
+            expanded: expandedPhaseIds(),
+            scroll: [window.scrollX, window.scrollY],
+            field: root.contains(field) ? field.dataset.field : null,
+            phaseId: field?.closest('[data-native-phase-id]')?.dataset.nativePhaseId,
+            selection: field?.selectionStart == null ? null : [field.selectionStart, field.selectionEnd],
+        };
+    }
+    function restoreSavePresentation({ expanded, scroll, field, phaseId, selection }) {
+        restorePhaseDisclosures(expanded);
+        if (field) {
+            const scope = phaseId ? root.querySelector(`[data-native-phase-id="${CSS.escape(phaseId)}"]`) : root;
+            const control = scope?.querySelector(`[data-field="${CSS.escape(field)}"]`);
+            control?.focus({ preventScroll: true });
+            if (selection) control?.setSelectionRange?.(...selection);
+        } else {
+            root.querySelector('[data-native-recheck], [data-template-save-retry], [data-field="name"]')
+                ?.focus({ preventScroll: true });
+        }
+        window.scrollTo(...scroll);
+    }
     function destroyPhaseDragging() {
         phaseDragToken += 1;
         phaseDragCleanup?.(); phaseDragCleanup = null;
@@ -1128,10 +1192,11 @@ export function createNativeEditorWorkspace({
         missing.setAttribute('role', 'status');
         form.append(total, missing);
         const actions = el('div', undefined, 'planner-actions native-workspace-save-actions');
-        const saveButton = el('button', t().save, 'primary'); saveButton.type = 'submit'; saveButton.disabled = mutationBlocked();
+        const saveButton = el('button', t().save, 'primary'); saveButton.type = 'submit';
+        saveButton.dataset.nativeSave = ''; saveButton.disabled = mutationBlocked() || !needsSave();
         actions.append(saveButton, button(t().cancel, () => {
             if (mutationBlocked()) return;
-            if (!discardCurrentTemplateRecovery()) return;
+            if (!discardDraftChanges()) return;
             clearEditor(); setFeedback('cancelled', false); render(); focusHeading();
         }));
         form.append(actions); section.append(form); root.replaceChildren(section); updateDurationSummary(); renderDeleteDialog();

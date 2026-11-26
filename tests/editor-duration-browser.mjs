@@ -21,7 +21,12 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     const phaseField = (index, key) => `#planner [data-native-phase-id]:nth-child(${index}) [data-field="${key}"]`;
     const duration = (index, value) => field(phaseField(index, 'duration'), value);
     const save = () => evaluate("document.querySelector('#planner form').requestSubmit()");
-    const saveToLibrary = async () => { await save(); await library(); };
+    const leaveSavedDraft = async () => {
+        await wait("document.querySelector('#planner [data-native-save]')?.disabled && document.querySelector('#planner').textContent.includes('Saved.')", 'Confirmed Save did not stay in the Editor');
+        await action('Cancel', "document.querySelector('#planner .native-workspace-save-actions')");
+        await library();
+    };
+    const saveToLibrary = async () => { await save(); await leaveSavedDraft(); };
     const selectPicker = async value => {
         await wait(`[...document.querySelector('#session-template').options].some(option => option.value === ${JSON.stringify(value)})`,
             'Picker did not load the expected plan');
@@ -168,9 +173,17 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     await field(phaseField(1, 'title'), 'Edited title');
     assert.equal((await displayedTitle())[0], 'Edited title');
     await field(phaseField(1, 'title'), '');
+    const beforeCleanSave = await raw();
+    assert.equal(await evaluate("document.querySelector('#planner [data-native-save]').disabled"), true);
+    await save();
+    assert.equal(await raw(), beforeCleanSave);
+    await field('#planner [data-field=prepared]', 'Prepared after reopening');
     await saveToLibrary();
     const reopenedTemplate = (await record()).templates.find(item => item.id === template.id);
-    assert.deepEqual(reopenedTemplate, { ...template, revision: template.revision + 1 });
+    assert.deepEqual(reopenedTemplate, {
+        ...template, revision: template.revision + 1,
+        plan: { ...template.plan, preparedInformation: 'Prepared after reopening' },
+    });
     await click('#planner .planner-back');
     await selectPicker(`planned:${planned.id}`);
     assert.equal(await evaluate("document.querySelector('#prepare-session').textContent"), 'Edit planned event');
@@ -196,7 +209,7 @@ export async function checkUnspecifiedTimeboxes({ evaluate, click, waitForBrowse
     const pending = await raw();
     assert.deepEqual(JSON.parse(pending).executions[0].execution.currentPlan.phases.map(phase => phase.durationSeconds), [420,480,null]);
     await click('#planner [data-native-recheck]');
-    await library();
+    await leaveSavedDraft();
     assert.equal(await raw(), pending, 'Read-only recheck must preserve exact authoritative bytes');
     await click('#planner .planner-back');
     await selectPicker(`planned:${planned.id}`);

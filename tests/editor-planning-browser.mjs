@@ -31,7 +31,12 @@ export async function checkZeroPhasePlanning({ evaluate, click, cdp, waitForBrow
         return item.querySelector('.start-unavailable')?.textContent === 'Add at least one phase before starting.'
             && ![...item.querySelectorAll('button')].some(button => button.textContent === 'Start Event');
     })()`);
-    const saveToLibrary = async () => { await save(); await library(); };
+    const leaveSavedDraft = async () => {
+        await wait("document.querySelector('#planner [data-native-save]')?.disabled && document.querySelector('#planner').textContent.includes('Saved.')", 'Confirmed Save did not stay in the Editor');
+        await action('Cancel', "document.querySelector('#planner .native-workspace-save-actions')");
+        await library();
+    };
+    const saveToLibrary = async () => { await save(); await leaveSavedDraft(); };
     const installSaveFault = () => evaluate(`(() => {
         const get = Storage.prototype.getItem; const set = Storage.prototype.setItem;
         const probe = window.zeroPlanFault = { armed: true, failed: false, writes: 0 };
@@ -101,7 +106,7 @@ export async function checkZeroPhasePlanning({ evaluate, click, cdp, waitForBrow
     await action('Restore', "document.querySelector('#planner [data-template-recoveries]')");
     await wait("!!document.querySelector('#planner [data-native-recheck]')", 'Recovery did not restore the pending Template ticket');
     await click('#planner [data-native-recheck]');
-    await library();
+    await leaveSavedDraft();
     assert.equal(await raw(), confirmedTemplate, 'Reload and recovery reconciliation perform no second Save');
     assert.equal(await hasNoStart('Empty workshop'), true);
     assert.deepEqual(await quickRuntime(), quick);
@@ -235,7 +240,7 @@ export async function checkZeroPhasePlanning({ evaluate, click, cdp, waitForBrow
     assert.deepEqual((await store()).executions[0].execution.currentPlan.phases, []);
     const confirmedEmpty = await raw();
     await click('#planner [data-native-recheck]');
-    await library();
+    await leaveSavedDraft();
     assert.equal(await raw(), confirmedEmpty, 'Planned Save reconciliation does not write again');
     assert.equal(await hasNoStart('Independent empty event'), true);
     await action('Edit', row('Independent empty event'));

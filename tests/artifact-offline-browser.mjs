@@ -144,6 +144,8 @@ async function checkOffline(negativeControl) {
             await wait('document.querySelector("#planner").textContent.includes("Saved.")');
             const library = await evaluate('JSON.parse(localStorage.getItem("easyTimerEditor.v1"))');
             assert.equal(library.templates[0].plan.name, 'Offline artifact');
+            assert.equal(await evaluate('document.querySelector("#planner [data-native-save]").disabled'), true);
+            await evaluate('[...document.querySelectorAll("#planner .native-workspace-save-actions button")].find(button => button.textContent === "Cancel").click()');
             await evaluate('document.querySelector(".rundown-launch").click()');
             await wait('document.body.dataset.mode === "session"');
             assert.equal(await evaluate('document.body.dataset.mode'), 'session');

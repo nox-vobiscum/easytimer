@@ -84,7 +84,7 @@ export async function checkNativeDraftReload({ evaluate, cdp, origin }) {
     assert.equal(await readStore(), initialStore);
     await action('Save');
     await wait(`document.querySelector('#planner').textContent.includes('Saved.') &&
-        !document.querySelector('#planner [data-field="name"]')`);
+        document.querySelector('#planner [data-native-save]')?.disabled`);
     const savedRaw = await readStore(), saved = validateEditorStoreRecord(JSON.parse(savedRaw));
     assert.equal(saved.revision, initialRevision + 1, 'Exactly one authoritative revision was added');
     assert.equal(saved.templates.length, 1);
@@ -94,10 +94,51 @@ export async function checkNativeDraftReload({ evaluate, cdp, origin }) {
     assert.equal(template.revision, 1);
     assert.deepEqual(template.plan, plan);
     assert.deepEqual(await recoveryKeys(), []);
+    await evaluate("document.querySelector('#planner form').requestSubmit()");
+    assert.equal(await readStore(), savedRaw, 'A programmatic repeat of clean Save performs no write');
+    await field('[data-field="name"]', '  Native draft second Save  ');
+    const [nextKey] = await recoveryKeys();
+    assert.ok(nextKey && nextKey !== key);
+    const next = await readRecovery(nextKey);
+    assert.equal(next.entityId, id);
+    assert.equal(next.baseline.mode, 'update');
+    assert.equal(next.baseline.expectedTemplateRevision, template.revision);
+    assert.equal(next.baseline.expectedAggregateRevision, saved.revision);
+    assert.deepEqual(next.baseline.template, { id, ...template.plan });
+    // Reproduce a reload where the previous create checkpoint survived the Store commit.
+    await evaluate(`localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(continued))})`);
     await reloadLibrary();
-    assert.equal(await evaluate(`Boolean(document.querySelector(${JSON.stringify(row)}))`), false);
+    assert.equal(await evaluate(`[...document.querySelector(${JSON.stringify(row)}).querySelectorAll('button')]
+        .some(button => button.textContent === 'Restore')`), false, 'The stale create checkpoint cannot reopen a writable draft');
     assert.equal(await readStore(), savedRaw);
-    console.log('PASS: native draft checkpoints, reloads, restores explicitly, continues under the same recovery ID and saves exactly once.');
+    await action('Restore', `#planner [data-recovery-id="${next.recoveryId}"]`);
+    await wait(`document.querySelector('#planner [data-field="name"]')?.value === '  Native draft second Save  '`);
+    await action('Save');
+    await wait(`document.querySelector('#planner [data-field="name"]')?.value === 'Native draft second Save'
+        && document.querySelector('#planner [data-native-save]')?.disabled`);
+    const secondRaw = await readStore();
+    const second = validateEditorStoreRecord(JSON.parse(secondRaw));
+    assert.equal(second.revision, saved.revision + 1);
+    assert.deepEqual(second.templates, [{ ...template, revision: 2, plan: { ...template.plan, name: 'Native draft second Save' } }]);
+    assert.deepEqual(await recoveryKeys(), [key], 'Only the owned update checkpoint was retired');
+    await reloadLibrary();
+    await action('Edit');
+    await wait(`document.querySelector('#planner [data-field="name"]')?.value === 'Native draft second Save'
+        && document.querySelector('#planner [data-native-save]')?.disabled`);
+    assert.equal(await readStore(), secondRaw);
+    await action('Cancel');
+    await action('New Event Template');
+    assert.equal(await evaluate(`document.querySelector('#planner [data-native-save]').disabled`), false);
+    assert.equal(await evaluate(`document.querySelector('#planner').textContent.includes('Saved.')`), false);
+    await evaluate(`(() => {
+        const confirm = window.confirm;
+        window.confirm = () => { throw new Error('Untouched draft asked for dirty confirmation'); };
+        try { [...document.querySelectorAll('#planner form button')].find(b => b.textContent === 'Cancel').click(); }
+        finally { window.confirm = confirm; }
+    })()`);
+    await wait(`!document.querySelector('#planner [data-native-save]')`);
+    assert.equal(await readStore(), secondRaw);
+    console.log('PASS: reload and confirmed Save preserve one Template identity, canonical baseline and a recoverable first edit; clean Save and stale create recovery write nothing.');
 }
 
 export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptExpectedConfirm }) {
@@ -204,6 +245,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
                 },
                 setItem(key, value) {
                     if (key !== 'easyTimerEditor.v1') throw new Error('V1 storage access');
+                    if (f.rejectStoreWrite) { f.rejectStoreWrite = false; throw new Error('Store write rejected'); }
                     f.keys.push(key); f.writes += 1; f.raw = value;
                     if (f.uncertainOnSet) { f.uncertainOnSet = false; f.throwReadback = true; }
                 },
@@ -845,7 +887,6 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             1, { label: 'Board', url: 'https://example.com/board' }, true, 0],
         'confirmed read-only reconciliation performs no duplicate write and cleans the exact Recovery copy');
 
-        await rowAction('Independent workshop', 'Edit');
         const writesBeforeCancel = await evaluate('nativeWorkspaceFixture.writes');
         await field('[data-field="name"]', 'Discarded title');
         await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => true`);
@@ -955,7 +996,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         }
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, alert = f.root.querySelector('[role="alert"]');
-            return [f.root.querySelector('[data-field="name"]'), f.root.querySelectorAll('[data-recovery-id]').length,
+            return [f.root.querySelector('[data-field="name"]')?.value, f.root.querySelectorAll('[data-recovery-id]').length,
                 alert.textContent.includes('could not be read for restoration'),
                 !alert.textContent.includes('saved library changed')];
         })()`), [null, 2, true, true],
@@ -996,6 +1037,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             if (await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-field="name"]') !== null`)) break;
             await delay(20);
         }
+        await field('[data-field="prepared"]', 'Edited restored content');
         await evaluate(`window.nativeWorkspaceConfirm = window.confirm; window.confirm = () => false`);
         await action('Cancel');
         assert.equal(await evaluate(`nativeWorkspaceFixture.root.querySelector('[data-field="name"]') !== null`), true,
@@ -1036,6 +1078,7 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         ]`), [writesBeforeSavedReload + 1, savesBeforeSavedReload + 1, true],
         'saved-result Retry performs no second authoritative Save');
 
+        await action('Cancel');
         const writesBeforeCleanupFailure = await evaluate(`nativeWorkspaceFixture.writes`);
         await action('New Event Template');
         await field('[data-field="name"]', 'Cleanup test'); await action('Add phase');
@@ -1053,12 +1096,13 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             return [f.writes, record.templates.some(template => template.plan.name === 'Cleanup test'),
                 f.root.textContent.includes('Saved.'),
                 f.root.textContent.includes('separate local recovery copy could not be cleaned up'),
-                f.root.querySelector('[data-field="name"]'),
+                f.root.querySelector('[data-field="name"]')?.value,
                 JSON.parse(f.recoveryValues.get(${JSON.stringify(cleanupKey)})).draft.template.name,
                 f.recoveryValues.get('easyTimerEditorDraftRecovery.v1.corrupt')];
-        })()`), [writesBeforeCleanupFailure + 1, true, true, true, null, 'Cleanup test', '{broken-json'],
+        })()`), [writesBeforeCleanupFailure + 1, true, true, true, 'Cleanup test', 'Cleanup test', '{broken-json'],
         'confirmed Save remains successful when exact Recovery cleanup fails, with no second Save attempt');
 
+        await action('Cancel');
         const writesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.writes`);
         const savesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.calls.templateSave`);
         const removesBeforeUnconfirmedCleanup = await evaluate(`nativeWorkspaceFixture.recoveryCalls.filter(([operation]) => operation === 'remove').length`);
@@ -1080,15 +1124,16 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
                 f.root.textContent.includes('Saved.'),
                 f.root.textContent.includes('could not be confirmed whether the local recovery copy was removed'),
                 !f.root.textContent.includes('copy could not be cleaned up and remains available'),
-                f.root.querySelector('[data-field="name"]'),
+                f.root.querySelector('[data-field="name"]')?.value,
                 ![...f.recoveryValues.values()].some(raw => {
                     try { return JSON.parse(raw).draft.template.name === 'Unconfirmed cleanup test'; }
                     catch { return false; }
                 })];
         })()`), [writesBeforeUnconfirmedCleanup + 1, savesBeforeUnconfirmedCleanup + 1,
-            removesBeforeUnconfirmedCleanup + 1, true, true, true, true, null, true],
+            removesBeforeUnconfirmedCleanup + 1, true, true, true, true, 'Unconfirmed cleanup test', true],
         'unconfirmed Recovery removal reports neutral cleanup uncertainty without retrying the confirmed Save or Remove');
 
+        await action('Cancel');
         const writesBeforeExecution = await evaluate('nativeWorkspaceFixture.writes');
         const sourceTemplateId = await evaluate(`JSON.parse(nativeWorkspaceFixture.raw).templates
             .find(item => item.plan.name === 'Independent workshop').id`);
@@ -1141,15 +1186,33 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
             return [...(row?.querySelectorAll('button') ?? [])].find(button =>
                 button.textContent.trim() === 'Edit' && !button.disabled && button.getClientRects().length);
         })()`;
-        const waitForEditableExecution = async revision => {
+        const waitForSavedExecution = async revision => {
             for (let i = 0; i < 100; i++) {
-                if (await evaluate(`Boolean(${editableExecutionButton(revision)})`)) return;
+                if (await evaluate(`(() => {
+                    const f = nativeWorkspaceFixture, record = JSON.parse(f.raw);
+                    return (${savedExecution}).revision === ${revision}
+                        && f.root.querySelector('[data-native-save]')?.disabled
+                        && f.root.textContent.includes('Saved.');
+                })()`)) return;
                 await delay(20);
             }
-            assert.fail(`Save did not return to editable Execution ${executionId} at revision ${revision}`);
+            assert.fail(`Save did not retain editable Execution ${executionId} at revision ${revision}`);
         };
+        await evaluate('nativeWorkspaceFixture.rejectStoreWrite = true');
         await action('Save');
-        await waitForEditableExecution(2);
+        for (let i = 0; i < 100; i++) {
+            if (await evaluate(`nativeWorkspaceFixture.root.textContent.includes('Storage could not confirm the operation')`)) break;
+            await delay(20);
+        }
+        assert.deepEqual(await evaluate(`[
+            nativeWorkspaceFixture.raw,
+            nativeWorkspaceFixture.calls.plan,
+            nativeWorkspaceFixture.root.querySelector('[data-field="name"]').value,
+            nativeWorkspaceFixture.root.querySelector('[data-native-save]').disabled,
+        ]`), [storeBeforePlanningRecheck, 1, 'Independent execution', false],
+        'A rejected update of the partially created Event retains the edited plan and does not create another Event');
+        await action('Save');
+        await waitForSavedExecution(2);
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, record = JSON.parse(f.raw);
             const source = record.templates.find(item => item.plan.name === 'Independent workshop');
@@ -1159,7 +1222,6 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
         })()`), [writesBeforeExecution + 2, 'Goals and **plain text**', { kind: 'template', id: sourceTemplateId },
             'Execution-only information', 'planned', 'active-seed', 2, 'Independent execution'],
         'Execution Save preserves source Template and active runtime');
-        await evaluate(`${editableExecutionButton(2)}.click()`);
         await field('[data-field="prepared"]', 'Edited planned information');
         const revisionBeforeEditSave = await evaluate('JSON.parse(nativeWorkspaceFixture.raw).revision');
         await evaluate("nativeWorkspaceFixture.hold('executionSave')");
@@ -1170,18 +1232,19 @@ export async function checkNativeEditorWorkspace({ evaluate, click, cdp, acceptE
                 return [f.calls.executionSave, f.writes, record.revision, execution.revision,
                     execution.currentPlan.preparedInformation, f.root.querySelector('button[type="submit"]')?.disabled,
                     Boolean(${editableExecutionButton(3)})];
-            })()`), [2, writesBeforeExecution + 2, revisionBeforeEditSave, 2, 'Execution-only information', true, false],
+            })()`), [3, writesBeforeExecution + 2, revisionBeforeEditSave, 2, 'Execution-only information', true, false],
             'held Execution Save leaves the authoritative record unchanged and the editor in flight');
         } finally {
             await evaluate("nativeWorkspaceFixture.release('executionSave')");
         }
-        await waitForEditableExecution(3);
+        await waitForSavedExecution(3);
         assert.deepEqual(await evaluate(`(() => {
             const f = nativeWorkspaceFixture, record = JSON.parse(f.raw), execution = ${savedExecution};
             return [f.calls.executionSave, f.writes, record.revision, execution.revision, execution.lifecycle,
                 execution.currentPlan.preparedInformation];
-        })()`), [2, writesBeforeExecution + 3, revisionBeforeEditSave + 1, 3, 'planned', 'Edited planned information'],
+        })()`), [3, writesBeforeExecution + 3, revisionBeforeEditSave + 1, 3, 'planned', 'Edited planned information'],
         'confirmed Execution Edit persists the new information exactly once');
+        await action('Cancel');
         console.log('PASS: both PLANNED Saves advance the same Execution revision with exactly one write each.');
 
         await rowAction('Independent workshop', 'Edit');
