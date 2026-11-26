@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>easyTimer Notes Editor Spike</title>
+  <link rel="stylesheet" href="./spike.css">
+</head>
+<body>
+  <main class="spike-shell">
+    <header>
+      <p class="eyebrow">Development-only browser spike</p>
+      <h1>Notizen-Editor mit OverType 2.9.0</h1>
+      <p>Diese Seite simuliert nur den Draft-Vertrag. Sie speichert keine Daten.</p>
+    </header>
+
+    <section class="card controls" aria-labelledby="controls-title">
+      <h2 id="controls-title">Teststeuerung</h2>
+      <div class="control-row">
+        <button id="open-editor" type="button">Editor öffnen</button>
+        <label for="theme">Darstellung</label>
+        <select id="theme">
+          <option value="solar">Hell</option>
+          <option value="cave">Dunkel</option>
+        </select>
+      </div>
+      <output id="status" role="status" aria-live="polite">Bereit.</output>
+    </section>
+
+    <div class="result-grid">
+      <section class="card" aria-labelledby="draft-title">
+        <h2 id="draft-title">Caller-eigener Test-Draft</h2>
+        <pre id="caller-draft"></pre>
+      </section>
+      <section class="card" aria-labelledby="preview-title">
+        <h2 id="preview-title">Schreibgeschützte Vorschau</h2>
+        <div id="caller-preview" class="markdown-preview"></div>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="editor-dialog" aria-labelledby="editor-title">
+    <div class="dialog-panel">
+      <header class="dialog-header">
+        <div>
+          <p class="eyebrow">Phase notes</p>
+          <h2 id="editor-title">Notizen bearbeiten</h2>
+        </div>
+        <button id="close-editor" class="quiet" type="button" aria-label="Editor schließen">Schließen</button>
+      </header>
+      <p class="hint">Markdown bleibt als einfacher String erhalten. Absätze und Zeilenumbrüche werden direkt eingegeben.</p>
+      <div id="editor-host"></div>
+      <section class="source-inspector" aria-labelledby="source-title">
+        <h3 id="source-title">Aktuelle Markdown-Quelle</h3>
+        <pre id="local-source"></pre>
+      </section>
+      <div class="dialog-actions">
+        <button id="cancel-editor" class="quiet" type="button">Abbrechen</button>
+        <button id="apply-editor" type="button">Übernehmen</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="./vendor/overtype.min.js"></script>
+  <script type="module" src="./spike.mjs"></script>
+</body>
+</html>
