@@ -72,6 +72,7 @@ Delivered work is recorded in the [changelog](../CHANGELOG.md) and the linked ac
 | CUSTOM-001 | Optional presentation customization | Someday | Stable core UI and audience-display requirements |
 | I18N-001 | On-demand translation of saved Rundowns | Later / Future idea | Explicit user action to translate a copy of title, phases, prepared notes and other authored content; no automatic mutation on UI language changes |
 | AI-001 | Image-to-Rundown conversion | Someday (low priority) | DATA-001 portability; separate design/feasibility review |
+| DEVENV-001 | Linux development verification and migration findings | Findings recorded; corrective work unscheduled | [Confirmed development-entry defect and environment/documentation debt](#devenv-001--linux-development-verification-and-migration-findings); EDITOR-001 priorities unchanged |
 
 ## Session Planner improvements
 
@@ -510,6 +511,8 @@ acceptance; it is not deployment approval.
 
 ### SYNC-001 — Optional Google Drive synchronization
 
+**Current development-entry exception (2026-11-27):** DEVENV-001 confirmed an initialization regression at the current baseline; historical acceptance does not establish current startup readiness. See the [consolidated diagnosis and minimum corrective scope](#devenv-001--linux-development-verification-and-migration-findings). Existing sync production gates and priorities remain unchanged.
+
 **Idea:** Eventually let a user access their own workshop templates across devices with Google sign-in and Google Drive storage, without creating an easyTimer-specific server or database. The earlier candidate was a small JSON document via Drive API and Google Identity Services, potentially in `appDataFolder`; the `drive.file` approach is an alternative if user-visible files become important.
 
 **Spike first:** Verify OAuth consent/scopes, app registration/verification requirements, iOS Safari and installed-PWA sign-in flows, token expiry, offline behavior, cross-device conflicts, data recovery, realistic free-tier limitations, and long-term maintenance costs. Do **not** assume that a fully browser-only solution or permanent zero cost is guaranteed. JSON export/import must remain useful without Google sign-in.
@@ -857,6 +860,31 @@ the active Session, deadline and fullscreen; confirmation retains the existing
 `Stop overtime` remains unchanged because it is not part of the reported defect.
 
 ## Documentation maintenance
+
+### DEVENV-001 — Linux development verification and migration findings
+
+**Status / priority:** Checkpoints 3.1B, 3.1E and 3.1E.1 investigated and verified locally on 2026-11-27; this entry records findings only. Corrections require separate approval and remain unscheduled. Preserve EDITOR-001, B2, Facilitator Panel and NANO-001 priorities; no sync productization or production release is authorized.
+
+**Evidence baseline:** `develop`, HEAD `81bb33d2c39c9df214b0e9beae69aa28a730c21c`, Ubuntu 26.04.1 LTS / WSL2 x86_64. 3.1B found no usable native Node/npm/browser on the inspected PATH. After environment preparation, 3.1E confirmed native Node 22.22.1 (`/usr/bin/node`), npm 9.2.0 (`/usr/share/nodejs/npm/bin/npm-cli.js`) and Chrome 158.0.8127.88 (`/usr/bin/google-chrome`, native binary `/opt/google/chrome/chrome`). All 598 Node tests across 37 tracked files passed, with zero failures/skips; full application/PWA browser regression, offline cold start/negative control, packaging verification and normal local HTTP startup passed. The isolated sync-browser regression failed. Investigation left the repository unchanged and removed its own temporary artifacts/processes; no security controls were disabled.
+
+**Confirmed application defect — development entry only:** [entry.mjs](../tools/app-sync/entry.mjs) imports and mounts `header.mjs?v=59`, then imports `app.js?v=67`; the current [app.js](../src/js/app.js) imports and mounts `header.mjs?v=87`. Different ES module URLs create separate module instances and separate singleton state. The second [mountApplicationHeader](../src/js/header.mjs) call encounters the already-replaced `#application-header` placeholder and throws `TypeError: Cannot read properties of null (reading 'replaceWith')` at `header.mjs?v=87:10:50`, called from `app.js?v=67:26:27`.
+
+- **Reproduction:** From the repository root, with native Chrome and a short temporary base directory, run `EASYTIMER_BROWSER=/usr/bin/google-chrome node tools/app-sync/browser-check.mjs`. The existing harness uses a fresh profile, ephemeral server and mocked authorized localhost origin; no real Google requests are needed. 3.1E.1 captured the exception through a temporary instrumented harness outside the repository.
+- **Initialization evidence:** All captured resource HTTP responses were 200, including both header URLs; the development gate was enabled, no service worker controlled the page, the document was complete, `main[aria-busy=true]` remained, Home stayed hidden and the App mode was unset. Missing `drive-status` and zero Mock Drive requests are consequences of this early abort. Native Chrome/CDP worked; the cause is stale development integration, not Linux/WSL, sandbox denial or a demonstrated browser/runtime incompatibility. No new defect was established in the normal production startup path.
+- **History / minimum corrective scope:** At `4d13975`, both imports used header v59; the development reference remained while the App advanced to v87. Historical [SYNC-003A acceptance](archive/implementation/SYNC-003A_LOCAL_APPLICATION.md) applies to earlier baselines. Align development/App header module identity, prevent renewed version drift and add a focused development-entry initialization regression check; rerun the isolated sync-browser regression. Do not change timer/Store/Recovery semantics, weaken safeguards or expand to sync productization. Further sync failures after initialization remain unverified.
+
+**Portability considerations:**
+
+- Browser harness defaults use Windows Edge/Chrome executable paths. Set `EASYTIMER_BROWSER` to a verified native executable for test processes only; Bash: `EASYTIMER_BROWSER=/usr/bin/google-chrome node tests/browser-check.mjs`. Check `type -a`, resolved paths and versions because inherited Windows PATH entries exist. No Playwright dependency/configuration is present; the harness launches Chromium directly through CDP. A native Chromium-compatible browser and its package-managed Linux libraries are required for browser tests; npm is not required for normal startup/tests. The optional DnD vendor rebuild uses its existing nested package/lockfile.
+- Linux Chrome temporary singleton sockets have a pathname-length limit. A long diagnostic TMPDIR produced `Socket path too long` and no debugging port; a short task-owned `/tmp` directory restored startup without disabling the sandbox. Keep temporary bases short and clean up only task-created profiles/artifacts/processes. This was separate from the original Home failure. The incidental UPower/DBus warning did not cause that failure.
+- Tracked text files had LF, no case-colliding tracked names were found and all tracked files had Git mode `100644`; Node-invoked scripts need no executable bit. These checks do not establish exhaustive Linux portability.
+
+**Environment and documentation debt — minimum follow-up, separately scoped:**
+
+- **Version reproducibility:** No root runtime/npm pin exists. [Time-travel guidance](DEV-001_TIME_TRAVEL.md) requires Node 22+, while the [production workflow](../.github/workflows/deploy-production.yaml) selects Node 20 and [staging](../.github/workflows/deploy.yaml) leaves Node unpinned. The browser harness uses global `WebSocket`. The optional [vendor lockfile](../tools/editor-phase-dndkit/package-lock.json) is format 3 with dependency engines Node >=18, not a project-wide runtime declaration. Record the verified versions and reconcile explicit development/CI requirements in a separately approved change; do not infer a mandatory npm version or authorize upgrades from this finding. CI packaging success alone does not establish browser-test readiness.
+- **Startup port:** [README](../README.md) documents `node tools/app-sync/server.mjs`, which prints/serves `http://localhost:8000/`; [launch.json](../.vscode/launch.json) targets 8080. Align the debugger guidance/configuration with the actual startup command. Normal startup returned 200 for Home, App JS, CSS, service worker and manifest; the disabled development entry correctly returned 404.
+- **Command examples:** Retain platform-neutral Node commands and provide Bash equivalents where documentation uses PowerShell-only syntax. For the tracked full Node suite, Bash: `mapfile -t test_files < <(git ls-files '*test.mjs'); node --test "${test_files[@]}"` replaces `node --test @(git ls-files '*test.mjs')`. Translate `$env:EASYTIMER_BROWSER` assignment to process-scoped Bash configuration; no shell/configuration rewrite is implied.
+- **Artifact count:** [BRIEFING](BRIEFING.md#testing-and-quality-gates) and the historical checkpoint in [RC-001](RC-001_PRODUCTION_PACKAGING.md) mention 36 files; the current deterministic package generated and verified **41 files, PWA v87**. Correct current guidance against the verified inventory while preserving explicitly historical counts. Do not alter the production allowlist merely to match old documentation.
 
 ### CI-001 — Skip staging deployment for documentation-only pushes
 
